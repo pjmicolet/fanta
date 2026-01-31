@@ -3,11 +3,25 @@
 #include <array>
 
 struct CPU {
-  auto fetch() {
+
+  constexpr auto fetch() {
     return ram[PC++];
   }
 
-  std::array<std::uint8_t, 8> registers;
+  template<std::size_t S>
+  constexpr auto load_rom(const std::array<uint8_t, S>& data) {
+    if constexpr( S > 2000) {
+      static_assert(false, "You've tried to dump a rom larger than 2000 bytes");
+    }
+    for(std::size_t i = 0; i < S; i++) {
+      ram[i] = data[i];
+    }
+  }
+
+  auto run_cycle() -> void;
+
+  std::array<std::uint8_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
+
 private:
   std::uint16_t PC;
   std::array<std::uint8_t, 2000> ram;

@@ -17,7 +17,7 @@ struct RegisterMode {
 
 struct ImmediateMode {
   static auto fetch(CPU& cpu) {
-    auto reg = cpu.fetch();
+    return cpu.fetch();
   }
 };
 
@@ -29,4 +29,7 @@ struct OpAdd {
     auto result = val1+val2;
     DestOp::store(cpu, result);
   }
-}
+};
+
+using AddReg = OpAdd<RegisterMode, RegisterMode, RegisterMode>;
+using AddImm = OpAdd<RegisterMode, RegisterMode, ImmediateMode>;
