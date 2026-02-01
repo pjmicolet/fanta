@@ -3,59 +3,63 @@
 #include "cpu.hpp"
 #include "instructions.hpp"
 
-struct RegisterMode {
-  static auto fetch(CPU& cpu) {
-    auto reg = cpu.fetch();
-    return cpu.registers[reg];
-  }
-
-  static auto store(CPU& cpu, uint8_t val) -> void {
-    auto reg = cpu.fetch();
-    cpu.registers[reg] = val;
+struct DecodeDest {
+  static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
+    auto reg = (inst >> 26) & 0x3F;
+    cpu.registers[reg] = result;
   }
 };
 
-struct ImmediateMode {
-  static auto fetch(CPU& cpu) {
-    return cpu.fetch();
+struct DecodeSource1 {
+  static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
+    return cpu.registers[(inst >> 21) & 0x1F];
   }
 };
 
-template<typename DestOp, typename Src1Op, typename Src2Op>
+struct DecodeSource2 {
+  static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
+    return cpu.registers[(inst >> 16) & 0x1F];
+  }
+};
+
+struct DecodeImm {
+  static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
+    return inst & 0xFF;
+  }
+};
+
+template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
 struct OpAdd {
-  static auto exec(CPU& cpu) {
-    auto val1 = Src1Op::fetch(cpu);
-    auto val2 = Src2Op::fetch(cpu);
-    auto result = val1+val2;
-    DestOp::store(cpu, result);
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto s1_data = S1Decoder::decode(cpu, inst);
+    auto opt_data = OptDecoder::decode(cpu, inst);
+    auto result = s1_data + opt_data;
+    DestDecoder::store(cpu, inst, result);
   }
 };
 
-using AddReg = OpAdd<RegisterMode, RegisterMode, RegisterMode>;
-using AddImm = OpAdd<RegisterMode, RegisterMode, ImmediateMode>;
+using AddReg = OpAdd<DecodeDest, DecodeSource1, DecodeSource2>;
+using AddImm = OpAdd<DecodeDest, DecodeSource1, DecodeImm>;
 
-template<typename DestOp, typename Src1Op, typename Src2Op>
+template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
 struct OpSub {
-  static auto exec(CPU& cpu) {
-    auto val1 = Src1Op::fetch(cpu);
-    auto val2 = Src2Op::fetch(cpu);
-    auto result = val1-val2;
-    DestOp::store(cpu, result);
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto s1_data = S1Decoder::decode(cpu, inst);
+    auto opt_data = OptDecoder::decode(cpu, inst);
+    auto result = s1_data - opt_data;
+    DestDecoder::store(cpu, inst, result);
   }
 };
 
-using SubReg = OpSub<RegisterMode, RegisterMode, RegisterMode>;
-using SubImm = OpSub<RegisterMode, RegisterMode, ImmediateMode>;
+using SubReg = OpSub<DecodeDest, DecodeSource1, DecodeSource2>;
+using SubImm = OpSub<DecodeDest, DecodeSource1, DecodeImm>;
 
-template<typename DestOp, typename Src1Op>
+template<typename DestDecoder, typename OptDecoder>
 struct OpMov {
-  static auto exec(CPU& cpu) {
-    auto val1 = Src1Op::fetch(cpu);
-    auto result = val1;
-    DestOp::store(cpu, result);
-    cpu.fetch(); // instruction needs an extra byte
+  static auto exec(CPU& cpu, uint32_t inst) {
+    DestDecoder::store(cpu, inst, OptDecoder::decode(cpu,inst));
   }
 };
 
-using MovReg = OpMov<RegisterMode, RegisterMode>;
-using MovImm = OpMov<RegisterMode, ImmediateMode>;
+using MovReg = OpMov<DecodeDest, DecodeSource1>;
+using MovImm = OpMov<DecodeDest, DecodeImm>;

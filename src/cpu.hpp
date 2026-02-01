@@ -9,7 +9,7 @@ struct CPU {
   }
 
   template<std::size_t S>
-  constexpr auto load_rom(const std::array<uint8_t, S>& data) {
+  constexpr auto load_rom(const std::array<uint32_t, S>& data) {
     if constexpr( S > 2000) {
       static_assert(false, "You've tried to dump a rom larger than 2000 bytes");
     }
@@ -20,9 +20,9 @@ struct CPU {
 
   auto run_cycle() -> void;
 
-  std::array<std::uint8_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
+  std::array<std::uint32_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
 
 private:
   std::uint16_t PC;
-  std::array<std::uint8_t, 2000> ram;
+  std::array<std::uint32_t, 2000> ram;
 };

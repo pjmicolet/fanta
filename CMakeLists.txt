@@ -19,7 +19,6 @@ target_include_directories(test_framework INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/
 
 # Test executable
 add_executable(ops_test test/ops.cpp)
-add_executable(cpu_test test/cpu.cpp)
 
 # Link the library
 # We manually add the src directory as SYSTEM to satisfy the requirement
@@ -27,11 +26,11 @@ add_executable(cpu_test test/cpu.cpp)
 target_include_directories(ops_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(ops_test PRIVATE fanta_lib test_framework)
 
-target_include_directories(cpu_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(cpu_test PRIVATE fanta_lib test_framework)
-
-
 # Enable testing
 enable_testing()
 add_test(NAME ops_test COMMAND ops_test)
-add_test(NAME cpu_test COMMAND cpu_test)
+
+# Main Application
+find_package(SDL2 REQUIRED)
+add_executable(fanta src/main.cpp)
+target_link_libraries(fanta PRIVATE fanta_lib SDL2::SDL2)

@@ -3,12 +3,17 @@
 
 #define EXEC_INST(OpCode, Name)\
   case OpCode: {\
-    Name::exec(*this);\
+    Name::exec(*this, instr);\
     break;\
   }\
 
+auto decodeOpt(uint32_t inst) {
+  return (inst >> 26) & 0x3F;
+}
+
 auto CPU::run_cycle() -> void {
-  auto byte = fetch();
+  auto instr = fetch();
+  auto byte = decodeOpt(instr);
   switch(byte) {
     EXEC_INST(0x1, AddReg)
     EXEC_INST(0x2, AddImm)
