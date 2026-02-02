@@ -51,3 +51,32 @@ TEST_CASE("Basic Sub") {
   cpu.run_cycle();
   REQUIRE_SAME(0, cpu.registers[2]);
 }
+
+TEST_CASE("Basic Load") {
+  using namespace Instructions;
+  constexpr auto code = Program<
+    Load<Reg<0>, Reg<0>, Literal<10>>
+  >::load();
+
+  CPU cpu{};
+  cpu.store(10, 1234);
+  cpu.load_rom(code);
+  cpu.run_cycle();
+  REQUIRE_SAME(1234, cpu.registers[0]);
+}
+
+TEST_CASE("Basic Store") {
+  using namespace Instructions;
+  constexpr auto code = Program<
+    Mov<Reg<0>, Literal<10>>,
+    Mov<Reg<1>, Literal<20>>,
+    Store<Reg<1>, Reg<0>, Literal<0>>
+  >::load();
+
+  CPU cpu{};
+  cpu.load_rom(code);
+  cpu.run_cycle();
+  cpu.run_cycle();
+  cpu.run_cycle();
+  REQUIRE_SAME(10, cpu.load(10));
+}

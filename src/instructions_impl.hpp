@@ -5,20 +5,20 @@
 
 struct DecodeDest {
   static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
-    auto reg = (inst >> 26) & 0x3F;
+    auto reg = (inst >> 21) & 0x1F;
     cpu.registers[reg] = result;
   }
 };
 
 struct DecodeSource1 {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
-    return cpu.registers[(inst >> 21) & 0x1F];
+    return cpu.registers[(inst >> 16) & 0x1F];
   }
 };
 
 struct DecodeSource2 {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
-    return cpu.registers[(inst >> 16) & 0x1F];
+    return cpu.registers[(inst >> 11) & 0x1F];
   }
 };
 
@@ -88,4 +88,4 @@ struct OpMem {
 
 // This is some magic here
 using StoreReg = OpMem<DecodeSource1, DecodeStorageDest>;
-using LoadReg = OpMem<DecodeDest, DecodeLoadSource>;
+using LoadReg = OpMem<DecodeLoadSource, DecodeDest>;

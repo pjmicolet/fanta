@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include <iostream>
 
 struct Memory {
   Memory(std::size_t size) : memory(size) {}
@@ -23,7 +24,9 @@ struct CPU {
 
   CPU() : ram(16*1024*1024) {}
   constexpr auto fetch() {
-    return ram.read32(PC++);
+    auto data = ram.read32(PC);
+    PC+=4;
+    return data;
   }
 
   constexpr auto store(uint32_t addr, uint32_t val) -> void {
@@ -47,5 +50,5 @@ struct CPU {
 
   Memory ram; //16MB
 private:
-  std::uint16_t PC;
+  std::uint16_t PC = 0;
 };
