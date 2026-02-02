@@ -89,3 +89,10 @@ struct OpMem {
 // This is some magic here
 using StoreReg = OpMem<DecodeSource1, DecodeStorageDest>;
 using LoadReg = OpMem<DecodeLoadSource, DecodeDest>;
+
+// One of the few non composable
+struct Jmp {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    cpu.set_pc(inst & 0x1FFF);
+  }
+};

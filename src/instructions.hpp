@@ -137,7 +137,7 @@ template<uint16_t Dest>
 struct Jmp<Literal<Dest>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x7 << 26);
-    constexpr uint32_t dest = (Dest & 0xFF);
+    constexpr uint32_t dest = (Dest & 0x3FFF);
     return opcode | dest;
   }
 };

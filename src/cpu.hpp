@@ -46,9 +46,13 @@ struct CPU {
 
   auto run_cycle() -> void;
 
+  auto set_pc(uint32_t pc_val) -> void {
+    PC = pc_val;
+  }
+
   std::array<std::uint32_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
 
   Memory ram; //16MB
 private:
-  std::uint16_t PC = 0;
+  std::uint32_t PC = 0;
 };

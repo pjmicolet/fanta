@@ -21,6 +21,7 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x4, MovImm)
     EXEC_INST(0x5, SubReg)
     EXEC_INST(0x6, SubImm)
+    EXEC_INST(0x7, Jmp)
     EXEC_INST(0x8, StoreReg)
     EXEC_INST(0x9, LoadReg)
   }

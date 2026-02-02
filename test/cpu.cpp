@@ -80,3 +80,16 @@ TEST_CASE("Basic Store") {
   cpu.run_cycle();
   REQUIRE_SAME(10, cpu.load(10));
 }
+
+TEST_CASE("Basic Loop") {
+  using namespace Instructions;
+  constexpr auto code = Program<
+    Add<Reg<0>, Reg<0>, Literal<1>>,
+    Jmp<Literal<0>>
+  >::load();
+
+  CPU cpu{};
+  cpu.load_rom(code);
+  for(int i = 0; i < 10; i++) { cpu.run_cycle(); }
+  REQUIRE_SAME(5, cpu.registers[0]);
+}
