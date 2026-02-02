@@ -28,6 +28,20 @@ struct DecodeImm {
   }
 };
 
+struct DecodeStorageDest {
+  static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
+    auto base = cpu.registers[(inst >> 16) & 0x1F] + inst & 0xFF;
+    cpu.store(base, result);
+  }
+};
+
+struct DecodeLoadSource {
+  static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
+    auto base = cpu.registers[(inst >> 16) & 0x1F] + inst & 0xFF;
+    return cpu.load(base);
+  }
+};
+
 template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
 struct OpAdd {
   static auto exec(CPU& cpu, uint32_t inst) {
@@ -63,3 +77,15 @@ struct OpMov {
 
 using MovReg = OpMov<DecodeDest, DecodeSource1>;
 using MovImm = OpMov<DecodeDest, DecodeImm>;
+
+template<typename SrcVal, typename DestAddr>
+struct OpMem {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto val = SrcVal::decode(cpu, inst);
+    DestAddr::store(cpu, inst, val);
+  }
+};
+
+// This is some magic here
+using StoreReg = OpMem<DecodeSource1, DecodeStorageDest>;
+using LoadReg = OpMem<DecodeDest, DecodeLoadSource>;

@@ -8,7 +8,9 @@ enum class Opcode {
   ADD,
   MOV,
   SUB,
-  JMP
+  JMP,
+  STORE,
+  LOAD
 };
 
 struct Decode {
@@ -16,6 +18,10 @@ struct Decode {
   // [opcode:6bit][dest:5bit][src1:5bit]
   //                                    [imm:16bit]
   //                                    [src2:5bit][unused:5bit]
+  // For store we have
+  // [opcode:6bit][reg_with_val:5bit][dest_base:5bit][offset:16bit]
+  // For load it's
+  // [opcode:6bit][reg_where_value_is_stored:5bit][src_base:5bit][offset:16bit]
   uint32_t raw;
   constexpr Decode(uint32_t d) : raw(d) {}
 
@@ -41,7 +47,7 @@ struct Decode {
 };
 
 template<std::uint8_t ID> struct Reg{};
-template<std::uint16_t LIT> struct Literal{};
+template<std::uint16_t LIT = 0> struct Literal{};
 
 struct Halt {
   // So far assuming that HALT will be 4 bytes just because it
@@ -113,7 +119,7 @@ struct Sub<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
   }
 };
 
-template<uint8_t Dest, uint8_t Reg1, uint8_t Imm>
+template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>
 struct Sub<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x6 << 26);
@@ -136,5 +142,31 @@ struct Jmp<Literal<Dest>> {
   }
 };
 
+template<typename SrcVal, typename DestMem, typename Offset>
+struct Store{};
 
+template<uint8_t SrcReg, uint8_t DestRegAddr, uint16_t Imm>
+struct Store<Reg<SrcReg>, Reg<DestRegAddr>, Literal<Imm>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x8 << 26);
+    constexpr uint32_t srcval = (SrcReg & 0x1F) << 21;
+    constexpr uint32_t destAddr = (DestRegAddr & 0x1F) << 16;
+    constexpr uint32_t imm = Imm & 0xFF;
+    return opcode | srcval | destAddr | imm;
+  }
+};
+
+template<typename DestReg, typename SourceMem, typename Offset>
+struct Load{};
+
+template<uint8_t DestReg, uint8_t SrcRegAddr, uint16_t Imm>
+struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x9 << 26);
+    constexpr uint32_t srcval = (DestReg & 0x1F) << 21;
+    constexpr uint32_t destAddr = (SrcRegAddr & 0x1F) << 16;
+    constexpr uint32_t imm = Imm & 0xFF;
+    return opcode | srcval | destAddr | imm;
+  }
+};
 }
