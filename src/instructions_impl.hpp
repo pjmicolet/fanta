@@ -48,6 +48,8 @@ struct OpAdd {
     auto s1_data = S1Decoder::decode(cpu, inst);
     auto opt_data = OptDecoder::decode(cpu, inst);
     auto result = s1_data + opt_data;
+    cpu.set_zero(result);
+    cpu.set_neg(result);
     DestDecoder::store(cpu, inst, result);
   }
 };
@@ -61,6 +63,8 @@ struct OpSub {
     auto s1_data = S1Decoder::decode(cpu, inst);
     auto opt_data = OptDecoder::decode(cpu, inst);
     auto result = s1_data - opt_data;
+    cpu.set_zero(result);
+    cpu.set_neg(result);
     DestDecoder::store(cpu, inst, result);
   }
 };
@@ -71,7 +75,10 @@ using SubImm = OpSub<DecodeDest, DecodeSource1, DecodeImm>;
 template<typename DestDecoder, typename OptDecoder>
 struct OpMov {
   static auto exec(CPU& cpu, uint32_t inst) {
-    DestDecoder::store(cpu, inst, OptDecoder::decode(cpu,inst));
+    auto data = OptDecoder::decode(cpu,inst);
+    DestDecoder::store(cpu, inst, data);
+    cpu.set_neg(data);
+    cpu.set_zero(data);
   }
 };
 
@@ -83,6 +90,8 @@ struct OpMem {
   static auto exec(CPU& cpu, uint32_t inst) {
     auto val = SrcVal::decode(cpu, inst);
     DestAddr::store(cpu, inst, val);
+    cpu.set_neg(val);
+    cpu.set_zero(val);
   }
 };
 
@@ -96,3 +105,26 @@ struct Jmp {
     cpu.set_pc(inst & 0x1FFF);
   }
 };
+
+struct Beq {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    if(cpu.is_zero_set()) {
+      cpu.set_pc(inst & 0x1FFF);
+    }
+  }
+};
+
+struct Bne {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    if(!cpu.is_zero_set()) {
+      cpu.set_pc(inst & 0x1FFF);
+    }
+  }
+};
+
+struct Halt {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    cpu.halted = true;
+  }
+};
+

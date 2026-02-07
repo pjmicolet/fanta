@@ -93,3 +93,19 @@ TEST_CASE("Basic Loop") {
   for(int i = 0; i < 10; i++) { cpu.run_cycle(); }
   REQUIRE_SAME(5, cpu.registers[0]);
 }
+
+TEST_CASE("Basic real Loop") {
+  using namespace Instructions;
+  constexpr auto code = Program<
+    Mov<Reg<0>, Literal<100>>,
+    Add<Reg<1>, Reg<1>, Literal<1>>,
+    Sub<Reg<0>, Reg<0>, Literal<1>>,
+    Bne<Literal<4>>,
+    Halt
+  >::load();
+
+  CPU cpu{};
+  cpu.load_rom(code);
+  cpu.run_until_halt();
+  REQUIRE_SAME(100, cpu.registers[1]);
+}

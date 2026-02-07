@@ -45,12 +45,37 @@ struct CPU {
   }
 
   auto run_cycle() -> void;
+  auto run_until_halt() -> void;
 
   auto set_pc(uint32_t pc_val) -> void {
     PC = pc_val;
   }
 
+  auto is_zero_set() -> bool {
+    return status_reg[3] == 1;
+  }
+
+  auto is_neg_set() -> bool {
+    return status_reg[1] == 1;
+  }
+
+  auto set_zero(uint32_t val) -> void {
+    status_reg[3] = val == 0 ? 1 : 0;
+  }
+
+  auto set_neg(uint32_t val) -> void {
+    status_reg[1] = static_cast<int32_t>(val) < 0 ? 1 : 0;
+  }
+
   std::array<std::uint32_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
+  // Status regs are:
+  // 0: Zero
+  // 1: Negative
+  // 2: Overflow (probably)
+  // 4: Carry
+  std::array<std::uint8_t, 4> status_reg{0,0,0,0};
+
+  bool halted = false;
 
   Memory ram; //16MB
 private:

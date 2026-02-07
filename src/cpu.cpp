@@ -15,6 +15,7 @@ auto CPU::run_cycle() -> void {
   auto instr = fetch();
   auto byte = decodeOpt(instr);
   switch(byte) {
+    EXEC_INST(0, Halt)
     EXEC_INST(0x1, AddReg)
     EXEC_INST(0x2, AddImm)
     EXEC_INST(0x3, MovReg)
@@ -24,5 +25,13 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x7, Jmp)
     EXEC_INST(0x8, StoreReg)
     EXEC_INST(0x9, LoadReg)
+    EXEC_INST(0xa, Beq)
+    EXEC_INST(0xb, Bne)
+  }
+}
+
+auto CPU::run_until_halt() -> void {
+  while(!halted) {
+    run_cycle();
   }
 }

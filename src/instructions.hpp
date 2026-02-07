@@ -10,7 +10,9 @@ enum class Opcode {
   SUB,
   JMP,
   STORE,
-  LOAD
+  LOAD,
+  BEQ,
+  BNE,
 };
 
 struct Decode {
@@ -169,4 +171,29 @@ struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
     return opcode | srcval | destAddr | imm;
   }
 };
+
+template<typename Dest>
+struct Beq {};
+
+template<uint16_t Dest>
+struct Beq<Literal<Dest>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0xA << 26);
+    constexpr uint32_t dest = (Dest & 0x3FFF);
+    return opcode | dest;
+  }
+};
+
+template<typename Dest>
+struct Bne {};
+
+template<uint16_t Dest>
+struct Bne<Literal<Dest>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0xB << 26);
+    constexpr uint32_t dest = (Dest & 0x3FFF);
+    return opcode | dest;
+  }
+};
+
 }
