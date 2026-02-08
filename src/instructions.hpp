@@ -16,6 +16,9 @@ enum class Opcode {
   LSH,
   CMP,
   BEC,
+  BMI,
+  BPL,
+  JREL,
 };
 
 struct Decode {
@@ -148,6 +151,19 @@ struct Jmp<Target<Dest>> {
   }
 };
 
+template<typename Dest>
+struct JmpRel {};
+
+template<std::int32_t Dest>
+struct JmpRel<Target<Dest>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x13 << 26);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
+    return opcode | dest;
+  }
+};
+
+
 template<typename SrcVal, typename DestMem, typename Offset>
 struct Store{};
 
@@ -169,8 +185,8 @@ template<uint8_t DestReg, uint8_t SrcRegAddr, uint16_t Imm>
 struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x9 << 26);
-    constexpr uint32_t srcval = (DestReg & 0x1F) << 21;
-    constexpr uint32_t destAddr = (SrcRegAddr & 0x1F) << 16;
+    constexpr uint32_t srcval = (SrcRegAddr & 0x1F) << 21;
+    constexpr uint32_t destAddr = (DestReg & 0x1F) << 16;
     constexpr uint32_t imm = Imm & 0xFF;
     return opcode | srcval | destAddr | imm;
   }
@@ -260,5 +276,31 @@ struct Cmp<Reg<Dest>, Literal<Imm>> {
     return opcode | dest | imm;
   }
 };
+
+template<typename Dest>
+struct Bmi {};
+
+template<std::int32_t Dest>
+struct Bmi<Target<Dest>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x11 << 26);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
+    return opcode | dest;
+  }
+};
+
+
+template<typename Dest>
+struct Bpl {};
+
+template<std::int32_t Dest>
+struct Bpl<Target<Dest>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x12 << 26);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
+    return opcode | dest;
+  }
+};
+
 
 }

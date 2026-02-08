@@ -22,7 +22,8 @@ TEST_CASE("Basic Mov") {
   using namespace Instructions;
   constexpr auto code = Program<
     Mov<Reg<1>, Literal<122>>,
-    Mov<Reg<2>, Reg<1>>
+    Mov<Reg<2>, Reg<1>>,
+    Mov<Reg<3>, Literal<250>>
   >::load();
 
   CPU cpu{};
@@ -31,6 +32,8 @@ TEST_CASE("Basic Mov") {
   REQUIRE_SAME(122, cpu.registers[1]);
   cpu.run_cycle();
   REQUIRE_SAME(122, cpu.registers[2]);
+  cpu.run_cycle();
+  REQUIRE_SAME(250, cpu.registers[3]);
 }
 
 TEST_CASE("Basic Sub") {
@@ -78,7 +81,7 @@ TEST_CASE("Basic Store") {
   cpu.run_cycle();
   cpu.run_cycle();
   cpu.run_cycle();
-  REQUIRE_SAME(10, cpu.load(10));
+  REQUIRE_SAME(20, cpu.load(10));
 }
 
 TEST_CASE("Basic Loop") {

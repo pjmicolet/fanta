@@ -10,6 +10,13 @@ struct DecodeDest {
   }
 };
 
+struct DecodeLoadDest {
+  static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
+    auto reg = (inst >> 16) & 0x1F;
+    cpu.registers[reg] = result;
+  }
+};
+
 struct DecodeS1Cmp {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
     auto reg = (inst >> 21) & 0x1F;
@@ -36,15 +43,17 @@ struct DecodeImm {
 };
 
 struct DecodeStorageDest {
+  #include <iostream>
   static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
-    auto base = cpu.registers[(inst >> 16) & 0x1F] + inst & 0xFF;
+    auto base = cpu.registers[(inst >> 16) & 0x1F] + (inst & 0xFF);
+    std::cout << base << "=" << result << "\n";
     cpu.store(base, result);
   }
 };
 
 struct DecodeLoadSource {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
-    auto base = cpu.registers[(inst >> 16) & 0x1F] + inst & 0xFF;
+    auto base = cpu.registers[(inst >> 21) & 0x1F] + inst & 0xFF;
     return cpu.load(base);
   }
 };
@@ -103,8 +112,8 @@ struct OpMem {
 };
 
 // This is some magic here
-using StoreReg = OpMem<DecodeSource1, DecodeStorageDest>;
-using LoadReg = OpMem<DecodeLoadSource, DecodeDest>;
+using StoreReg = OpMem<DecodeS1Cmp, DecodeStorageDest>;
+using LoadReg = OpMem<DecodeLoadSource, DecodeLoadDest>;
 
 // One of the few non composable
 struct Jmp {
@@ -139,6 +148,27 @@ struct Bec {
   }
 };
 
+struct Bmi {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    if(cpu.is_neg_set()) {
+      auto prev = cpu.get_prev_pc();
+      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
+      cpu.set_pc(res);
+    }
+  }
+};
+
+struct Bpl {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    if(!cpu.is_neg_set()) {
+      auto prev = cpu.get_prev_pc();
+      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
+      cpu.set_pc(res);
+    }
+  }
+};
+
+
 struct Bne {
   static auto exec(CPU& cpu, uint32_t inst) {
     if(!cpu.is_zero_set()) {
@@ -148,6 +178,15 @@ struct Bne {
     }
   }
 };
+
+struct Jrel {
+  static auto exec(CPU& cpu, uint32_t inst) {
+      auto prev = cpu.get_prev_pc();
+      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
+      cpu.set_pc(res);
+  }
+};
+
 
 struct Halt {
   static auto exec(CPU& cpu, uint32_t inst) {
@@ -175,16 +214,19 @@ struct OpCmp {
   static auto exec(CPU& cpu, uint32_t inst) {
     auto data = static_cast<std::int32_t>(DestDecoder::decode(cpu,inst));
     auto data2 = static_cast<std::int32_t>(OptDecoder::decode(cpu,inst));
+    std::cout << "Cmp" << data << " " << data2 << "\n";
     if(data == data2) {
-      cpu.set_zero(0);
-    } else {
       cpu.set_zero(1);
+    } else {
+      cpu.set_zero(0);
     }
     if(data > data2) {
       cpu.set_carry(1);
     } else {
       cpu.set_carry(0);
     }
+
+    cpu.set_neg(data - data2);
   }
 };
 

@@ -1,3 +1,4 @@
+#include "line.hpp"
 #include <SDL.h>
 #include "cpu.hpp"
 #include <SDL_events.h>
@@ -68,11 +69,17 @@ int main() {
   bool running = true;
   SDL_Event event;
 	CPU cpu{};
+  cpu.load_rom(generate_line()); 
   std::vector<uint32_t> vram(320*240, 0xFF000000);
   uint64_t count = 0; 
   uint64_t threshold = 1000;
   uint64_t lower_threshold = 100;
   bool up = true;
+  cpu.store(200, 80);
+  cpu.store(204, 300);
+  cpu.store(208, 15);
+  cpu.store(212, 30);
+  cpu.store(216, 0xFFFFFFFF);
   while(running) {
     while(SDL_PollEvent(&event)) {
       if(event.type == SDL_QUIT) {
@@ -80,10 +87,24 @@ int main() {
       }
     }
 
+    for(int i = 0; i < 1000; i++) {
+      cpu.run_cycle();
+    }
+    //  for(int j = 0; j < 240; j++) {
+    //  for(int i = 0; i < 320; i++) {
+    //    if(cpu.load(600+(j*320+(i*4))) != 0) {
+    //      std::cout << "x";
+    //    } else {
+    //      std::cout << ".";
+    //    }
+    //  }
+    //  std::cout << "\n";
+    //}
+    //std::cout << "\n\n\n\n\n\n\n";
     // D. Render Phase
     // 1. Lock/Update the Texture with the VM's VRAM
     //    (pitch = row width in bytes = 320 * 4 bytes)
-    SDL_UpdateTexture(texture, nullptr, vram.data(), VM_WIDTH * sizeof(uint32_t));
+    SDL_UpdateTexture(texture, nullptr, cpu.get_vram(), VM_WIDTH * sizeof(uint32_t));
 
     // 2. Clear Screen (Black)
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);

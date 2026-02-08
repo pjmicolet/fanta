@@ -16,6 +16,10 @@ struct Memory {
     return val;
   }
   
+  auto from(std::size_t base_addr) -> uint8_t* {
+    return &memory[base_addr];
+  }
+
 private:
   std::vector<std::uint8_t> memory; //16MB
 };
@@ -46,6 +50,10 @@ struct CPU {
 
   auto run_cycle() -> void;
   auto run_until_halt() -> void;
+
+  auto get_vram() {
+    return ram.from(250);
+  }
 
   auto get_prev_pc() -> std::uint32_t {
     return PC - 4; 
