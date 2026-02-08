@@ -10,6 +10,13 @@ struct DecodeDest {
   }
 };
 
+struct DecodeS1Cmp {
+  static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
+    auto reg = (inst >> 21) & 0x1F;
+    return cpu.registers[reg];
+  }
+};
+
 struct DecodeSource1 {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
     return cpu.registers[(inst >> 16) & 0x1F];
@@ -102,14 +109,32 @@ using LoadReg = OpMem<DecodeLoadSource, DecodeDest>;
 // One of the few non composable
 struct Jmp {
   static auto exec(CPU& cpu, uint32_t inst) {
-    cpu.set_pc(inst & 0x1FFF);
+    cpu.set_pc(inst & 0x3FFFFFF);
   }
 };
+
+auto parse_as_signed(uint32_t data) -> std::int32_t {
+  std::int32_t temp = data;
+  temp = temp << 6;
+  return temp >> 6;
+}
 
 struct Beq {
   static auto exec(CPU& cpu, uint32_t inst) {
     if(cpu.is_zero_set()) {
-      cpu.set_pc(inst & 0x1FFF);
+      auto prev = cpu.get_prev_pc();
+      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
+      cpu.set_pc(res);
+    }
+  }
+};
+
+struct Bec {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    if(cpu.is_carry_set()) {
+      auto prev = cpu.get_prev_pc();
+      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
+      cpu.set_pc(res);
     }
   }
 };
@@ -117,7 +142,9 @@ struct Beq {
 struct Bne {
   static auto exec(CPU& cpu, uint32_t inst) {
     if(!cpu.is_zero_set()) {
-      cpu.set_pc(inst & 0x1FFF);
+      auto prev = cpu.get_prev_pc();
+      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
+      cpu.set_pc(res);
     }
   }
 };
@@ -128,3 +155,38 @@ struct Halt {
   }
 };
 
+template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
+struct OpLsh {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto s1_data = S1Decoder::decode(cpu, inst);
+    auto opt_data = OptDecoder::decode(cpu, inst);
+    auto result = s1_data << opt_data;
+    cpu.set_zero(result);
+    cpu.set_neg(result);
+    DestDecoder::store(cpu, inst, result);
+  }
+};
+
+using LshReg = OpLsh<DecodeDest, DecodeSource1, DecodeSource2>;
+using LshImm = OpLsh<DecodeDest, DecodeSource1, DecodeImm>;
+
+template<typename DestDecoder, typename OptDecoder>
+struct OpCmp {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto data = static_cast<std::int32_t>(DestDecoder::decode(cpu,inst));
+    auto data2 = static_cast<std::int32_t>(OptDecoder::decode(cpu,inst));
+    if(data == data2) {
+      cpu.set_zero(0);
+    } else {
+      cpu.set_zero(1);
+    }
+    if(data > data2) {
+      cpu.set_carry(1);
+    } else {
+      cpu.set_carry(0);
+    }
+  }
+};
+
+using CmpReg = OpCmp<DecodeS1Cmp, DecodeSource1>;
+using CmpImm = OpCmp<DecodeS1Cmp, DecodeImm>;

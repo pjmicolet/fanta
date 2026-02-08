@@ -85,7 +85,7 @@ TEST_CASE("Basic Loop") {
   using namespace Instructions;
   constexpr auto code = Program<
     Add<Reg<0>, Reg<0>, Literal<1>>,
-    Jmp<Literal<0>>
+    Jmp<Target<0>>
   >::load();
 
   CPU cpu{};
@@ -100,7 +100,7 @@ TEST_CASE("Basic real Loop") {
     Mov<Reg<0>, Literal<100>>,
     Add<Reg<1>, Reg<1>, Literal<1>>,
     Sub<Reg<0>, Reg<0>, Literal<1>>,
-    Bne<Literal<4>>,
+    Bne<Target<-8>>,
     Halt
   >::load();
 

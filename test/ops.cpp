@@ -29,7 +29,7 @@ TEST_CASE("Multi Inst Assembler") {
     Add<Reg<0>, Reg<1>, Literal<123>>,
     Mov<Reg<2>, Reg<0>>,
     Halt,
-    Jmp<Literal<20>>,
+    Jmp<Target<20>>,
     Sub<Reg<2>, Reg<3>, Literal<0>>
   >::load();
 
@@ -51,7 +51,7 @@ TEST_CASE("Load into cpu") {
     Add<Reg<0>, Reg<1>, Literal<123>>,
     Mov<Reg<2>, Reg<0>>,
     Halt,
-    Jmp<Literal<20>>,
+    Jmp<Target<20>>,
     Sub<Reg<2>, Reg<3>, Literal<0>>
   >::load();
 

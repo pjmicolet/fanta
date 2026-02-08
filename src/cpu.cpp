@@ -27,6 +27,11 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x9, LoadReg)
     EXEC_INST(0xa, Beq)
     EXEC_INST(0xb, Bne)
+    EXEC_INST(0xc, LshReg)
+    EXEC_INST(0xd, LshImm)
+    EXEC_INST(0xe, CmpReg)
+    EXEC_INST(0xf, CmpImm)
+    EXEC_INST(0x10, Bec)
   }
 }
 

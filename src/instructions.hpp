@@ -13,6 +13,9 @@ enum class Opcode {
   LOAD,
   BEQ,
   BNE,
+  LSH,
+  CMP,
+  BEC,
 };
 
 struct Decode {
@@ -49,7 +52,8 @@ struct Decode {
 };
 
 template<std::uint8_t ID> struct Reg{};
-template<std::uint16_t LIT = 0> struct Literal{};
+template<std::int16_t LIT = 0> struct Literal{};
+template<std::int32_t TARGET = 0> struct Target{};
 
 struct Halt {
   // So far assuming that HALT will be 4 bytes just because it
@@ -135,11 +139,11 @@ struct Sub<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
 template<typename Dest>
 struct Jmp {};
 
-template<uint16_t Dest>
-struct Jmp<Literal<Dest>> {
+template<std::int32_t Dest>
+struct Jmp<Target<Dest>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x7 << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFF);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
     return opcode | dest;
   }
 };
@@ -175,11 +179,11 @@ struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
 template<typename Dest>
 struct Beq {};
 
-template<uint16_t Dest>
-struct Beq<Literal<Dest>> {
+template<std::int32_t Dest>
+struct Beq<Target<Dest>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0xA << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFF);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
     return opcode | dest;
   }
 };
@@ -187,12 +191,73 @@ struct Beq<Literal<Dest>> {
 template<typename Dest>
 struct Bne {};
 
-template<uint16_t Dest>
-struct Bne<Literal<Dest>> {
+template<std::int32_t Dest>
+struct Bne<Target<Dest>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0xB << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFF);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
     return opcode | dest;
+  }
+};
+
+template<typename Dest>
+struct Bec {};
+
+template<std::int32_t Dest>
+struct Bec<Target<Dest>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x10 << 26);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
+    return opcode | dest;
+  }
+};
+
+
+template<typename Dest, typename Src1, typename Src2>
+struct Lsh {};
+
+template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
+struct Lsh<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0xC << 26);
+    constexpr uint32_t dest = (Dest & 0x1F) << 21;
+    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
+    constexpr uint32_t src2 = (Reg2 & 0x1F) << 11;
+    return opcode | dest | src1 | src2;
+  }
+};
+
+template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>
+struct Lsh<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0xD << 26);
+    constexpr uint32_t dest = (Dest & 0x1F) << 21;
+    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
+    constexpr uint32_t imm = Imm & 0xFF;
+    return opcode | dest | src1 | imm;
+  }
+};
+
+template<typename Dest, typename Src1>
+struct Cmp {};
+
+template<uint8_t Dest, uint8_t Reg1>
+struct Cmp<Reg<Dest>, Reg<Reg1> > {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0xE << 26);
+    constexpr uint32_t dest = (Dest & 0x1F) << 21;
+    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
+    return opcode | dest | src1 ;
+  }
+};
+
+template<uint8_t Dest, uint16_t Imm>
+struct Cmp<Reg<Dest>, Literal<Imm>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0xF << 26);
+    constexpr uint32_t dest = (Dest & 0x1F) << 21;
+    constexpr uint32_t imm = Imm & 0xFF;
+    return opcode | dest | imm;
   }
 };
 

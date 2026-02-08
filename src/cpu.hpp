@@ -47,6 +47,10 @@ struct CPU {
   auto run_cycle() -> void;
   auto run_until_halt() -> void;
 
+  auto get_prev_pc() -> std::uint32_t {
+    return PC - 4; 
+  }
+
   auto set_pc(uint32_t pc_val) -> void {
     PC = pc_val;
   }
@@ -65,6 +69,14 @@ struct CPU {
 
   auto set_neg(uint32_t val) -> void {
     status_reg[1] = static_cast<int32_t>(val) < 0 ? 1 : 0;
+  }
+
+  auto set_carry(uint32_t val) -> void {
+    status_reg[3] = val; 
+  }
+
+  auto is_carry_set() -> bool {
+    return status_reg[3]; 
   }
 
   std::array<std::uint32_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
