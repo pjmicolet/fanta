@@ -59,7 +59,7 @@ TEST_CASE("Load into cpu") {
   cpu.load_rom(code);
 
   const auto data = cpu.fetch(); 
-  REQUIRE_SAME(0x2, data);
+  REQUIRE_SAME(0x2, Decode{data}.getOpcode());
 
   cpu.run_cycle();
 }

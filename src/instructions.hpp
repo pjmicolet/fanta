@@ -1,8 +1,68 @@
 #pragma once
 #include <cstdint>
-#include <array>
+#include <string>
+#include <unordered_map>
 
 namespace Instructions {
+
+enum InstFormat { THREE_OP, TWO_OP, MEM, JUMP, BRANCH, HALT };
+
+struct InstMetadata {
+  InstFormat fmt;
+  uint8_t reg;
+  uint8_t imm;
+};
+
+
+#define THREE_OP_INST( class_name, mnemonic, reg_op, imm_op) \
+template<typename Dest, typename Src1, typename Src2>\
+struct class_name {};\
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::THREE_OP, reg_op, imm_op});
+
+#define TWO_OP_INST( class_name, mnemonic, reg_op, imm_op) \
+template<typename Dest, typename Src1>\
+struct class_name {};\
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::TWO_OP, reg_op, imm_op});
+
+#define JUMP_INST( class_name, mnemonic, op) \
+template<typename Dest>\
+struct class_name {};\
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::JUMP, op, 0});
+
+#define BRANCH_INST( class_name, mnemonic, op) \
+template<typename Dest>\
+struct class_name {};\
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::BRANCH, op, 0});
+
+#define MEM_INST( class_name, mnemonic, op) \
+template<typename SrcVal, typename DestMem, typename Offset>\
+struct class_name {};\
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::MEM, op, 0});
+
+#define HALT_INST( class_name, mnemonic, op) \
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::HALT, op, 0});
+
+struct Registry {
+private:
+  static inline auto& get() {
+    static std::unordered_map<std::string, InstMetadata> map;
+    return map;
+  }
+public:
+  static auto& fetch(const std::string& key) {
+    return get().at(key);
+  }
+
+  static inline auto register_inst(std::string mnem, InstMetadata fmt) {
+    get()[mnem] = fmt;
+
+    return true;
+
+  }
+};
+
+
+
 enum class Opcode {
   HALT,
   ADD,
@@ -54,20 +114,33 @@ struct Decode {
   }
 };
 
+// constexpr assembler
+
 template<std::uint8_t ID> struct Reg{};
 template<std::int16_t LIT = 0> struct Literal{};
 template<std::int32_t TARGET = 0> struct Target{};
 
 struct Halt {
-  // So far assuming that HALT will be 4 bytes just because it
-  // makes fetching the next inst easier.
   static constexpr auto emit() {
     return 0;
   }
 };
 
-template<typename Dest, typename Src1, typename Src2>
-struct Add {};
+static inline bool regHalt = Registry::register_inst("HALT", { InstFormat::HALT, 0, 0});
+THREE_OP_INST(Add, "ADD", 0x1, 0x2)
+TWO_OP_INST(Mov, "MOV", 0x3, 0x4)
+THREE_OP_INST(Sub, "SUB", 0x5, 0x6)
+JUMP_INST(Jmp, "JMP", 0x7)
+JUMP_INST(JmpRel, "JREL", 0x13)
+MEM_INST(Store, "STORE", 0x8)
+MEM_INST(Load, "LOAD", 0x9)
+BRANCH_INST(Beq, "BEQ", 0xA)
+BRANCH_INST(Bne, "BNE", 0xB)
+BRANCH_INST(Bec, "BEC", 0x10)
+THREE_OP_INST(Lsh, "LSH", 0xC, 0xD)
+TWO_OP_INST(Cmp, "CMP", 0xE, 0xF)
+BRANCH_INST(Bmi, "BMI", 0x11)
+BRANCH_INST(Bpl, "BPL", 0x12)
 
 template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
 struct Add<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
@@ -91,9 +164,6 @@ struct Add<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
   }
 };
 
-template<typename Dest, typename Src1>
-struct Mov {};
-
 template<uint8_t Dest, uint8_t Reg1>
 struct Mov<Reg<Dest>, Reg<Reg1> > {
   static constexpr auto emit() {
@@ -113,9 +183,6 @@ struct Mov<Reg<Dest>, Literal<Imm>> {
     return opcode | dest | imm;
   }
 };
-
-template<typename Dest, typename Src1, typename Src2>
-struct Sub {};
 
 template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
 struct Sub<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
@@ -139,9 +206,6 @@ struct Sub<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
   }
 };
 
-template<typename Dest>
-struct Jmp {};
-
 template<std::int32_t Dest>
 struct Jmp<Target<Dest>> {
   static constexpr auto emit() {
@@ -150,9 +214,6 @@ struct Jmp<Target<Dest>> {
     return opcode | dest;
   }
 };
-
-template<typename Dest>
-struct JmpRel {};
 
 template<std::int32_t Dest>
 struct JmpRel<Target<Dest>> {
@@ -163,9 +224,6 @@ struct JmpRel<Target<Dest>> {
   }
 };
 
-
-template<typename SrcVal, typename DestMem, typename Offset>
-struct Store{};
 
 template<uint8_t SrcReg, uint8_t DestRegAddr, uint16_t Imm>
 struct Store<Reg<SrcReg>, Reg<DestRegAddr>, Literal<Imm>> {
@@ -178,9 +236,6 @@ struct Store<Reg<SrcReg>, Reg<DestRegAddr>, Literal<Imm>> {
   }
 };
 
-template<typename DestReg, typename SourceMem, typename Offset>
-struct Load{};
-
 template<uint8_t DestReg, uint8_t SrcRegAddr, uint16_t Imm>
 struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
   static constexpr auto emit() {
@@ -192,9 +247,6 @@ struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
   }
 };
 
-template<typename Dest>
-struct Beq {};
-
 template<std::int32_t Dest>
 struct Beq<Target<Dest>> {
   static constexpr auto emit() {
@@ -203,9 +255,6 @@ struct Beq<Target<Dest>> {
     return opcode | dest;
   }
 };
-
-template<typename Dest>
-struct Bne {};
 
 template<std::int32_t Dest>
 struct Bne<Target<Dest>> {
@@ -216,9 +265,6 @@ struct Bne<Target<Dest>> {
   }
 };
 
-template<typename Dest>
-struct Bec {};
-
 template<std::int32_t Dest>
 struct Bec<Target<Dest>> {
   static constexpr auto emit() {
@@ -228,9 +274,6 @@ struct Bec<Target<Dest>> {
   }
 };
 
-
-template<typename Dest, typename Src1, typename Src2>
-struct Lsh {};
 
 template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
 struct Lsh<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
@@ -254,9 +297,6 @@ struct Lsh<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
   }
 };
 
-template<typename Dest, typename Src1>
-struct Cmp {};
-
 template<uint8_t Dest, uint8_t Reg1>
 struct Cmp<Reg<Dest>, Reg<Reg1> > {
   static constexpr auto emit() {
@@ -277,9 +317,6 @@ struct Cmp<Reg<Dest>, Literal<Imm>> {
   }
 };
 
-template<typename Dest>
-struct Bmi {};
-
 template<std::int32_t Dest>
 struct Bmi<Target<Dest>> {
   static constexpr auto emit() {
@@ -290,9 +327,6 @@ struct Bmi<Target<Dest>> {
 };
 
 
-template<typename Dest>
-struct Bpl {};
-
 template<std::int32_t Dest>
 struct Bpl<Target<Dest>> {
   static constexpr auto emit() {
@@ -302,5 +336,16 @@ struct Bpl<Target<Dest>> {
   }
 };
 
+// runtime assembler
 
+inline auto parse_three(uint32_t op, uint32_t dest, uint32_t s1, uint32_t s2_or_imm, bool using_imm) -> std::uint32_t {
+  uint32_t res = (op << 26) | ((dest & 0x1F) << 21) | ((s1 & 0x1F) << 16);
+  if (using_imm) res |= (s2_or_imm & 0xFF);
+  else        res |= ((s2_or_imm & 0x1F) << 11);
+  return res;
+}
+
+inline auto parse_one(uint32_t op, uint32_t dest) -> std::uint32_t {
+  return op | dest & 0x3FFFFFF;
+}
 }

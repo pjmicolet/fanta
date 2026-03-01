@@ -19,6 +19,7 @@ target_include_directories(test_framework INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/
 # Test executable
 add_executable(ops_test test/ops.cpp)
 add_executable(cpu_test test/cpu.cpp)
+add_executable(string_assembler test/string_assembler.cpp)
 
 # Link the library
 # We manually add the src directory as SYSTEM to satisfy the requirement
@@ -29,12 +30,27 @@ target_link_libraries(ops_test PRIVATE fanta_lib test_framework)
 target_include_directories(cpu_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(cpu_test PRIVATE fanta_lib test_framework)
 
+target_include_directories(string_assembler SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(string_assembler PRIVATE fanta_lib test_framework)
+
 # Enable testing
 enable_testing()
 add_test(NAME ops_test COMMAND ops_test)
 add_test(NAME cpu_test COMMAND cpu_test)
+add_test(NAME string_assembler COMMAND string_assembler)
 
 # Main Application
 find_package(SDL2 REQUIRED)
 add_executable(fanta src/main.cpp)
 target_link_libraries(fanta PRIVATE fanta_lib SDL2::SDL2)
+
+# TUI Application
+find_package(Curses REQUIRED)
+add_executable(fanta-tui tui/main.cpp tui/tui.cpp)
+target_include_directories(fanta-tui PRIVATE tui src)
+target_link_libraries(fanta-tui PRIVATE fanta_lib ${CURSES_LIBRARIES})
+
+# TUI Tests
+add_executable(tui-tests tui/tests.cpp tui/tui.cpp)
+target_include_directories(tui-tests PRIVATE tui src)
+target_link_libraries(tui-tests PRIVATE fanta_lib ${CURSES_LIBRARIES})

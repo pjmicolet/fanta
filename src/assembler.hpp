@@ -1,6 +1,7 @@
 #pragma once 
 #include <tuple>
 #include <algorithm>
+#include <array>
 #include "instructions.hpp"
 
 namespace Instructions {

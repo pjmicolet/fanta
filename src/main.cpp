@@ -75,10 +75,10 @@ int main() {
   uint64_t threshold = 1000;
   uint64_t lower_threshold = 100;
   bool up = true;
-  cpu.store(200, 80);
-  cpu.store(204, 300);
+  cpu.store(200, 10);
+  cpu.store(204, 20);
   cpu.store(208, 15);
-  cpu.store(212, 30);
+  cpu.store(212, 15);
   cpu.store(216, 0xFFFFFFFF);
   while(running) {
     while(SDL_PollEvent(&event)) {
