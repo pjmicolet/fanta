@@ -345,6 +345,13 @@ inline auto parse_three(uint32_t op, uint32_t dest, uint32_t s1, uint32_t s2_or_
   return res;
 }
 
+inline auto parse_two(uint32_t op, uint32_t dest, uint32_t other, bool isImm) -> std::uint32_t {
+  uint32_t opcode = (op << 26);
+  uint32_t destr = (dest & 0x1F) << 21;
+  uint32_t second = isImm ? other & 0xFF : (other & 0x1F) << 16;
+  return opcode | destr | second;
+}
+
 inline auto parse_one(uint32_t op, uint32_t dest) -> std::uint32_t {
   return op | dest & 0x3FFFFFF;
 }
