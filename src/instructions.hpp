@@ -43,12 +43,11 @@ static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFor
 static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::HALT, op, 0});
 
 struct Registry {
-private:
   static inline auto& get() {
     static std::unordered_map<std::string, InstMetadata> map;
     return map;
   }
-public:
+
   static auto& fetch(const std::string& key) {
     return get().at(key);
   }
@@ -353,6 +352,6 @@ inline auto parse_two(uint32_t op, uint32_t dest, uint32_t other, bool isImm) ->
 }
 
 inline auto parse_one(uint32_t op, uint32_t dest) -> std::uint32_t {
-  return op | dest & 0x3FFFFFF;
+  return (op << 26) | (dest & 0x3FFFFFF);
 }
 }
