@@ -37,6 +37,9 @@ private:
     uint32_t mem_offset = 0;
     bool is_running_continuously = false;
     
+    int term_w = 80;
+    int term_h = 24;
+
     // Editor state
     Mode mode = Mode::NORMAL;
     std::vector<std::string> editor_buffer;

@@ -65,6 +65,10 @@ private:
         token.remove_prefix(2);
     }
 
+    if (token.starts_with("#")) {
+        token.remove_prefix(1);
+    }
+
     int realNum = 0;
     // Try hex first, if it fails or isn't 0x, from_chars handles it
     auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), realNum, 16);
