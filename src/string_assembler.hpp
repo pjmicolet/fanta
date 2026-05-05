@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cctype>
+#include <algorithm>
 #include <string>
 #include <charconv>
 #include <instructions.hpp>
@@ -10,26 +11,70 @@
 struct Assembler {
   static constexpr std::string _LITERAL = "#";
 
-  auto assemble(std::string_view inst) -> std::uint32_t {
+  auto scan_for_labels(std::string_view code) -> void {
+    auto lines = extract_labels(code);
+    uint32_t add = 0;
+    for(const auto& line : lines) {
+      if(is_label_define(line)) {
+        std::string clean_label{line.substr(0,line.size()-1)};
+        labels_[clean_label] = add;
+      }
+      add += 4;
+    }
+  }
+
+  auto assemble(std::string_view inst, int address) -> std::uint32_t {
     auto tokens = split_inst(inst);
     if (tokens.empty()) return -1;
+    if (is_label_define(inst)) return -1;
 
     try {
       auto& mtdc = Instructions::Registry::fetch(std::string{tokens[0]});
       switch(mtdc.fmt) {
-        case Instructions::THREE_OP: return parse_three(tokens, mtdc);
-        case Instructions::TWO_OP:   return parse_two(tokens, mtdc);
-        case Instructions::MEM:      return parse_mem(tokens, mtdc);
-        case Instructions::JUMP:     return parse_one(tokens, mtdc);
-        case Instructions::BRANCH:   return parse_one(tokens, mtdc);
+        case Instructions::THREE_OP: return parse_three(tokens, mtdc, address);
+        case Instructions::TWO_OP:   return parse_two(tokens, mtdc, address);
+        case Instructions::MEM:      return parse_mem(tokens, mtdc, address);
+        case Instructions::JUMP:     return parse_one(tokens, mtdc, address, true);
+        case Instructions::BRANCH:   return parse_one(tokens, mtdc, address);
         case Instructions::HALT:     return 0;
       }
     } catch (...) { return -1; }
     return -1;
   }
 
+  auto get_label_for(int address) -> std::string {
+    for(auto const& [ label, add ] : labels_) {
+      if(add == address) return label;
+    }
+    return "";
+  }
+
 private:
   std::string last_copy; // Store the modified string to keep string_views valid
+
+  auto is_label_define(std::string_view line) -> bool {
+    return line.contains(':');
+  }
+
+  auto is_label(std::string_view token) -> bool {
+    return std::all_of(token.data(), token.data() + token.size(),
+      [](unsigned char c) { return ::isalpha(c); });
+  }
+
+  auto is_register(std::string_view token) -> bool {
+    if(token.size() < 2) return false;
+    if (token[0] != 'R' && token[0] != 'r') return false;
+    return std::all_of(token.data() + 1, token.data() + token.size(),
+      [](unsigned char c) { return ::isdigit(c); });
+  }
+
+  auto extract_labels(std::string_view code) -> std::vector<std::string> {
+    return code | std::views::split('\n') | 
+      std::views::transform([](auto t) { return std::string_view{t}; }) | 
+      std::views::filter([](auto t) { return !t.empty(); }) |
+      std::views::transform([](auto t) { return std::string{t}; }) | 
+      std::ranges::to<std::vector>();
+  }
 
   auto split_inst(std::string_view text) -> std::vector<std::string_view> {
     last_copy = std::string{text};
@@ -44,14 +89,19 @@ private:
       std::ranges::to<std::vector>();
   }
 
-  auto extract_val(std::string_view token) -> int {
+  auto extract_val(std::string_view token, int address, bool is_jump = false) -> int {
     if (token.empty()) return 0;
     
     // Check for register format "R1"
-    if (token[0] == 'R' || token[0] == 'r') {
+    if (is_register(token)) {
         int regNum = 0;
         std::from_chars(token.data() + 1, token.data() + token.size(), regNum);
         return regNum;
+    }
+
+    if (is_label(token)) {
+      if(is_jump) return labels_[std::string{token}];
+      return labels_[std::string{token}] - address;
     }
 
     // Check for hex/immediate "-0x4" or "10"
@@ -63,6 +113,10 @@ private:
     
     if (token.starts_with("0X")) {
         token.remove_prefix(2);
+    }
+
+    if (token.starts_with("$")) {
+        token.remove_prefix(1);
     }
 
     if (token.starts_with("#")) {
@@ -80,34 +134,36 @@ private:
     return isNeg ? -realNum : realNum;
   }
 
-  auto parse_one(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd) -> uint32_t {
+  auto parse_one(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd, int address, bool is_jump=false) -> uint32_t {
     if (tokens.size() < 2) return -1;
-    int r1_int = extract_val(tokens[1]);
+    int r1_int = extract_val(tokens[1], address, is_jump);
     return Instructions::parse_one(mtd.reg, r1_int);
   }
 
-  auto parse_two(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd) -> uint32_t {
+  auto parse_two(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd, int address) -> uint32_t {
     if (tokens.size() < 3) return -1;
-    int r1_int = extract_val(tokens[1]);
+    int r1_int = extract_val(tokens[1], address);
     bool isImm = (tokens[2][0] != 'R' && tokens[2][0] != 'r');
-    int r2_int = extract_val(tokens[2]);
+    int r2_int = extract_val(tokens[2], address);
     return Instructions::parse_two(isImm ? mtd.imm : mtd.reg, r1_int, r2_int, isImm);
   }
 
-  auto parse_three(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd) -> uint32_t {
+  auto parse_three(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd, int address) -> uint32_t {
     if (tokens.size() < 4) return -1;
-    int r1_int = extract_val(tokens[1]);
-    int r2_int = extract_val(tokens[2]);
+    int r1_int = extract_val(tokens[1], address);
+    int r2_int = extract_val(tokens[2], address);
     bool isImm = (tokens[3][0] != 'R' && tokens[3][0] != 'r');
-    int r3_int = extract_val(tokens[3]);
+    int r3_int = extract_val(tokens[3], address);
     return Instructions::parse_three(isImm ? mtd.imm : mtd.reg, r1_int, r2_int, r3_int, isImm);
   }
 
-  auto parse_mem(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd) -> uint32_t {
+  auto parse_mem(const std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd, int address) -> uint32_t {
     if (tokens.size() < 4) return -1;
-    int dest_reg = extract_val(tokens[1]);
-    int offset   = extract_val(tokens[2]);
-    int base_reg = extract_val(tokens[3]);
+    int dest_reg = extract_val(tokens[1], address);
+    int offset   = extract_val(tokens[2], address);
+    int base_reg = extract_val(tokens[3], address);
     return Instructions::parse_three(mtd.reg, dest_reg, base_reg, offset, true);
   }
+
+  std::unordered_map<std::string, int> labels_;
 };

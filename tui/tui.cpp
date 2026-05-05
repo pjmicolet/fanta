@@ -284,27 +284,33 @@ void TUI::handle_insert_mode(int ch) {
             break;
         case KEY_ENTER:
         case '\n': {
-            // Assemble line and patch memory at cursor_y * 4
-            try {
-                Assembler assem;
-                std::string line = editor_buffer[cursor_y];
-                if (!line.empty()) {
-                    uint32_t instr = assem.assemble(line);
-                    if (instr != (uint32_t)-1) {
-                        cpu.store(cursor_y * 4, instr);
-                    }
-                }
-            } catch (const std::exception& e) {
-                // Ignore malformed lines gracefully
-            } catch (...) {
-                // Catch-all for any other non-standard exceptions
-            }
-            
+            // New line insertion logic
             std::string remaining = editor_buffer[cursor_y].substr(cursor_x);
             editor_buffer[cursor_y] = editor_buffer[cursor_y].substr(0, cursor_x);
             editor_buffer.insert(editor_buffer.begin() + cursor_y + 1, remaining);
             cursor_y++;
             cursor_x = 0;
+
+            // Two-pass assembly for the entire buffer
+            try {
+                // Pass 1: Scan for labels
+                std::string full_code;
+                for (const auto& line : editor_buffer) {
+                    full_code += line + "\n";
+                }
+                assem.scan_for_labels(full_code);
+
+                // Pass 2: Re-assemble all lines into memory
+                for (size_t i = 0; i < editor_buffer.size(); ++i) {
+                    if (editor_buffer[i].empty()) continue;
+                    uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
+                    if (instr != (uint32_t)-1) {
+                        cpu.store(i * 4, instr);
+                    }
+                }
+            } catch (...) {
+                // Ignore errors during re-assembly
+            }
             break;
         }
         default:
@@ -321,6 +327,9 @@ std::string TUI::disassemble(uint32_t addr) {
     uint32_t raw = cpu.ram.read32(addr);
     Instructions::Decode d(raw);
     uint8_t opcode = d.getOpcode();
+
+    std::string label = assem.get_label_for((int)addr);
+    std::string label_tag = label.empty() ? "" : "[" + label + "] ";
 
     // Mapping of opcode to name for display
     static std::unordered_map<uint8_t, std::string> names;
@@ -341,20 +350,47 @@ std::string TUI::disassemble(uint32_t addr) {
     ss << name << " ";
     switch(mtd.fmt) {
         case Instructions::THREE_OP:
-            ss << "R" << (int)d.getDestSrc() << ", R" << (int)d.getS1() << ", " << (opcode == mtd.imm ? "#" : "R") << (int)(opcode == mtd.imm ? d.getImm() : d.getS2());
+            ss << "R" << (int)d.getDestSrc() << ", R" << (int)d.getS1() << ", ";
+            if (opcode == mtd.imm) {
+                ss << "#" << std::hex << (int)d.getImm();
+            } else {
+                ss << "R" << (int)d.getS2();
+            }
             break;
         case Instructions::TWO_OP:
-            ss << "R" << (int)d.getDestSrc() << ", " << (opcode == mtd.imm ? "#" : "R") << (int)(opcode == mtd.imm ? d.getImm() : d.getS1());
+            ss << "R" << (int)d.getDestSrc() << ", ";
+            if (opcode == mtd.imm) {
+                ss << "#" << std::hex << (int)d.getImm();
+            } else {
+                ss << "R" << (int)d.getS1();
+            }
             break;
         case Instructions::MEM:
-            ss << "R" << (int)d.getDestSrc() << ", 0x" << std::hex << (int)d.getImm() << "(R" << std::dec << (int)d.getS1() << ")";
+            ss << "R" << (int)d.getDestSrc() << ", " << std::hex << (int)d.getImm() << "(R" << std::dec << (int)d.getS1() << ")";
             break;
         case Instructions::JUMP:
-        case Instructions::BRANCH:
-            ss << "0x" << std::hex << (raw & 0x3FFFFFF);
+        case Instructions::BRANCH: {
+            int32_t offset = (int32_t)(raw & 0x3FFFFFF);
+            // Sign extend 26-bit to 32-bit
+            if (offset & 0x2000000) offset |= 0xFC000000;
+            
+            // For JMP (absolute) vs Branch (relative)
+            uint32_t target = (opcode == Instructions::Registry::fetch("JMP").reg) ? (raw & 0x3FFFFFF) : (addr + offset);
+            
+            std::string target_label = assem.get_label_for((int)target);
+            if (!target_label.empty()) {
+                ss << target_label << " <0x" << std::hex << target << ">";
+            } else {
+                ss << "0x" << std::hex << target;
+            }
+            
+            if (opcode != Instructions::Registry::fetch("JMP").reg) {
+                ss << " (offset: " << std::dec << offset << ")";
+            }
             break;
+        }
         case Instructions::HALT:
-            return "HALT";
+            return label_tag + "HALT";
     }
-    return ss.str();
+    return label_tag + ss.str();
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include "cpu.hpp"
 #include "trie.hpp"
+#include "string_assembler.hpp"
 #include <ncurses.h>
 #include <string>
 #include <vector>
@@ -47,6 +48,7 @@ private:
     int cursor_y = 0;
     int editor_scroll = 0;
 
+    Assembler assem;
     Trie trie;
     void init_trie();
 };
