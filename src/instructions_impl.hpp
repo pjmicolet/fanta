@@ -64,8 +64,7 @@ struct OpAdd {
     auto s1_data = S1Decoder::decode(cpu, inst);
     auto opt_data = OptDecoder::decode(cpu, inst);
     auto result = s1_data + opt_data;
-    cpu.set_zero(result);
-    cpu.set_neg(result);
+    cpu.check_arith(s1_data, opt_data, result, false);
     DestDecoder::store(cpu, inst, result);
   }
 };
@@ -79,8 +78,7 @@ struct OpSub {
     auto s1_data = S1Decoder::decode(cpu, inst);
     auto opt_data = OptDecoder::decode(cpu, inst);
     auto result = s1_data - opt_data;
-    cpu.set_zero(result);
-    cpu.set_neg(result);
+    cpu.check_arith(s1_data, opt_data, result, true);
     DestDecoder::store(cpu, inst, result);
   }
 };
@@ -202,6 +200,7 @@ struct OpLsh {
     auto result = s1_data << opt_data;
     cpu.set_zero(result);
     cpu.set_neg(result);
+    cpu.set_carry(result < s1_data);
     DestDecoder::store(cpu, inst, result);
   }
 };

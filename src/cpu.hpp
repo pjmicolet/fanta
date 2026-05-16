@@ -59,40 +59,60 @@ struct CPU {
     return PC - 4; 
   }
 
+  auto check_arith(uint32_t s1, uint32_t s2, uint32_t res, bool isSub) -> void {
+    set_zero(res);
+    set_neg(res);
+    
+    if(isSub) {
+      set_carry(s1 >= s2);
+      set_overflow(((s1^s2)&(s1^res))&0x80000000);
+    } else {
+      set_carry(res < s1);
+      set_overflow(((s1^res)&(s2^res))&0x80000000);
+    }
+  }
+
   auto set_pc(uint32_t pc_val) -> void {
     PC = pc_val;
   }
 
   auto is_zero_set() -> bool {
-    return status_reg[3] == 1;
+    return status_reg[0] == 1;
   }
 
   auto is_neg_set() -> bool {
     return status_reg[1] == 1;
   }
 
+  auto is_overflow_set() -> bool {
+    return status_reg[2] == 1; 
+  }
+
+  auto is_carry_set() -> bool {
+    return status_reg[3] == 1; 
+  }
+
   auto set_zero(uint32_t val) -> void {
-    status_reg[3] = val == 0 ? 1 : 0;
+    status_reg[0] = val == 0 ? 1 : 0;
   }
 
   auto set_neg(uint32_t val) -> void {
     status_reg[1] = static_cast<int32_t>(val) < 0 ? 1 : 0;
   }
 
+  auto set_overflow(uint32_t val) -> void {
+    status_reg[2] = val; 
+  }
+
   auto set_carry(uint32_t val) -> void {
     status_reg[3] = val; 
   }
-
-  auto is_carry_set() -> bool {
-    return status_reg[3]; 
-  }
-
   std::array<std::uint32_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
   // Status regs are:
   // 0: Zero
   // 1: Negative
   // 2: Overflow (probably)
-  // 4: Carry
+  // 3: Carry
   std::array<std::uint8_t, 4> status_reg{0,0,0,0};
 
   bool halted = false;

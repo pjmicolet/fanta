@@ -112,3 +112,18 @@ TEST_CASE("Basic real Loop") {
   cpu.run_until_halt();
   REQUIRE_SAME(100, cpu.registers[1]);
 }
+
+TEST_CASE("Flag Tests") {
+  using namespace Instructions;
+  constexpr auto code = Program<
+    Mov<Reg<0>, Literal<1>>,
+    Lsh<Reg<0>, Reg<0>, Literal<31>>,
+    Lsh<Reg<0>, Reg<0>, Literal<1>>,
+    Halt
+  >::load();
+
+  CPU cpu{};
+  cpu.load_rom(code);
+  cpu.run_until_halt();
+  REQUIRE_TRUE(cpu.is_carry_set());
+}
