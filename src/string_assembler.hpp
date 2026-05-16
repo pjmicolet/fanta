@@ -12,6 +12,7 @@ struct Assembler {
   static constexpr std::string _LITERAL = "#";
 
   auto scan_for_labels(std::string_view code) -> void {
+    labels_.clear();
     auto lines = extract_labels(code);
     uint32_t add = 0;
     for(const auto& line : lines) {
@@ -26,7 +27,7 @@ struct Assembler {
   auto assemble(std::string_view inst, int address) -> std::uint32_t {
     auto tokens = split_inst(inst);
     if (tokens.empty()) return -1;
-    if (is_label_define(inst)) return -1;
+    if (is_label_define(inst)) return Instructions::Nop::emit();
 
     try {
       auto& mtdc = Instructions::Registry::fetch(std::string{tokens[0]});
@@ -71,7 +72,6 @@ private:
   auto extract_labels(std::string_view code) -> std::vector<std::string> {
     return code | std::views::split('\n') | 
       std::views::transform([](auto t) { return std::string_view{t}; }) | 
-      std::views::filter([](auto t) { return !t.empty(); }) |
       std::views::transform([](auto t) { return std::string{t}; }) | 
       std::ranges::to<std::vector>();
   }
@@ -104,30 +104,31 @@ private:
       return labels_[std::string{token}] - address;
     }
 
-    // Check for hex/immediate "-0x4" or "10"
+    // Check for hex/immediate "-#12" or "$FF"
     bool isNeg = false;
     if(token[0] == '-') {
       isNeg = true;
       token.remove_prefix(1);
     }
     
+    bool forceHex = false;
     if (token.starts_with("0X")) {
         token.remove_prefix(2);
-    }
-
-    if (token.starts_with("$")) {
+        forceHex = true;
+    } else if (token.starts_with("$")) {
         token.remove_prefix(1);
-    }
-
-    if (token.starts_with("#")) {
+        forceHex = true;
+    } else if (token.starts_with("#")) {
         token.remove_prefix(1);
+        forceHex = true;
     }
 
     int realNum = 0;
-    // Try hex first, if it fails or isn't 0x, from_chars handles it
+    // Default to Hex (base 16) for all literal types per GEMINI.md
     auto [ptr, ec] = std::from_chars(token.data(), token.data() + token.size(), realNum, 16);
-    if (ec != std::errc{}) {
-        // Fallback to decimal if hex parsing failed
+    
+    if (ec != std::errc{} && !forceHex) {
+        // Fallback to decimal ONLY if it wasn't a prefixed literal
         std::from_chars(token.data(), token.data() + token.size(), realNum, 10);
     }
     

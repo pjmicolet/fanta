@@ -109,7 +109,7 @@ struct Decode {
   }
 
   constexpr auto getImm() const -> uint16_t {
-    return raw & (0xFF);
+    return raw & (0xFFFF);
   }
 };
 
@@ -125,7 +125,15 @@ struct Halt {
   }
 };
 
+struct Nop {
+  static constexpr auto emit() {
+    return 0x14 << 26;
+  }
+};
+
+
 static inline bool regHalt = Registry::register_inst("HALT", { InstFormat::HALT, 0, 0});
+static inline bool nop = Registry::register_inst("NOP", { InstFormat::HALT, 0x14, 0});
 THREE_OP_INST(Add, "ADD", 0x1, 0x2)
 TWO_OP_INST(Mov, "MOV", 0x3, 0x4)
 THREE_OP_INST(Sub, "SUB", 0x5, 0x6)
@@ -158,7 +166,7 @@ struct Add<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
     constexpr uint32_t opcode = (0x2 << 26);
     constexpr uint32_t dest = (Dest & 0x1F) << 21;
     constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFF;
+    constexpr uint32_t imm = Imm & 0xFFFF;
     return opcode | dest | src1 | imm;
   }
 };
@@ -178,7 +186,7 @@ struct Mov<Reg<Dest>, Literal<Imm>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x4 << 26);
     constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t imm = Imm & 0xFF;
+    constexpr uint32_t imm = Imm & 0xFFFF;
     return opcode | dest | imm;
   }
 };
@@ -200,7 +208,7 @@ struct Sub<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
     constexpr uint32_t opcode = (0x6 << 26);
     constexpr uint32_t dest = (Dest & 0x1F) << 21;
     constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFF;
+    constexpr uint32_t imm = Imm & 0xFFFF;
     return opcode | dest | src1 | imm;
   }
 };
@@ -230,7 +238,7 @@ struct Store<Reg<SrcReg>, Reg<DestRegAddr>, Literal<Imm>> {
     constexpr uint32_t opcode = (0x8 << 26);
     constexpr uint32_t srcval = (SrcReg & 0x1F) << 21;
     constexpr uint32_t destAddr = (DestRegAddr & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFF;
+    constexpr uint32_t imm = Imm & 0xFFFF;
     return opcode | srcval | destAddr | imm;
   }
 };
@@ -241,7 +249,7 @@ struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
     constexpr uint32_t opcode = (0x9 << 26);
     constexpr uint32_t srcval = (SrcRegAddr & 0x1F) << 21;
     constexpr uint32_t destAddr = (DestReg & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFF;
+    constexpr uint32_t imm = Imm & 0xFFFF;
     return opcode | srcval | destAddr | imm;
   }
 };
@@ -291,7 +299,7 @@ struct Lsh<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
     constexpr uint32_t opcode = (0xD << 26);
     constexpr uint32_t dest = (Dest & 0x1F) << 21;
     constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFF;
+    constexpr uint32_t imm = Imm & 0xFFFF;
     return opcode | dest | src1 | imm;
   }
 };
@@ -311,7 +319,7 @@ struct Cmp<Reg<Dest>, Literal<Imm>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0xF << 26);
     constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t imm = Imm & 0xFF;
+    constexpr uint32_t imm = Imm & 0xFFFF;
     return opcode | dest | imm;
   }
 };
@@ -339,7 +347,7 @@ struct Bpl<Target<Dest>> {
 
 inline auto parse_three(uint32_t op, uint32_t dest, uint32_t s1, uint32_t s2_or_imm, bool using_imm) -> std::uint32_t {
   uint32_t res = (op << 26) | ((dest & 0x1F) << 21) | ((s1 & 0x1F) << 16);
-  if (using_imm) res |= (s2_or_imm & 0xFF);
+  if (using_imm) res |= (s2_or_imm & 0xFFFF);
   else        res |= ((s2_or_imm & 0x1F) << 11);
   return res;
 }
@@ -347,7 +355,7 @@ inline auto parse_three(uint32_t op, uint32_t dest, uint32_t s1, uint32_t s2_or_
 inline auto parse_two(uint32_t op, uint32_t dest, uint32_t other, bool isImm) -> std::uint32_t {
   uint32_t opcode = (op << 26);
   uint32_t destr = (dest & 0x1F) << 21;
-  uint32_t second = isImm ? other & 0xFF : (other & 0x1F) << 16;
+  uint32_t second = isImm ? other & 0xFFFF : (other & 0x1F) << 16;
   return opcode | destr | second;
 }
 

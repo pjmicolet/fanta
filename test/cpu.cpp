@@ -127,3 +127,4 @@ TEST_CASE("Flag Tests") {
   cpu.run_until_halt();
   REQUIRE_TRUE(cpu.is_carry_set());
 }
+

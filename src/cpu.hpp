@@ -26,7 +26,7 @@ private:
 
 struct CPU {
 
-  CPU() : ram(16*1024*1024) {}
+  CPU() : ram(32*1024*1024) {}
   constexpr auto fetch() {
     auto data = ram.read32(PC);
     PC+=4;
@@ -52,7 +52,7 @@ struct CPU {
   auto run_until_halt() -> void;
 
   auto get_vram() {
-    return ram.from(250);
+    return ram.from(0x800000);
   }
 
   auto get_prev_pc() -> std::uint32_t {
@@ -70,6 +70,11 @@ struct CPU {
       set_carry(res < s1);
       set_overflow(((s1^res)&(s2^res))&0x80000000);
     }
+
+  }
+
+  auto get_pc() const -> uint32_t {
+    return PC;
   }
 
   auto set_pc(uint32_t pc_val) -> void {
@@ -101,11 +106,11 @@ struct CPU {
   }
 
   auto set_overflow(uint32_t val) -> void {
-    status_reg[2] = val; 
+    status_reg[2] = val ? 1 : 0; 
   }
 
   auto set_carry(uint32_t val) -> void {
-    status_reg[3] = val; 
+    status_reg[3] = val ? 1 : 0; 
   }
   std::array<std::uint32_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
   // Status regs are:

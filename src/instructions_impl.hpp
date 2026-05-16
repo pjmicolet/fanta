@@ -38,22 +38,20 @@ struct DecodeSource2 {
 
 struct DecodeImm {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
-    return inst & 0xFF;
+    return inst & 0xFFFF;
   }
 };
 
 struct DecodeStorageDest {
-  #include <iostream>
   static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
-    auto base = cpu.registers[(inst >> 16) & 0x1F] + (inst & 0xFF);
-    std::cout << base << "=" << result << "\n";
+    auto base = cpu.registers[(inst >> 16) & 0x1F] + (inst & 0xFFFF);
     cpu.store(base, result);
   }
 };
 
 struct DecodeLoadSource {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
-    auto base = cpu.registers[(inst >> 21) & 0x1F] + inst & 0xFF;
+    auto base = cpu.registers[(inst >> 21) & 0x1F] + inst & 0xFFFF;
     return cpu.load(base);
   }
 };
@@ -192,6 +190,12 @@ struct Halt {
   }
 };
 
+struct Nop {
+  static auto exec(CPU& cpu, uint32_t inst) {
+  }
+};
+
+
 template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
 struct OpLsh {
   static auto exec(CPU& cpu, uint32_t inst) {
@@ -213,7 +217,6 @@ struct OpCmp {
   static auto exec(CPU& cpu, uint32_t inst) {
     auto data = static_cast<std::int32_t>(DestDecoder::decode(cpu,inst));
     auto data2 = static_cast<std::int32_t>(OptDecoder::decode(cpu,inst));
-    std::cout << "Cmp" << data << " " << data2 << "\n";
     if(data == data2) {
       cpu.set_zero(1);
     } else {

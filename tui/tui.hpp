@@ -8,7 +8,9 @@
 
 enum class Mode {
     NORMAL,
-    INSERT
+    INSERT,
+    ZOOM,
+    COMMAND
 };
 
 class TUI {
@@ -32,6 +34,7 @@ private:
     
     void handle_normal_mode(int ch);
     void handle_insert_mode(int ch);
+    void handle_command_mode(int ch);
 
     CPU& cpu;
     bool running;
@@ -44,6 +47,7 @@ private:
     // Editor state
     Mode mode = Mode::NORMAL;
     std::vector<std::string> editor_buffer;
+    std::string command_buffer;
     int cursor_x = 0;
     int cursor_y = 0;
     int editor_scroll = 0;
@@ -51,4 +55,7 @@ private:
     Assembler assem;
     Trie trie;
     void init_trie();
+
+    std::array<std::uint32_t, 8> prev_registers{0};
+    int last_changed_reg = -1;
 };

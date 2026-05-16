@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <fstream>
 
 TUI::TUI(CPU& cpu) : cpu(cpu), running(true) {
     editor_buffer.push_back("");
@@ -34,17 +35,47 @@ void TUI::init_ncurses() {
         init_pair(3, COLOR_YELLOW, COLOR_BLACK); // Status / Insert Mode
         init_pair(4, COLOR_RED, COLOR_BLACK);    // Halted
         init_pair(5, COLOR_MAGENTA, COLOR_BLACK); // Memory
-        init_pair(6, COLOR_WHITE, COLOR_BLACK);  // VRAM preview
+        init_pair(6, COLOR_WHITE, COLOR_BLACK);  // VRAM preview (default)
+
+        // Initialize 6x6x6 color cube starting at pair 10
+        // xterm colors 16-231 are the 6x6x6 cube
+        if (COLORS >= 256) {
+            for (int r = 0; r < 6; ++r) {
+                for (int g = 0; g < 6; ++g) {
+                    for (int b = 0; b < 6; ++b) {
+                        int color_idx = 16 + (r * 36) + (g * 6) + b;
+                        int pair_idx = 10 + (r * 36) + (g * 6) + b;
+                        init_pair(pair_idx, color_idx, color_idx); // Same fg/bg for solid block
+                    }
+                }
+            }
+        }
     }
 }
 
 void TUI::run() {
     while (running) {
         if (is_running_continuously) {
-            if (!cpu.halted) {
-                cpu.run_cycle();
-            } else {
-                is_running_continuously = false;
+            // Run a batch of cycles to speed up execution
+            for (int i = 0; i < 1000; ++i) {
+                if (!cpu.halted) {
+                    prev_registers = cpu.registers;
+                    cpu.run_cycle();
+                    
+                    // Update last_changed_reg for the very last instruction in the batch
+                    if (i == 999) {
+                        last_changed_reg = -1;
+                        for (int r = 0; r < 8; ++r) {
+                            if (cpu.registers[r] != prev_registers[r]) {
+                                last_changed_reg = r;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    is_running_continuously = false;
+                    break;
+                }
             }
         }
         update();
@@ -55,6 +86,13 @@ void TUI::run() {
 void TUI::update() {
     getmaxyx(stdscr, term_h, term_w);
     erase();
+
+    if (mode == Mode::ZOOM) {
+        draw_vram_preview();
+        refresh();
+        return;
+    }
+
     draw_registers();
     draw_status();
     draw_disassembly();
@@ -72,25 +110,42 @@ void TUI::update() {
 void TUI::draw_registers() {
     attron(COLOR_PAIR(1));
     mvprintw(1, 2, "--- REGISTERS ---");
-    for (int i = 0; i < 8; ++i) {
-        if (2 + i < term_h)
-            mvprintw(2 + i, 2, "R%d: 0x%08X", i, cpu.registers[i]);
-    }
     attroff(COLOR_PAIR(1));
+
+    for (int i = 0; i < 8; ++i) {
+        if (2 + i < term_h) {
+            if (i == last_changed_reg) {
+                attron(COLOR_PAIR(3) | A_BOLD);
+                mvprintw(2 + i, 2, "R%d: 0x%08X", i, cpu.registers[i]);
+                attroff(COLOR_PAIR(3) | A_BOLD);
+            } else {
+                attron(COLOR_PAIR(1));
+                mvprintw(2 + i, 2, "R%d: 0x%08X", i, cpu.registers[i]);
+                attroff(COLOR_PAIR(1));
+            }
+        }
+    }
 }
 
 void TUI::draw_status() {
     attron(COLOR_PAIR(3));
     int col = term_w * 0.25;
-    if (col < 20) col = 20; // Minimum column offset
+    if (col < 20) col = 20; 
     mvprintw(1, col, "--- STATUS ---");
-    mvprintw(2, col, "Z:%d N:%d V:%d C:%d", cpu.status_reg[0], cpu.status_reg[1], cpu.status_reg[2], cpu.status_reg[3]);
-    mvprintw(3, col, "MODE: %s %s", (mode == Mode::NORMAL ? "NORMAL" : "INSERT"), (is_running_continuously ? "(CONTINUOUS)" : ""));
-    mvprintw(4, col, "KEYS: %s", (mode == Mode::NORMAL ? "s:step c:cont i:edit q:quit" : "ESC:exit"));
+    mvprintw(2, col, "PC: 0x%04X", cpu.get_pc());
+    mvprintw(3, col, "FLAGS: Z:%d N:%d V:%d C:%d", cpu.status_reg[0], cpu.status_reg[1], (cpu.status_reg[2] ? 1 : 0), (cpu.status_reg[3] ? 1 : 0));
+    mvprintw(4, col, "MODE: %s %s", (mode == Mode::NORMAL ? "NORMAL" : (mode == Mode::INSERT ? "INSERT" : (mode == Mode::ZOOM ? "ZOOM" : "COMMAND"))), (is_running_continuously ? "(CONT)" : ""));
+    mvprintw(5, col, "KEYS: %s", (mode == Mode::NORMAL ? "s:step c:cont r:reset i:edit q:quit" : "ESC:exit"));
     
+    if (!command_buffer.empty()) {
+        attron(A_REVERSE);
+        mvprintw(term_h - 1, 0, "%s", command_buffer.c_str());
+        attroff(A_REVERSE);
+    }
+
     if (cpu.halted) {
         attron(COLOR_PAIR(4) | A_BOLD);
-        mvprintw(5, col, "!!! HALTED !!!");
+        mvprintw(6, col, "!!! HALTED !!!");
         attroff(COLOR_PAIR(4) | A_BOLD);
     }
     attroff(COLOR_PAIR(3));
@@ -190,29 +245,52 @@ void TUI::draw_editor() {
 }
 
 void TUI::draw_vram_preview() {
-    int start_col = term_w * 0.55;
-    int start_y = term_h * 0.6;
-    int preview_w = term_w - start_col - 4;
-    int preview_h = term_h - start_y - 1;
+    int start_col, start_y, preview_w, preview_h;
+
+    if (mode == Mode::ZOOM) {
+        start_col = 0;
+        start_y = 0;
+        preview_w = term_w;
+        preview_h = term_h;
+    } else {
+        start_col = term_w * 0.55;
+        start_y = term_h * 0.6;
+        preview_w = term_w - start_col - 4;
+        preview_h = term_h - start_y - 1;
+        mvprintw(start_y - 1, start_col, "--- VRAM MONITOR ---");
+    }
     
     if (preview_w <= 0 || preview_h <= 0) return;
 
-    mvprintw(start_y - 1, start_col, "--- VRAM PREVIEW ---");
     uint32_t* vram = (uint32_t*)cpu.get_vram();
-    
+    bool use_color = (COLORS >= 256);
+
     for (int y = 0; y < preview_h; ++y) {
         for (int x = 0; x < preview_w; ++x) {
-            float scale_x = 320 / (float)preview_w;
-            float scale_y = 240 / (float)preview_h;
-            int vx = x * scale_x;
-            int vy = y * scale_y;
+            int vx = (x * 320) / preview_w;
+            int vy = (y * 240) / preview_h;
+            
             if (vx >= 320 || vy >= 240) continue;
             
             uint32_t pixel = vram[vy * 320 + vx];
-            if (pixel != 0xFF000000 && pixel != 0) {
-                mvaddch(start_y + y, start_col + x, '#');
+            uint8_t r = (pixel >> 16) & 0xFF;
+            uint8_t g = (pixel >> 8) & 0xFF;
+            uint8_t b = pixel & 0xFF;
+
+            if (use_color) {
+                int r5 = (r * 5) / 255;
+                int g5 = (g * 5) / 255;
+                int b5 = (b * 5) / 255;
+                int pair_idx = 10 + (r5 * 36) + (g5 * 6) + b5;
+                
+                attron(COLOR_PAIR(pair_idx));
+                mvaddch(start_y + y, start_col + x, ' '); 
+                attroff(COLOR_PAIR(pair_idx));
             } else {
-                mvaddch(start_y + y, start_col + x, '.');
+                const char* ramp = " .:-=+*#%@";
+                uint8_t lum = (r + g + b) / 3;
+                int char_idx = (lum * 9) / 255;
+                mvaddch(start_y + y, start_col + x, ramp[char_idx]);
             }
         }
     }
@@ -222,22 +300,80 @@ void TUI::handle_input() {
     int ch = getch();
     if (ch == ERR) return;
 
-    if (ch == 27) { // ESC always stops continuous run
+    if (ch == 27) { // ESC
         is_running_continuously = false;
+        if (mode == Mode::ZOOM) {
+            mode = Mode::NORMAL;
+            return;
+        }
     }
 
     if (mode == Mode::NORMAL) {
         handle_normal_mode(ch);
-    } else {
+    } else if (mode == Mode::INSERT) {
         handle_insert_mode(ch);
+    } else if (mode == Mode::ZOOM) {
+        // In ZOOM mode, we still want to step, reset, and continue
+        switch(ch) {
+            case 's': if (!cpu.halted) cpu.run_cycle(); break;
+            case 'c': if (!cpu.halted) is_running_continuously = !is_running_continuously; break;
+            case 'r': handle_normal_mode('r'); break; // Reuse reset logic
+            case 'z': mode = Mode::NORMAL; break;
+        }
+    } else if (mode == Mode::COMMAND) {
+        handle_command_mode(ch);
     }
 }
 
 void TUI::handle_normal_mode(int ch) {
     switch (ch) {
         case 'q': running = false; break;
+        case ':':
+            mode = Mode::COMMAND;
+            command_buffer = ":";
+            is_running_continuously = false;
+            break;
+        case 'z': mode = Mode::ZOOM; is_running_continuously = false; break;
+        case 'r': // Full CPU Reset
+            cpu.set_pc(0);
+            cpu.halted = false;
+            cpu.registers.fill(0);
+            cpu.status_reg.fill(0);
+            prev_registers.fill(0);
+            last_changed_reg = -1;
+            is_running_continuously = false;
+            // Optionally clear first 1MB of RAM if you want a "clean" run
+            for (uint32_t i = 0; i < 1024*1024; i += 4) {
+                cpu.store(i, 0);
+            }
+            // Clear VRAM (320x240 * 4 bytes = 307,200 bytes)
+            for (uint32_t i = 0x800000; i < 0x800000 + (320*240*4); i += 4) {
+                cpu.store(i, 0);
+            }
+            // Re-assemble current buffer back into the clean memory
+            for (size_t i = 0; i < editor_buffer.size(); ++i) {
+                uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
+                if (instr != (uint32_t)-1) {
+                    cpu.store(i * 4, instr);
+                } else {
+                    cpu.store(i * 4, 0x14 << 26); // Official NOP
+                }
+            }
+            break;
         case 'i': mode = Mode::INSERT; curs_set(1); is_running_continuously = false; break;
-        case 's': if (!cpu.halted) cpu.run_cycle(); break;
+        case 's': 
+            if (!cpu.halted) {
+                prev_registers = cpu.registers;
+                cpu.run_cycle();
+                last_changed_reg = -1;
+                for (int i = 0; i < 8; ++i) {
+                    if (cpu.registers[i] != prev_registers[i]) {
+                        last_changed_reg = i;
+                        break;
+                    }
+                }
+            }
+            break;
         case 'c': if (!cpu.halted) is_running_continuously = !is_running_continuously; break;
         case KEY_UP: if (cursor_y > 0) cursor_y--; break;
         case KEY_DOWN: if (cursor_y < (int)editor_buffer.size() - 1) cursor_y++; break;
@@ -255,10 +391,33 @@ void TUI::handle_insert_mode(int ch) {
     if (ch == 27) { // ESC
         mode = Mode::NORMAL;
         curs_set(0);
+        
+        // Apply changes to the whole buffer when exiting insert mode
+        try {
+            std::string full_code;
+            for (const auto& line : editor_buffer) {
+                full_code += line + "\n";
+            }
+            assem.scan_for_labels(full_code);
+
+            for (size_t i = 0; i < editor_buffer.size(); ++i) {
+                uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
+                if (instr != (uint32_t)-1) {
+                    cpu.store(i * 4, instr);
+                } else {
+                    // Use official NOP opcode (0x14) shifted left by 26
+                    cpu.store(i * 4, 0x14 << 26); 
+                }
+            }
+        } catch (...) {}
         return;
     }
 
     switch (ch) {
+        case KEY_LEFT: if (cursor_x > 0) cursor_x--; break;
+        case KEY_RIGHT: if (cursor_x < (int)editor_buffer[cursor_y].size()) cursor_x++; break;
+        case KEY_UP: if (cursor_y > 0) { cursor_y--; cursor_x = std::min(cursor_x, (int)editor_buffer[cursor_y].size()); } break;
+        case KEY_DOWN: if (cursor_y < (int)editor_buffer.size() - 1) { cursor_y++; cursor_x = std::min(cursor_x, (int)editor_buffer[cursor_y].size()); } break;
         case '\t': { // TAB completion
             std::string line = editor_buffer[cursor_y];
             if (line.find(' ') == std::string::npos && !line.empty()) {
@@ -284,33 +443,11 @@ void TUI::handle_insert_mode(int ch) {
             break;
         case KEY_ENTER:
         case '\n': {
-            // New line insertion logic
             std::string remaining = editor_buffer[cursor_y].substr(cursor_x);
             editor_buffer[cursor_y] = editor_buffer[cursor_y].substr(0, cursor_x);
             editor_buffer.insert(editor_buffer.begin() + cursor_y + 1, remaining);
             cursor_y++;
             cursor_x = 0;
-
-            // Two-pass assembly for the entire buffer
-            try {
-                // Pass 1: Scan for labels
-                std::string full_code;
-                for (const auto& line : editor_buffer) {
-                    full_code += line + "\n";
-                }
-                assem.scan_for_labels(full_code);
-
-                // Pass 2: Re-assemble all lines into memory
-                for (size_t i = 0; i < editor_buffer.size(); ++i) {
-                    if (editor_buffer[i].empty()) continue;
-                    uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
-                    if (instr != (uint32_t)-1) {
-                        cpu.store(i * 4, instr);
-                    }
-                }
-            } catch (...) {
-                // Ignore errors during re-assembly
-            }
             break;
         }
         default:
@@ -319,6 +456,60 @@ void TUI::handle_insert_mode(int ch) {
                 cursor_x++;
             }
             break;
+    }
+}
+
+void TUI::handle_command_mode(int ch) {
+    if (ch == 27) { // ESC
+        mode = Mode::NORMAL;
+        command_buffer = "";
+        return;
+    }
+
+    if (ch == KEY_BACKSPACE || ch == 127) {
+        if (command_buffer.size() > 1) {
+            command_buffer.pop_back();
+        } else {
+            mode = Mode::NORMAL;
+            command_buffer = "";
+        }
+    } else if (ch == '\n' || ch == KEY_ENTER) {
+        std::string cmd = command_buffer.substr(1); // skip ':'
+        
+        if (cmd.starts_with("w ")) {
+            std::string filename = cmd.substr(2);
+            std::ofstream out(filename);
+            for (const auto& line : editor_buffer) {
+                out << line << "\n";
+            }
+            command_buffer = "Written to " + filename;
+        } else if (cmd.starts_with("e ")) {
+            std::string filename = cmd.substr(2);
+            std::ifstream in(filename);
+            if (in) {
+                editor_buffer.clear();
+                std::string line;
+                while (std::getline(in, line)) {
+                    editor_buffer.push_back(line);
+                }
+                if (editor_buffer.empty()) editor_buffer.push_back("");
+                cursor_y = 0;
+                cursor_x = 0;
+                command_buffer = "Loaded " + filename;
+                
+                // Re-assemble immediately
+                handle_insert_mode(27); // Trigger the ESC logic to re-assemble
+            } else {
+                command_buffer = "Error loading " + filename;
+            }
+        } else if (cmd == "q") {
+            running = false;
+        } else {
+            command_buffer = "Unknown command: " + cmd;
+        }
+        mode = Mode::NORMAL; // Switch back but draw_status will show the message briefly
+    } else if (isprint(ch)) {
+        command_buffer += (char)ch;
     }
 }
 
