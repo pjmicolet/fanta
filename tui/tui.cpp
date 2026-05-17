@@ -5,6 +5,7 @@
 #include <sstream>
 #include <algorithm>
 #include <fstream>
+#include <thread>
 
 TUI::TUI(CPU& cpu) : cpu(cpu), running(true) {
     editor_buffer.push_back("");
@@ -55,25 +56,20 @@ void TUI::init_ncurses() {
 }
 
 void TUI::run() {
+    auto frame_start = std::chrono::steady_clock::now();
+    const std::chrono::microseconds frame_duration(16666); // ~60 FPS
+
     while (running) {
+        auto now = std::chrono::steady_clock::now();
+        
         if (is_running_continuously) {
-            // Run a batch of cycles to speed up execution
-            for (int i = 0; i < 1000; ++i) {
+            // Run a batch of cycles to fill the time since last update
+            // We'll stick to a fixed batch size for now but spread it out
+            for (int i = 0; i < 5000; ++i) { // Increased batch size for smoother feel
                 if (!cpu.halted) {
                     prev_registers = cpu.registers;
                     cpu.run_cycle();
                     total_cycles++;
-                    
-                    // Update last_changed_reg for the very last instruction in the batch
-                    if (i == 999) {
-                        last_changed_reg = -1;
-                        for (int r = 0; r < 16; ++r) {
-                            if (cpu.registers[r] != prev_registers[r]) {
-                                last_changed_reg = r;
-                                break;
-                            }
-                        }
-                    }
                 } else {
                     is_running_continuously = false;
                     break;
@@ -81,8 +77,7 @@ void TUI::run() {
             }
         }
 
-        // Calculate IPS every second
-        auto now = std::chrono::steady_clock::now();
+        // IPS calculation
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_ips_time).count();
         if (elapsed >= 1000) {
             current_ips = (total_cycles * 1000.0) / elapsed;
@@ -92,6 +87,14 @@ void TUI::run() {
 
         update();
         handle_input();
+
+        // Sync to 60 FPS
+        auto frame_end = std::chrono::steady_clock::now();
+        auto sleep_time = frame_duration - std::chrono::duration_cast<std::chrono::microseconds>(frame_end - frame_start);
+        if (sleep_time.count() > 0) {
+            std::this_thread::sleep_for(sleep_time);
+        }
+        frame_start = std::chrono::steady_clock::now();
     }
 }
 
@@ -224,43 +227,37 @@ void TUI::draw_editor() {
     attron(A_BOLD);
     mvprintw(win_y - 1, 2, "--- EDITOR (Mnemonic Entry) ---");
     attroff(A_BOLD);
-    
-    for (int i = 0; i < win_h; ++i) {
+
+    // Calculate scrolling to keep cursor in view
+    int visible_lines = win_h - 1;
+    if (cursor_y < editor_scroll) {
+        editor_scroll = cursor_y;
+    } else if (cursor_y >= editor_scroll + visible_lines) {
+        editor_scroll = cursor_y - visible_lines + 1;
+    }
+
+    for (int i = 0; i < visible_lines; ++i) {
         int line_idx = editor_scroll + i;
-        if (line_idx < (int)editor_buffer.size()) {
-            std::string line = editor_buffer[line_idx];
+        if (line_idx >= (int)editor_buffer.size()) break;
+
+        std::string line = editor_buffer[line_idx];
+        if (line_idx == cursor_y) {
+            attron(COLOR_PAIR(2));
             mvprintw(win_y + i, 2, "%2d| %s", line_idx, line.c_str());
+            attroff(COLOR_PAIR(2));
             
-            // Auto-suggestion for the current line being edited
-            if (line_idx == cursor_y && mode == Mode::INSERT && !line.empty()) {
-                // If there's no space yet, suggest the mnemonic
-                if (line.find(' ') == std::string::npos) {
-                    std::string suggestion = trie.get_suggestion(line);
-                    if (!suggestion.empty() && suggestion.size() > line.size()) {
-                        attron(A_DIM);
-                        printw("%s", suggestion.substr(line.size()).c_str());
-                        attroff(A_DIM);
-                        
-                        // Show format suggestion
-                        auto& meta = Instructions::Registry::fetch(suggestion);
-                        attron(COLOR_PAIR(3));
-                        std::string fmt_hint;
-                        switch(meta.fmt) {
-                            case Instructions::THREE_OP: fmt_hint = " R, R, R/#"; break;
-                            case Instructions::TWO_OP: fmt_hint = " R, R/#"; break;
-                            case Instructions::MEM: fmt_hint = " R, #imm(R)"; break;
-                            case Instructions::JUMP: fmt_hint = " #imm"; break;
-                            case Instructions::BRANCH: fmt_hint = " #imm"; break;
-                            case Instructions::HALT: fmt_hint = ""; break;
-                            case Instructions::RET: fmt_hint = ""; break;
-                        }
-                        mvprintw(win_y + i, term_w * 0.4, "(%s)", fmt_hint.c_str());
-                        attroff(COLOR_PAIR(3));
-                    }
+            if (mode == Mode::INSERT && !line.empty() && line.find(' ') == std::string::npos) {
+                std::string suggestion = trie.get_suggestion(line);
+                if (!suggestion.empty() && suggestion.size() > line.size()) {
+                    attron(A_DIM);
+                    mvprintw(win_y + i, 6 + line.size(), "%s", suggestion.substr(line.size()).c_str());
+                    attroff(A_DIM);
                 }
             }
+            if (mode == Mode::INSERT)
+                move(win_y + i, 6 + cursor_x);
         } else {
-            mvprintw(win_y + i, 2, "%2d|", line_idx);
+            mvprintw(win_y + i, 2, "%2d| %s", line_idx, line.c_str());
         }
     }
 }
@@ -355,6 +352,8 @@ void TUI::handle_normal_mode(int ch) {
             is_running_continuously = false;
             break;
         case 'z': mode = Mode::ZOOM; is_running_continuously = false; break;
+        case '[': if (mem_offset >= 16) mem_offset -= 16; break;
+        case ']': if (mem_offset < 16*1024*1024 - 16) mem_offset += 16; break;
         case 'r': // Full CPU Reset
             cpu.set_pc(0);
             cpu.halted = false;

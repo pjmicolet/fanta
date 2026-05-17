@@ -91,10 +91,10 @@ struct CPU {
   auto flag_check(FLAG f, bool isNeg) {
     bool result = false;
     switch(f) {
-      break; case ZERO: result = is_zero_set();
-      break; case NEGATIVE: return is_neg_set();
-      break; case OVFL: return is_overflow_set();
-      break; case CARRY: return is_carry_set();
+      case ZERO: result = is_zero_set();      break;
+      case NEGATIVE: result = is_neg_set();   break;
+      case OVFL: result = is_overflow_set();  break;
+      case CARRY: result =  is_carry_set();   break;
     }
     return isNeg ? !result : result;
   }
