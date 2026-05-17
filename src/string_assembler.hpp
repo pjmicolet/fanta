@@ -59,7 +59,7 @@ private:
 
   auto is_label(std::string_view token) -> bool {
     return std::all_of(token.data(), token.data() + token.size(),
-      [](unsigned char c) { return ::isalpha(c); });
+      [](unsigned char c) { return ::isalpha(c) || c == '_'; });
   }
 
   auto is_register(std::string_view token) -> bool {

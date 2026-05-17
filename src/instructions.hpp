@@ -13,7 +13,6 @@ struct InstMetadata {
   uint8_t imm;
 };
 
-
 #define THREE_OP_INST( class_name, mnemonic, reg_op, imm_op) \
 template<typename Dest, typename Src1, typename Src2>\
 struct class_name {};\
@@ -59,8 +58,6 @@ struct Registry {
 
   }
 };
-
-
 
 enum class Opcode {
   HALT,
@@ -114,7 +111,6 @@ struct Decode {
 };
 
 // constexpr assembler
-
 template<std::uint8_t ID> struct Reg{};
 template<std::int16_t LIT = 0> struct Literal{};
 template<std::int32_t TARGET = 0> struct Target{};
@@ -130,7 +126,6 @@ struct Nop {
     return 0x14 << 26;
   }
 };
-
 
 static inline bool regHalt = Registry::register_inst("HALT", { InstFormat::HALT, 0, 0});
 static inline bool nop = Registry::register_inst("NOP", { InstFormat::HALT, 0x14, 0});
@@ -230,7 +225,6 @@ struct JmpRel<Target<Dest>> {
     return opcode | dest;
   }
 };
-
 
 template<uint8_t SrcReg, uint8_t DestRegAddr, uint16_t Imm>
 struct Store<Reg<SrcReg>, Reg<DestRegAddr>, Literal<Imm>> {
@@ -344,7 +338,6 @@ struct Bpl<Target<Dest>> {
 };
 
 // runtime assembler
-
 inline auto parse_three(uint32_t op, uint32_t dest, uint32_t s1, uint32_t s2_or_imm, bool using_imm) -> std::uint32_t {
   uint32_t res = (op << 26) | ((dest & 0x1F) << 21) | ((s1 & 0x1F) << 16);
   if (using_imm) res |= (s2_or_imm & 0xFFFF);

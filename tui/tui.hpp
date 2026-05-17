@@ -5,6 +5,7 @@
 #include <ncurses.h>
 #include <string>
 #include <vector>
+#include <chrono>
 
 enum class Mode {
     NORMAL,
@@ -56,6 +57,11 @@ private:
     Trie trie;
     void init_trie();
 
-    std::array<std::uint32_t, 8> prev_registers{0};
+    std::array<std::uint32_t, 16> prev_registers{0};
     int last_changed_reg = -1;
+
+    // IPS Monitoring
+    uint64_t total_cycles = 0;
+    double current_ips = 0;
+    std::chrono::steady_clock::time_point last_ips_time;
 };

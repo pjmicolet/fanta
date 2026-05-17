@@ -54,3 +54,8 @@ target_link_libraries(fanta-tui PRIVATE fanta_lib ${CURSES_LIBRARIES})
 add_executable(tui-tests tui/tests.cpp tui/tui.cpp)
 target_include_directories(tui-tests PRIVATE tui src)
 target_link_libraries(tui-tests PRIVATE fanta_lib ${CURSES_LIBRARIES})
+
+# Trace Utility
+add_executable(fanta-trace tui/trace.cpp)
+target_include_directories(fanta-trace PRIVATE tui src)
+target_link_libraries(fanta-trace PRIVATE fanta_lib)

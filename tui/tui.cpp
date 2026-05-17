@@ -9,6 +9,7 @@
 TUI::TUI(CPU& cpu) : cpu(cpu), running(true) {
     editor_buffer.push_back("");
     init_trie();
+    last_ips_time = std::chrono::steady_clock::now();
 }
 
 void TUI::init_trie() {
@@ -61,11 +62,12 @@ void TUI::run() {
                 if (!cpu.halted) {
                     prev_registers = cpu.registers;
                     cpu.run_cycle();
+                    total_cycles++;
                     
                     // Update last_changed_reg for the very last instruction in the batch
                     if (i == 999) {
                         last_changed_reg = -1;
-                        for (int r = 0; r < 8; ++r) {
+                        for (int r = 0; r < 16; ++r) {
                             if (cpu.registers[r] != prev_registers[r]) {
                                 last_changed_reg = r;
                                 break;
@@ -78,6 +80,16 @@ void TUI::run() {
                 }
             }
         }
+
+        // Calculate IPS every second
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_ips_time).count();
+        if (elapsed >= 1000) {
+            current_ips = (total_cycles * 1000.0) / elapsed;
+            total_cycles = 0;
+            last_ips_time = now;
+        }
+
         update();
         handle_input();
     }
@@ -112,15 +124,18 @@ void TUI::draw_registers() {
     mvprintw(1, 2, "--- REGISTERS ---");
     attroff(COLOR_PAIR(1));
 
-    for (int i = 0; i < 8; ++i) {
-        if (2 + i < term_h) {
+    for (int i = 0; i < 16; ++i) {
+        int col = (i < 8) ? 2 : 20; // Second column starting at X=20
+        int row = 2 + (i % 8);
+        
+        if (row < term_h) {
             if (i == last_changed_reg) {
                 attron(COLOR_PAIR(3) | A_BOLD);
-                mvprintw(2 + i, 2, "R%d: 0x%08X", i, cpu.registers[i]);
+                mvprintw(row, col, "R%2d: 0x%08X", i, cpu.registers[i]);
                 attroff(COLOR_PAIR(3) | A_BOLD);
             } else {
                 attron(COLOR_PAIR(1));
-                mvprintw(2 + i, 2, "R%d: 0x%08X", i, cpu.registers[i]);
+                mvprintw(row, col, "R%2d: 0x%08X", i, cpu.registers[i]);
                 attroff(COLOR_PAIR(1));
             }
         }
@@ -134,8 +149,9 @@ void TUI::draw_status() {
     mvprintw(1, col, "--- STATUS ---");
     mvprintw(2, col, "PC: 0x%04X", cpu.get_pc());
     mvprintw(3, col, "FLAGS: Z:%d N:%d V:%d C:%d", cpu.status_reg[0], cpu.status_reg[1], (cpu.status_reg[2] ? 1 : 0), (cpu.status_reg[3] ? 1 : 0));
-    mvprintw(4, col, "MODE: %s %s", (mode == Mode::NORMAL ? "NORMAL" : (mode == Mode::INSERT ? "INSERT" : (mode == Mode::ZOOM ? "ZOOM" : "COMMAND"))), (is_running_continuously ? "(CONT)" : ""));
-    mvprintw(5, col, "KEYS: %s", (mode == Mode::NORMAL ? "s:step c:cont r:reset i:edit q:quit" : "ESC:exit"));
+    mvprintw(4, col, "IPS: %.0f", current_ips);
+    mvprintw(5, col, "MODE: %s %s", (mode == Mode::NORMAL ? "NORMAL" : (mode == Mode::INSERT ? "INSERT" : (mode == Mode::ZOOM ? "ZOOM" : "COMMAND"))), (is_running_continuously ? "(CONT)" : ""));
+    mvprintw(6, col, "KEYS: %s", (mode == Mode::NORMAL ? "s:step c:cont r:reset i:edit q:quit" : "ESC:exit"));
     
     if (!command_buffer.empty()) {
         attron(A_REVERSE);
@@ -145,7 +161,7 @@ void TUI::draw_status() {
 
     if (cpu.halted) {
         attron(COLOR_PAIR(4) | A_BOLD);
-        mvprintw(6, col, "!!! HALTED !!!");
+        mvprintw(7, col, "!!! HALTED !!!");
         attroff(COLOR_PAIR(4) | A_BOLD);
     }
     attroff(COLOR_PAIR(3));
@@ -156,7 +172,9 @@ void TUI::draw_disassembly() {
     int col = term_w * 0.55;
     if (col < 40) col = 40;
     mvprintw(1, col, "--- DISASSEMBLY ---");
-    uint32_t current_pc = (cpu.halted || cpu.get_prev_pc() > 16*1024*1024) ? 0 : cpu.get_prev_pc();
+    
+    // Highlight what is ABOUT TO RUN (the current PC)
+    uint32_t current_pc = cpu.get_pc();
     
     int max_lines = (term_h * 0.5) - 2;
     if (max_lines < 5) max_lines = 5;
@@ -168,7 +186,9 @@ void TUI::draw_disassembly() {
 
         std::string line = disassemble((uint32_t)addr);
         if ((uint32_t)addr == current_pc) {
-            mvprintw(2 + i, col - 2, "> 0x%04X: %s", (uint32_t)addr, line.c_str());
+            attron(A_BOLD | A_REVERSE);
+            mvprintw(2 + i, col, "> 0x%04X: %s", (uint32_t)addr, line.c_str());
+            attroff(A_BOLD | A_REVERSE);
         } else {
             mvprintw(2 + i, col, "0x%04X: %s", (uint32_t)addr, line.c_str());
         }
@@ -352,6 +372,8 @@ void TUI::handle_normal_mode(int ch) {
             }
             // Re-assemble current buffer back into the clean memory
             for (size_t i = 0; i < editor_buffer.size(); ++i) {
+                // Trim trailing spaces
+                editor_buffer[i].erase(editor_buffer[i].find_last_not_of(" \n\r\t") + 1, std::string::npos);
                 uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
                 if (instr != (uint32_t)-1) {
                     cpu.store(i * 4, instr);
@@ -366,7 +388,7 @@ void TUI::handle_normal_mode(int ch) {
                 prev_registers = cpu.registers;
                 cpu.run_cycle();
                 last_changed_reg = -1;
-                for (int i = 0; i < 8; ++i) {
+                for (int i = 0; i < 16; ++i) {
                     if (cpu.registers[i] != prev_registers[i]) {
                         last_changed_reg = i;
                         break;
@@ -395,7 +417,9 @@ void TUI::handle_insert_mode(int ch) {
         // Apply changes to the whole buffer when exiting insert mode
         try {
             std::string full_code;
-            for (const auto& line : editor_buffer) {
+            for (auto& line : editor_buffer) {
+                // Trim trailing spaces
+                line.erase(line.find_last_not_of(" \n\r\t") + 1, std::string::npos);
                 full_code += line + "\n";
             }
             assem.scan_for_labels(full_code);

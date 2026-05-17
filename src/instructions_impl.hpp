@@ -1,7 +1,6 @@
 #pragma once
 
 #include "cpu.hpp"
-#include "instructions.hpp"
 
 struct DecodeDest {
   static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
@@ -67,8 +66,6 @@ struct OpAdd {
   }
 };
 
-using AddReg = OpAdd<DecodeDest, DecodeSource1, DecodeSource2>;
-using AddImm = OpAdd<DecodeDest, DecodeSource1, DecodeImm>;
 
 template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
 struct OpSub {
@@ -81,9 +78,6 @@ struct OpSub {
   }
 };
 
-using SubReg = OpSub<DecodeDest, DecodeSource1, DecodeSource2>;
-using SubImm = OpSub<DecodeDest, DecodeSource1, DecodeImm>;
-
 template<typename DestDecoder, typename OptDecoder>
 struct OpMov {
   static auto exec(CPU& cpu, uint32_t inst) {
@@ -94,9 +88,6 @@ struct OpMov {
   }
 };
 
-using MovReg = OpMov<DecodeDest, DecodeSource1>;
-using MovImm = OpMov<DecodeDest, DecodeImm>;
-
 template<typename SrcVal, typename DestAddr>
 struct OpMem {
   static auto exec(CPU& cpu, uint32_t inst) {
@@ -106,10 +97,6 @@ struct OpMem {
     cpu.set_zero(val);
   }
 };
-
-// This is some magic here
-using StoreReg = OpMem<DecodeS1Cmp, DecodeStorageDest>;
-using LoadReg = OpMem<DecodeLoadSource, DecodeLoadDest>;
 
 // One of the few non composable
 struct Jmp {
@@ -124,50 +111,10 @@ auto parse_as_signed(uint32_t data) -> std::int32_t {
   return temp >> 6;
 }
 
-struct Beq {
+template<CPU::FLAG f, bool isNeg>
+struct Branch {
   static auto exec(CPU& cpu, uint32_t inst) {
-    if(cpu.is_zero_set()) {
-      auto prev = cpu.get_prev_pc();
-      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
-      cpu.set_pc(res);
-    }
-  }
-};
-
-struct Bec {
-  static auto exec(CPU& cpu, uint32_t inst) {
-    if(cpu.is_carry_set()) {
-      auto prev = cpu.get_prev_pc();
-      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
-      cpu.set_pc(res);
-    }
-  }
-};
-
-struct Bmi {
-  static auto exec(CPU& cpu, uint32_t inst) {
-    if(cpu.is_neg_set()) {
-      auto prev = cpu.get_prev_pc();
-      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
-      cpu.set_pc(res);
-    }
-  }
-};
-
-struct Bpl {
-  static auto exec(CPU& cpu, uint32_t inst) {
-    if(!cpu.is_neg_set()) {
-      auto prev = cpu.get_prev_pc();
-      auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
-      cpu.set_pc(res);
-    }
-  }
-};
-
-
-struct Bne {
-  static auto exec(CPU& cpu, uint32_t inst) {
-    if(!cpu.is_zero_set()) {
+    if(cpu.flag_check(f,isNeg)) {
       auto prev = cpu.get_prev_pc();
       auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
       cpu.set_pc(res);
@@ -183,7 +130,6 @@ struct Jrel {
   }
 };
 
-
 struct Halt {
   static auto exec(CPU& cpu, uint32_t inst) {
     cpu.halted = true;
@@ -194,7 +140,6 @@ struct Nop {
   static auto exec(CPU& cpu, uint32_t inst) {
   }
 };
-
 
 template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
 struct OpLsh {
@@ -209,18 +154,15 @@ struct OpLsh {
   }
 };
 
-using LshReg = OpLsh<DecodeDest, DecodeSource1, DecodeSource2>;
-using LshImm = OpLsh<DecodeDest, DecodeSource1, DecodeImm>;
-
 template<typename DestDecoder, typename OptDecoder>
 struct OpCmp {
   static auto exec(CPU& cpu, uint32_t inst) {
     auto data = static_cast<std::int32_t>(DestDecoder::decode(cpu,inst));
     auto data2 = static_cast<std::int32_t>(OptDecoder::decode(cpu,inst));
     if(data == data2) {
-      cpu.set_zero(1);
-    } else {
       cpu.set_zero(0);
+    } else {
+      cpu.set_zero(1);
     }
     if(data > data2) {
       cpu.set_carry(1);
@@ -232,5 +174,28 @@ struct OpCmp {
   }
 };
 
+using AddReg = OpAdd<DecodeDest, DecodeSource1, DecodeSource2>;
+using AddImm = OpAdd<DecodeDest, DecodeSource1, DecodeImm>;
+
+using LshReg = OpLsh<DecodeDest, DecodeSource1, DecodeSource2>;
+using LshImm = OpLsh<DecodeDest, DecodeSource1, DecodeImm>;
+
 using CmpReg = OpCmp<DecodeS1Cmp, DecodeSource1>;
 using CmpImm = OpCmp<DecodeS1Cmp, DecodeImm>;
+
+// This is some magic here
+using StoreReg = OpMem<DecodeS1Cmp, DecodeStorageDest>;
+using LoadReg = OpMem<DecodeLoadSource, DecodeLoadDest>;
+
+using SubReg = OpSub<DecodeDest, DecodeSource1, DecodeSource2>;
+using SubImm = OpSub<DecodeDest, DecodeSource1, DecodeImm>;
+
+using MovReg = OpMov<DecodeDest, DecodeSource1>;
+using MovImm = OpMov<DecodeDest, DecodeImm>;
+
+//Branches
+using Beq = Branch<CPU::FLAG::ZERO, false>;
+using Bne = Branch<CPU::FLAG::ZERO, true>;
+using Bec = Branch<CPU::FLAG::CARRY, false>;
+using Bmi = Branch<CPU::FLAG::NEGATIVE, false>;
+using Bpl = Branch<CPU::FLAG::NEGATIVE, true>;

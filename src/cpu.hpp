@@ -1,8 +1,6 @@
 #pragma once
 #include <cstdint>
 #include <vector>
-#include <string>
-#include <iostream>
 
 struct Memory {
   Memory(std::size_t size) : memory(size) {}
@@ -25,6 +23,12 @@ private:
 };
 
 struct CPU {
+  enum FLAG : uint8_t {
+    ZERO,
+    NEGATIVE,
+    OVFL,
+    CARRY
+  };
 
   CPU() : ram(32*1024*1024) {}
   constexpr auto fetch() {
@@ -70,7 +74,6 @@ struct CPU {
       set_carry(res < s1);
       set_overflow(((s1^res)&(s2^res))&0x80000000);
     }
-
   }
 
   auto get_pc() const -> uint32_t {
@@ -79,6 +82,17 @@ struct CPU {
 
   auto set_pc(uint32_t pc_val) -> void {
     PC = pc_val;
+  }
+
+  auto flag_check(FLAG f, bool isNeg) {
+    bool result = false;
+    switch(f) {
+      break; case ZERO: result = is_zero_set();
+      break; case NEGATIVE: return is_neg_set();
+      break; case OVFL: return is_overflow_set();
+      break; case CARRY: return is_carry_set();
+    }
+    return isNeg ? !result : result;
   }
 
   auto is_zero_set() -> bool {
@@ -112,7 +126,8 @@ struct CPU {
   auto set_carry(uint32_t val) -> void {
     status_reg[3] = val ? 1 : 0; 
   }
-  std::array<std::uint32_t, 8> registers{0, 0, 0, 0, 0, 0, 0, 0};
+
+  std::array<std::uint32_t, 16> registers{0, 0, 0, 0, 0, 0, 0, 0,0, 0, 0, 0, 0, 0, 0, 0};
   // Status regs are:
   // 0: Zero
   // 1: Negative
@@ -122,7 +137,7 @@ struct CPU {
 
   bool halted = false;
 
-  Memory ram; //16MB
+  Memory ram; //32MB
 private:
   std::uint32_t PC = 0;
 };
