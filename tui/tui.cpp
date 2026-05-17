@@ -147,7 +147,7 @@ void TUI::draw_status() {
     int col = term_w * 0.25;
     if (col < 20) col = 20; 
     mvprintw(1, col, "--- STATUS ---");
-    mvprintw(2, col, "PC: 0x%04X", cpu.get_pc());
+    mvprintw(2, col, "PC: 0x%04X | SP: 0x%04X", cpu.get_pc(), cpu.get_sp());
     mvprintw(3, col, "FLAGS: Z:%d N:%d V:%d C:%d", cpu.status_reg[0], cpu.status_reg[1], (cpu.status_reg[2] ? 1 : 0), (cpu.status_reg[3] ? 1 : 0));
     mvprintw(4, col, "IPS: %.0f", current_ips);
     mvprintw(5, col, "MODE: %s %s", (mode == Mode::NORMAL ? "NORMAL" : (mode == Mode::INSERT ? "INSERT" : (mode == Mode::ZOOM ? "ZOOM" : "COMMAND"))), (is_running_continuously ? "(CONT)" : ""));
@@ -252,6 +252,7 @@ void TUI::draw_editor() {
                             case Instructions::JUMP: fmt_hint = " #imm"; break;
                             case Instructions::BRANCH: fmt_hint = " #imm"; break;
                             case Instructions::HALT: fmt_hint = ""; break;
+                            case Instructions::RET: fmt_hint = ""; break;
                         }
                         mvprintw(win_y + i, term_w * 0.4, "(%s)", fmt_hint.c_str());
                         attroff(COLOR_PAIR(3));
@@ -554,6 +555,8 @@ std::string TUI::disassemble(uint32_t addr) {
             if (meta.imm != 0) names[meta.imm] = mnem;
         }
         names[0] = "HALT";
+        names[0x15] = "CALL";
+        names[0x16] = "RET";
     }
 
     if (names.find(opcode) == names.end()) return "UNKNOWN";
@@ -606,6 +609,8 @@ std::string TUI::disassemble(uint32_t addr) {
         }
         case Instructions::HALT:
             return label_tag + "HALT";
+        case Instructions::RET:
+            return label_tag + "RET";
     }
     return label_tag + ss.str();
 }

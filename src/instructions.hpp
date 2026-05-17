@@ -5,7 +5,7 @@
 
 namespace Instructions {
 
-enum InstFormat { THREE_OP, TWO_OP, MEM, JUMP, BRANCH, HALT };
+enum InstFormat { THREE_OP, TWO_OP, MEM, JUMP, BRANCH, HALT, RET };
 
 struct InstMetadata {
   InstFormat fmt;
@@ -41,6 +41,10 @@ static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFor
 #define HALT_INST( class_name, mnemonic, op) \
 static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::HALT, op, 0});
 
+#define RET_INST( class_name, mnemonic, op) \
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::RET, op, 0});
+
+
 struct Registry {
   static inline auto& get() {
     static std::unordered_map<std::string, InstMetadata> map;
@@ -75,6 +79,9 @@ enum class Opcode {
   BMI,
   BPL,
   JREL,
+  NOP,
+  CALL,
+  RET,
 };
 
 struct Decode {
@@ -143,6 +150,9 @@ THREE_OP_INST(Lsh, "LSH", 0xC, 0xD)
 TWO_OP_INST(Cmp, "CMP", 0xE, 0xF)
 BRANCH_INST(Bmi, "BMI", 0x11)
 BRANCH_INST(Bpl, "BPL", 0x12)
+BRANCH_INST(Call, "CALL", 0x15)
+static inline bool ret = Registry::register_inst("RET", { InstFormat::RET, 0x16, 0});
+
 
 template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
 struct Add<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
@@ -241,10 +251,10 @@ template<uint8_t DestReg, uint8_t SrcRegAddr, uint16_t Imm>
 struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x9 << 26);
-    constexpr uint32_t srcval = (SrcRegAddr & 0x1F) << 21;
-    constexpr uint32_t destAddr = (DestReg & 0x1F) << 16;
+    constexpr uint32_t data_reg = (SrcRegAddr & 0x1F) << 21;
+    constexpr uint32_t data_addr = (DestReg & 0x1F) << 16;
     constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | srcval | destAddr | imm;
+    return opcode | data_reg | data_addr | imm;
   }
 };
 
@@ -327,7 +337,6 @@ struct Bmi<Target<Dest>> {
   }
 };
 
-
 template<std::int32_t Dest>
 struct Bpl<Target<Dest>> {
   static constexpr auto emit() {
@@ -336,6 +345,23 @@ struct Bpl<Target<Dest>> {
     return opcode | dest;
   }
 };
+
+template<std::int32_t Dest>
+struct Call<Target<Dest>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x15 << 26);
+    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
+    return opcode | dest;
+  }
+};
+
+struct Ret {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x16 << 26);
+    return opcode;
+  }
+};
+
 
 // runtime assembler
 inline auto parse_three(uint32_t op, uint32_t dest, uint32_t s1, uint32_t s2_or_imm, bool using_imm) -> std::uint32_t {

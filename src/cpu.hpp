@@ -80,6 +80,10 @@ struct CPU {
     return PC;
   }
 
+  auto get_sp() const -> uint32_t {
+    return SP;
+  }
+
   auto set_pc(uint32_t pc_val) -> void {
     PC = pc_val;
   }
@@ -127,6 +131,16 @@ struct CPU {
     status_reg[3] = val ? 1 : 0; 
   }
 
+  auto push_stack() {
+    ram.write32(SP,PC);
+    SP-=4;
+  }
+
+  auto pop_stack() -> std::uint32_t {
+    SP+=4;
+    return ram.read32(SP);
+  }
+
   std::array<std::uint32_t, 16> registers{0, 0, 0, 0, 0, 0, 0, 0,0, 0, 0, 0, 0, 0, 0, 0};
   // Status regs are:
   // 0: Zero
@@ -140,4 +154,5 @@ struct CPU {
   Memory ram; //32MB
 private:
   std::uint32_t PC = 0;
+  std::uint32_t SP = 0x1000;
 };

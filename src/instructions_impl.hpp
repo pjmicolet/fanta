@@ -11,7 +11,7 @@ struct DecodeDest {
 
 struct DecodeLoadDest {
   static auto store(CPU& cpu, std::uint32_t inst, uint32_t result) -> void {
-    auto reg = (inst >> 16) & 0x1F;
+    auto reg = (inst >> 21) & 0x1F;
     cpu.registers[reg] = result;
   }
 };
@@ -50,7 +50,7 @@ struct DecodeStorageDest {
 
 struct DecodeLoadSource {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
-    auto base = cpu.registers[(inst >> 21) & 0x1F] + inst & 0xFFFF;
+    auto base = cpu.registers[(inst >> 16) & 0x1F] + inst & 0xFFFF;
     return cpu.load(base);
   }
 };
@@ -171,6 +171,22 @@ struct OpCmp {
     }
 
     cpu.set_neg(data - data2);
+  }
+};
+
+struct Ret {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto pc = cpu.pop_stack();
+    cpu.set_pc(pc);
+  }
+};
+
+struct Call {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    cpu.push_stack();
+    auto prev = cpu.get_prev_pc();
+    auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) + parse_as_signed(inst & 0x3FFFFFF));
+    cpu.set_pc(res);
   }
 };
 

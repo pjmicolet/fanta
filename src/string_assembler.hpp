@@ -38,6 +38,7 @@ struct Assembler {
         case Instructions::JUMP:     return parse_one(tokens, mtdc, address, true);
         case Instructions::BRANCH:   return parse_one(tokens, mtdc, address);
         case Instructions::HALT:     return 0;
+        case Instructions::RET:      return 0x16 << 26;
       }
     } catch (...) { return -1; }
     return -1;

@@ -36,6 +36,8 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x12, Bpl)
     EXEC_INST(0x13, Jrel)
     EXEC_INST(0x14, Nop)
+    EXEC_INST(0x15, Call)
+    EXEC_INST(0x16, Ret)
   }
 }
 
