@@ -38,6 +38,8 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x14, Nop)
     EXEC_INST(0x15, Call)
     EXEC_INST(0x16, Ret)
+    EXEC_INST(0x17, AndReg)
+    EXEC_INST(0x18, AndImm)
   }
 }
 

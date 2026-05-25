@@ -98,6 +98,43 @@ void TUI::run() {
     }
 }
 
+void TUI::dump_state(const std::string& filename) {
+    std::ofstream out(filename);
+    if (!out) return;
+
+    // Simulate an update to fill the virtual backbuffer
+    update();
+
+    out << "--- TUI DUMP ---" << std::endl;
+    out << "Term Size: " << term_w << "x" << term_h << std::endl;
+    out << "PC: 0x" << std::hex << cpu.get_pc() << " SP: 0x" << cpu.get_sp() << std::endl;
+    out << "----------------" << std::endl;
+
+    // Use ncurses winnstr or similar if we wanted real characters, 
+    // but update() already wrote to stdscr.
+    // For a headless dump, we'll just reconstruct the key regions.
+    
+    out << "[REGISTERS]" << std::endl;
+    for (int i = 0; i < 16; ++i) {
+        out << "R" << std::dec << std::setw(2) << i << ": 0x" << std::hex << std::setw(8) << std::setfill('0') << cpu.registers[i] << "  ";
+        if (i % 4 == 3) out << std::endl;
+    }
+
+    out << std::endl << "[DISASSEMBLY]" << std::endl;
+    uint32_t pc = cpu.get_pc();
+    for (int i = -5; i <= 5; ++i) {
+        uint32_t addr = pc + (i * 4);
+        out << (i == 0 ? "> " : "  ") << "0x" << std::hex << addr << ": " << disassemble(addr) << std::endl;
+    }
+
+    out << std::endl << "[EDITOR]" << std::endl;
+    for (size_t i = 0; i < editor_buffer.size(); ++i) {
+        out << std::setw(2) << std::setfill(' ') << i << "| " << editor_buffer[i] << (i == (size_t)cursor_y ? " <--" : "") << std::endl;
+    }
+
+    out << "--- END DUMP ---" << std::endl;
+}
+
 void TUI::update() {
     getmaxyx(stdscr, term_h, term_w);
     erase();

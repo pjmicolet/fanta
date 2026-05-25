@@ -44,7 +44,6 @@ static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFor
 #define RET_INST( class_name, mnemonic, op) \
 static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::RET, op, 0});
 
-
 struct Registry {
   static inline auto& get() {
     static std::unordered_map<std::string, InstMetadata> map;
@@ -152,6 +151,7 @@ BRANCH_INST(Bmi, "BMI", 0x11)
 BRANCH_INST(Bpl, "BPL", 0x12)
 BRANCH_INST(Call, "CALL", 0x15)
 static inline bool ret = Registry::register_inst("RET", { InstFormat::RET, 0x16, 0});
+THREE_OP_INST(And, "AND", 0x17, 0x18)
 
 
 template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
@@ -359,6 +359,28 @@ struct Ret {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x16 << 26);
     return opcode;
+  }
+};
+
+template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
+struct And<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x17 << 26);
+    constexpr uint32_t dest = (Dest & 0x1F) << 21;
+    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
+    constexpr uint32_t src2 = (Reg2 & 0x1F) << 11;
+    return opcode | dest | src1 | src2;
+  }
+};
+
+template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>
+struct And<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
+  static constexpr auto emit() {
+    constexpr uint32_t opcode = (0x18 << 26);
+    constexpr uint32_t dest = (Dest & 0x1F) << 21;
+    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
+    constexpr uint32_t imm = Imm & 0xFFFF;
+    return opcode | dest | src1 | imm;
   }
 };
 

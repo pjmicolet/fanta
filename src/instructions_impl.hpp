@@ -50,30 +50,36 @@ struct DecodeStorageDest {
 
 struct DecodeLoadSource {
   static auto decode(CPU& cpu, std::uint32_t inst) -> std::uint32_t {
-    auto base = cpu.registers[(inst >> 16) & 0x1F] + inst & 0xFFFF;
+    auto base = cpu.registers[(inst >> 16) & 0x1F] + (inst & 0xFFFF);
     return cpu.load(base);
   }
 };
 
-template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
-struct OpAdd {
-  static auto exec(CPU& cpu, uint32_t inst) {
-    auto s1_data = S1Decoder::decode(cpu, inst);
-    auto opt_data = OptDecoder::decode(cpu, inst);
-    auto result = s1_data + opt_data;
-    cpu.check_arith(s1_data, opt_data, result, false);
-    DestDecoder::store(cpu, inst, result);
-  }
+enum OpType {
+  ARITH_ADD,
+  ARITH_SUB,
+  LOGICAL,
+  LSHIFT
 };
 
-
-template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
-struct OpSub {
+template<typename DestDecoder, typename S1Decoder, typename OptDecoder, auto OpFunc, OpType type>
+struct OpArithLogical {
   static auto exec(CPU& cpu, uint32_t inst) {
     auto s1_data = S1Decoder::decode(cpu, inst);
     auto opt_data = OptDecoder::decode(cpu, inst);
-    auto result = s1_data - opt_data;
-    cpu.check_arith(s1_data, opt_data, result, true);
+    auto result = OpFunc(s1_data, opt_data);
+    if constexpr(type == ARITH_ADD) {
+      cpu.check_arith(s1_data, opt_data, result, false);
+    } else if constexpr(type == ARITH_SUB){
+      cpu.check_arith(s1_data, opt_data, result, true);
+    } else if constexpr(type == LOGICAL) {
+      cpu.set_neg(result);
+      cpu.set_zero(result);
+    } else if constexpr(type == LSHIFT){
+      cpu.set_neg(result);
+      cpu.set_carry(opt_data > 0 ? s1_data >> (32-opt_data)&0x1 : 0);
+      cpu.set_zero(result);
+    }
     DestDecoder::store(cpu, inst, result);
   }
 };
@@ -141,19 +147,6 @@ struct Nop {
   }
 };
 
-template<typename DestDecoder, typename S1Decoder, typename OptDecoder>
-struct OpLsh {
-  static auto exec(CPU& cpu, uint32_t inst) {
-    auto s1_data = S1Decoder::decode(cpu, inst);
-    auto opt_data = OptDecoder::decode(cpu, inst);
-    auto result = s1_data << opt_data;
-    cpu.set_zero(result);
-    cpu.set_neg(result);
-    cpu.set_carry(result < s1_data);
-    DestDecoder::store(cpu, inst, result);
-  }
-};
-
 template<typename DestDecoder, typename OptDecoder>
 struct OpCmp {
   static auto exec(CPU& cpu, uint32_t inst) {
@@ -190,11 +183,22 @@ struct Call {
   }
 };
 
-using AddReg = OpAdd<DecodeDest, DecodeSource1, DecodeSource2>;
-using AddImm = OpAdd<DecodeDest, DecodeSource1, DecodeImm>;
+constexpr auto op_plus = [](uint32_t a, uint32_t b) { return a + b; };
+constexpr auto op_minus = [](uint32_t a, uint32_t b) { return a - b; };
+constexpr auto op_and = [](uint32_t a, uint32_t b) { return a & b; };
+constexpr auto op_lsh = [](uint32_t a, uint32_t b) { return a << b; };
 
-using LshReg = OpLsh<DecodeDest, DecodeSource1, DecodeSource2>;
-using LshImm = OpLsh<DecodeDest, DecodeSource1, DecodeImm>;
+using AddReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_plus, ARITH_ADD>;
+using AddImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_plus, ARITH_ADD>;
+
+using SubReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_minus, ARITH_SUB>;
+using SubImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_minus, ARITH_SUB>;
+
+using AndReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_and, LOGICAL>;
+using AndImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_and, LOGICAL>;
+
+using LshReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_lsh, LSHIFT>;
+using LshImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_lsh, LSHIFT>;
 
 using CmpReg = OpCmp<DecodeS1Cmp, DecodeSource1>;
 using CmpImm = OpCmp<DecodeS1Cmp, DecodeImm>;
@@ -202,10 +206,6 @@ using CmpImm = OpCmp<DecodeS1Cmp, DecodeImm>;
 // This is some magic here
 using StoreReg = OpMem<DecodeS1Cmp, DecodeStorageDest>;
 using LoadReg = OpMem<DecodeLoadSource, DecodeLoadDest>;
-
-using SubReg = OpSub<DecodeDest, DecodeSource1, DecodeSource2>;
-using SubImm = OpSub<DecodeDest, DecodeSource1, DecodeImm>;
-
 using MovReg = OpMov<DecodeDest, DecodeSource1>;
 using MovImm = OpMov<DecodeDest, DecodeImm>;
 

@@ -21,6 +21,7 @@ public:
 
     void init_ncurses();
     void run();
+    void dump_state(const std::string& filename);
     std::string disassemble(uint32_t addr);
 
 private:

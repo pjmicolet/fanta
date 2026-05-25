@@ -18,6 +18,7 @@ struct Assembler {
     for(const auto& line : lines) {
       if(is_label_define(line)) {
         std::string clean_label{line.substr(0,line.size()-1)};
+        std::transform(clean_label.begin(), clean_label.end(), clean_label.begin(), ::toupper);
         labels_[clean_label] = add;
       }
       add += 4;
@@ -25,6 +26,7 @@ struct Assembler {
   }
 
   auto assemble(std::string_view inst, int address) -> std::uint32_t {
+    if (is_pure_comment(inst)) return Instructions::Nop::emit();
     auto tokens = split_inst(inst);
     if (tokens.empty()) return -1;
     if (is_label_define(inst)) return Instructions::Nop::emit();
@@ -55,12 +57,18 @@ private:
   std::string last_copy; // Store the modified string to keep string_views valid
 
   auto is_label_define(std::string_view line) -> bool {
+    if (line.empty() || line[0] == ';') return false;
     return line.contains(':');
   }
 
+  auto is_pure_comment(std::string_view line) -> bool {
+    return line[0] == ';';
+  }
+
   auto is_label(std::string_view token) -> bool {
+    if(!::isalpha(token[0])) return false;
     return std::all_of(token.data(), token.data() + token.size(),
-      [](unsigned char c) { return ::isalpha(c) || c == '_'; });
+      [](unsigned char c) { return ::isalnum(c) || c == '_'; });
   }
 
   auto is_register(std::string_view token) -> bool {
@@ -86,7 +94,7 @@ private:
 
     return last_copy | std::views::split(' ') | 
       std::views::transform([](auto t) { return std::string_view{t}; }) | 
-      std::views::filter([](auto t) { return !t.empty(); }) |
+      std::views::filter([](auto t) { return !t.empty() && t[0] != ';'; }) |
       std::ranges::to<std::vector>();
   }
 
