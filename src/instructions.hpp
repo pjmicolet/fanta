@@ -16,27 +16,74 @@ struct InstMetadata {
 #define THREE_OP_INST( class_name, mnemonic, reg_op, imm_op) \
 template<typename Dest, typename Src1, typename Src2>\
 struct class_name {};\
-static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::THREE_OP, reg_op, imm_op});
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::THREE_OP, reg_op, imm_op});\
+\
+template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>\
+struct class_name<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {\
+  static constexpr auto emit() {\
+    return Emitter::three_op(reg_op, Dest, Reg1, Reg2);\
+  }\
+};\
+\
+template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>\
+struct class_name<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {\
+  static constexpr auto emit() {\
+    return Emitter::three_op_imm(imm_op, Dest, Reg1, Imm);\
+  }\
+};\
 
 #define TWO_OP_INST( class_name, mnemonic, reg_op, imm_op) \
 template<typename Dest, typename Src1>\
 struct class_name {};\
-static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::TWO_OP, reg_op, imm_op});
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::TWO_OP, reg_op, imm_op});\
+\
+template<uint8_t Dest, uint8_t Reg1>\
+struct class_name<Reg<Dest>, Reg<Reg1>> {\
+  static constexpr auto emit() {\
+    return Emitter::two_op(reg_op, Dest, Reg1);\
+  }\
+};\
+\
+template<uint8_t Dest, uint16_t Imm>\
+struct class_name<Reg<Dest>, Literal<Imm>> {\
+  static constexpr auto emit() {\
+    return Emitter::two_op_imm(imm_op, Dest, Imm);\
+  }\
+};\
+
 
 #define JUMP_INST( class_name, mnemonic, op) \
 template<typename Dest>\
 struct class_name {};\
-static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::JUMP, op, 0});
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::JUMP, op, 0});\
+\
+template<int32_t Dest>\
+struct class_name<Target<Dest>> { static constexpr auto emit() { return Emitter::branch(op, Dest);}\
+};\
 
 #define BRANCH_INST( class_name, mnemonic, op) \
 template<typename Dest>\
 struct class_name {};\
-static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::BRANCH, op, 0});
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::BRANCH, op, 0});\
+\
+template<int32_t Dest>\
+struct class_name<Target<Dest>> { static constexpr auto emit() { return Emitter::branch(op, Dest);}\
+};\
+
 
 #define MEM_INST( class_name, mnemonic, op) \
 template<typename SrcVal, typename DestMem, typename Offset>\
 struct class_name {};\
-static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::MEM, op, 0});
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::MEM, op, 0});\
+\
+template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>\
+struct class_name<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {\
+  static constexpr auto emit() {\
+    return Emitter::three_op_imm(op, Dest, Reg1, Imm);\
+  }\
+};\
+
+
 
 #define HALT_INST( class_name, mnemonic, op) \
 static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::HALT, op, 0});
@@ -133,6 +180,28 @@ struct Nop {
   }
 };
 
+struct Emitter {
+  static constexpr uint32_t three_op(uint8_t op, uint8_t d, uint8_t s1, uint8_t s2) {
+    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 | uint32_t(s1 & 0x1F) << 16 | uint32_t(s2 & 0x1F) << 11;
+  }
+
+  static constexpr uint32_t three_op_imm(uint8_t op, uint8_t d, uint8_t s1, uint16_t imm) {
+    return uint32_t(op << 26) | uint32_t(d & 0x1f) << 21 | uint32_t(s1 & 0x1f) << 16 | uint32_t(imm & 0xffff);
+  }
+
+  static constexpr uint32_t branch(uint8_t op, int32_t dest) {
+    return uint32_t(op << 26) | uint32_t(dest & 0x3FFFFFF);
+  }
+
+  static constexpr uint32_t two_op(uint8_t op, uint8_t d, uint8_t s1) {
+    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 | uint32_t(s1 & 0x1F) << 16;
+  }
+
+  static constexpr uint32_t two_op_imm(uint8_t op, uint8_t d, uint16_t s1) {
+    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 | uint32_t(s1 & 0xFFFF);
+  }
+};
+
 static inline bool regHalt = Registry::register_inst("HALT", { InstFormat::HALT, 0, 0});
 static inline bool nop = Registry::register_inst("NOP", { InstFormat::HALT, 0x14, 0});
 THREE_OP_INST(Add, "ADD", 0x1, 0x2)
@@ -152,208 +221,8 @@ BRANCH_INST(Bpl, "BPL", 0x12)
 BRANCH_INST(Call, "CALL", 0x15)
 static inline bool ret = Registry::register_inst("RET", { InstFormat::RET, 0x16, 0});
 THREE_OP_INST(And, "AND", 0x17, 0x18)
-
-
-template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
-struct Add<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x1 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t src2 = (Reg2 & 0x1F) << 11;
-    return opcode | dest | src1 | src2;
-  }
-};
-
-template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>
-struct Add<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x2 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | dest | src1 | imm;
-  }
-};
-
-template<uint8_t Dest, uint8_t Reg1>
-struct Mov<Reg<Dest>, Reg<Reg1> > {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x3 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    return opcode | dest | src1 ;
-  }
-};
-
-template<uint8_t Dest, uint16_t Imm>
-struct Mov<Reg<Dest>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x4 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | dest | imm;
-  }
-};
-
-template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
-struct Sub<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x5 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t src2 = (Reg2 & 0x1F) << 11;
-    return opcode | dest | src1 | src2;
-  }
-};
-
-template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>
-struct Sub<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x6 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | dest | src1 | imm;
-  }
-};
-
-template<std::int32_t Dest>
-struct Jmp<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x7 << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
-
-template<std::int32_t Dest>
-struct JmpRel<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x13 << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
-
-template<uint8_t SrcReg, uint8_t DestRegAddr, uint16_t Imm>
-struct Store<Reg<SrcReg>, Reg<DestRegAddr>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x8 << 26);
-    constexpr uint32_t srcval = (SrcReg & 0x1F) << 21;
-    constexpr uint32_t destAddr = (DestRegAddr & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | srcval | destAddr | imm;
-  }
-};
-
-template<uint8_t DestReg, uint8_t SrcRegAddr, uint16_t Imm>
-struct Load<Reg<DestReg>, Reg<SrcRegAddr>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x9 << 26);
-    constexpr uint32_t data_reg = (SrcRegAddr & 0x1F) << 21;
-    constexpr uint32_t data_addr = (DestReg & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | data_reg | data_addr | imm;
-  }
-};
-
-template<std::int32_t Dest>
-struct Beq<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0xA << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
-
-template<std::int32_t Dest>
-struct Bne<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0xB << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
-
-template<std::int32_t Dest>
-struct Bec<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x10 << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
-
-
-template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
-struct Lsh<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0xC << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t src2 = (Reg2 & 0x1F) << 11;
-    return opcode | dest | src1 | src2;
-  }
-};
-
-template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>
-struct Lsh<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0xD << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | dest | src1 | imm;
-  }
-};
-
-template<uint8_t Dest, uint8_t Reg1>
-struct Cmp<Reg<Dest>, Reg<Reg1> > {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0xE << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    return opcode | dest | src1 ;
-  }
-};
-
-template<uint8_t Dest, uint16_t Imm>
-struct Cmp<Reg<Dest>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0xF << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | dest | imm;
-  }
-};
-
-template<std::int32_t Dest>
-struct Bmi<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x11 << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
-
-template<std::int32_t Dest>
-struct Bpl<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x12 << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
-
-template<std::int32_t Dest>
-struct Call<Target<Dest>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x15 << 26);
-    constexpr uint32_t dest = (Dest & 0x3FFFFFF);
-    return opcode | dest;
-  }
-};
+THREE_OP_INST(Or, "OR", 0x19, 0x1A)
+THREE_OP_INST(Xor, "XOR", 0x1B, 0x1C)
 
 struct Ret {
   static constexpr auto emit() {
@@ -361,29 +230,6 @@ struct Ret {
     return opcode;
   }
 };
-
-template<uint8_t Dest, uint8_t Reg1, uint8_t Reg2>
-struct And<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x17 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t src2 = (Reg2 & 0x1F) << 11;
-    return opcode | dest | src1 | src2;
-  }
-};
-
-template<uint8_t Dest, uint8_t Reg1, uint16_t Imm>
-struct And<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {
-  static constexpr auto emit() {
-    constexpr uint32_t opcode = (0x18 << 26);
-    constexpr uint32_t dest = (Dest & 0x1F) << 21;
-    constexpr uint32_t src1 = (Reg1 & 0x1F) << 16;
-    constexpr uint32_t imm = Imm & 0xFFFF;
-    return opcode | dest | src1 | imm;
-  }
-};
-
 
 // runtime assembler
 inline auto parse_three(uint32_t op, uint32_t dest, uint32_t s1, uint32_t s2_or_imm, bool using_imm) -> std::uint32_t {

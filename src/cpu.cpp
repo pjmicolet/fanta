@@ -40,6 +40,10 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x16, Ret)
     EXEC_INST(0x17, AndReg)
     EXEC_INST(0x18, AndImm)
+    EXEC_INST(0x19, OrReg)
+    EXEC_INST(0x1A, OrImm)
+    EXEC_INST(0x1B, XorReg)
+    EXEC_INST(0x1C, XorImm)
   }
 }
 

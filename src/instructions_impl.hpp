@@ -187,6 +187,8 @@ constexpr auto op_plus = [](uint32_t a, uint32_t b) { return a + b; };
 constexpr auto op_minus = [](uint32_t a, uint32_t b) { return a - b; };
 constexpr auto op_and = [](uint32_t a, uint32_t b) { return a & b; };
 constexpr auto op_lsh = [](uint32_t a, uint32_t b) { return a << b; };
+constexpr auto op_or = [](uint32_t a, uint32_t b) { return a | b; };
+constexpr auto op_xor = [](uint32_t a, uint32_t b) { return a ^ b; };
 
 using AddReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_plus, ARITH_ADD>;
 using AddImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_plus, ARITH_ADD>;
@@ -199,6 +201,12 @@ using AndImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_and, LOGI
 
 using LshReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_lsh, LSHIFT>;
 using LshImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_lsh, LSHIFT>;
+
+using OrReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_or, LOGICAL>;
+using OrImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_or, LOGICAL>;
+
+using XorReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_xor, LOGICAL>;
+using XorImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_xor, LOGICAL>;
 
 using CmpReg = OpCmp<DecodeS1Cmp, DecodeSource1>;
 using CmpImm = OpCmp<DecodeS1Cmp, DecodeImm>;
