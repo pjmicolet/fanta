@@ -39,6 +39,7 @@ struct Assembler {
         case Instructions::MEM:      return parse_mem(tokens, mtdc, address);
         case Instructions::JUMP:     return parse_one(tokens, mtdc, address, true);
         case Instructions::BRANCH:   return parse_one(tokens, mtdc, address);
+        case Instructions::STACK_INST:   return parse_one(tokens, mtdc, address);
         case Instructions::HALT:     return 0;
         case Instructions::RET:      return 0x16 << 26;
       }
@@ -72,6 +73,7 @@ private:
   }
 
   auto is_register(std::string_view token) -> bool {
+    if(token == "SP") return true;
     if(token.size() < 2) return false;
     if (token[0] != 'R' && token[0] != 'r') return false;
     return std::all_of(token.data() + 1, token.data() + token.size(),
@@ -101,10 +103,13 @@ private:
   auto extract_val(std::string_view token, int address, bool is_jump = false) -> int {
     if (token.empty()) return 0;
     
+    if (token == "SP") return 16;
+
     // Check for register format "R1"
     if (is_register(token)) {
         int regNum = 0;
         std::from_chars(token.data() + 1, token.data() + token.size(), regNum);
+        if (regNum >= 16) return -1; // Force assembly error for direct access
         return regNum;
     }
 

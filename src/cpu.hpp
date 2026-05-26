@@ -30,7 +30,10 @@ struct CPU {
     CARRY
   };
 
-  CPU() : ram(32*1024*1024) {}
+  CPU() : ram(32*1024*1024) {
+    registers.fill(0);
+    registers[16] = 0x7FFFFF;
+  }
   constexpr auto fetch() {
     auto data = ram.read32(PC);
     PC+=4;
@@ -81,7 +84,7 @@ struct CPU {
   }
 
   auto get_sp() const -> uint32_t {
-    return SP;
+    return registers[16];
   }
 
   auto set_pc(uint32_t pc_val) -> void {
@@ -131,17 +134,22 @@ struct CPU {
     status_reg[3] = val ? 1 : 0; 
   }
 
+  auto push_stack(uint32_t val) {
+    ram.write32(registers[16], val);
+    registers[16]-=4;
+  }
+
   auto push_stack() {
-    ram.write32(SP,PC);
-    SP-=4;
+    ram.write32(registers[16], PC);
+    registers[16]-=4;
   }
 
   auto pop_stack() -> std::uint32_t {
-    SP+=4;
-    return ram.read32(SP);
+    registers[16]+=4;
+    return ram.read32(registers[16]);
   }
 
-  std::array<std::uint32_t, 16> registers{0, 0, 0, 0, 0, 0, 0, 0,0, 0, 0, 0, 0, 0, 0, 0};
+  std::array<std::uint32_t, 17> registers{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x7FFFFF};
   // Status regs are:
   // 0: Zero
   // 1: Negative
@@ -154,5 +162,4 @@ struct CPU {
   Memory ram; //32MB
 private:
   std::uint32_t PC = 0;
-  std::uint32_t SP = 0x1000;
 };

@@ -63,9 +63,8 @@ void TUI::run() {
         auto now = std::chrono::steady_clock::now();
         
         if (is_running_continuously) {
-            // Run a batch of cycles to fill the time since last update
-            // We'll stick to a fixed batch size for now but spread it out
-            for (int i = 0; i < 5000; ++i) { // Increased batch size for smoother feel
+            // Increased batch size for smoother feel
+            for (int i = 0; i < 150000; ++i) { 
                 if (!cpu.halted) {
                     prev_registers = cpu.registers;
                     cpu.run_cycle();
@@ -164,18 +163,31 @@ void TUI::draw_registers() {
     mvprintw(1, 2, "--- REGISTERS ---");
     attroff(COLOR_PAIR(1));
 
-    for (int i = 0; i < 16; ++i) {
-        int col = (i < 8) ? 2 : 20; // Second column starting at X=20
-        int row = 2 + (i % 8);
+    for (int i = 0; i < 17; ++i) {
+        int col;
+        int row;
+        if (i < 8) {
+            col = 2;
+            row = 2 + i;
+        } else if (i < 16) {
+            col = 20;
+            row = 2 + (i - 8);
+        } else {
+            col = 2; // Put SP below R7
+            row = 10;
+        }
         
         if (row < term_h) {
+            std::string label = (i == 16) ? "SP " : "R" + std::to_string(i);
+            if (i < 10 && i != 16) label = "R " + std::to_string(i); // alignment
+
             if (i == last_changed_reg) {
                 attron(COLOR_PAIR(3) | A_BOLD);
-                mvprintw(row, col, "R%2d: 0x%08X", i, cpu.registers[i]);
+                mvprintw(row, col, "%s: 0x%08X", label.c_str(), cpu.registers[i]);
                 attroff(COLOR_PAIR(3) | A_BOLD);
             } else {
                 attron(COLOR_PAIR(1));
-                mvprintw(row, col, "R%2d: 0x%08X", i, cpu.registers[i]);
+                mvprintw(row, col, "%s: 0x%08X", label.c_str(), cpu.registers[i]);
                 attroff(COLOR_PAIR(1));
             }
         }
@@ -320,14 +332,21 @@ void TUI::draw_vram_preview() {
     uint32_t* vram = (uint32_t*)cpu.get_vram();
     bool use_color = (COLORS >= 256);
 
+    // Optimized scaling using fixed-point
+    const int sx = (320 << 16) / preview_w;
+    const int sy = (240 << 16) / preview_h;
+
     for (int y = 0; y < preview_h; ++y) {
+        int vy = (y * sy) >> 16;
+        if (vy >= 240) break;
+        uint32_t* row = vram + (vy * 320);
+        
+        move(start_y + y, start_col);
         for (int x = 0; x < preview_w; ++x) {
-            int vx = (x * 320) / preview_w;
-            int vy = (y * 240) / preview_h;
+            int vx = (x * sx) >> 16;
+            if (vx >= 320) break;
             
-            if (vx >= 320 || vy >= 240) continue;
-            
-            uint32_t pixel = vram[vy * 320 + vx];
+            uint32_t pixel = row[vx];
             uint8_t r = (pixel >> 16) & 0xFF;
             uint8_t g = (pixel >> 8) & 0xFF;
             uint8_t b = pixel & 0xFF;
@@ -339,13 +358,12 @@ void TUI::draw_vram_preview() {
                 int pair_idx = 10 + (r5 * 36) + (g5 * 6) + b5;
                 
                 attron(COLOR_PAIR(pair_idx));
-                mvaddch(start_y + y, start_col + x, ' '); 
+                addch(' '); 
                 attroff(COLOR_PAIR(pair_idx));
             } else {
                 const char* ramp = " .:-=+*#%@";
                 uint8_t lum = (r + g + b) / 3;
-                int char_idx = (lum * 9) / 255;
-                mvaddch(start_y + y, start_col + x, ramp[char_idx]);
+                addch(ramp[(lum * 9) / 255]);
             }
         }
     }
@@ -395,7 +413,7 @@ void TUI::handle_normal_mode(int ch) {
             cpu.set_pc(0);
             cpu.halted = false;
             cpu.registers.fill(0);
-            cpu.status_reg.fill(0);
+            cpu.registers[16] = 0x7FFFFF; // Restore Sacred SP
             prev_registers.fill(0);
             last_changed_reg = -1;
             is_running_continuously = false;
@@ -425,7 +443,7 @@ void TUI::handle_normal_mode(int ch) {
                 prev_registers = cpu.registers;
                 cpu.run_cycle();
                 last_changed_reg = -1;
-                for (int i = 0; i < 16; ++i) {
+                for (int i = 0; i < 17; ++i) {
                     if (cpu.registers[i] != prev_registers[i]) {
                         last_changed_reg = i;
                         break;
@@ -621,6 +639,9 @@ std::string TUI::disassemble(uint32_t addr) {
             break;
         case Instructions::MEM:
             ss << "R" << (int)d.getDestSrc() << ", " << std::hex << (int)d.getImm() << "(R" << std::dec << (int)d.getS1() << ")";
+            break;
+        case Instructions::STACK_INST:
+            ss << "R" << (int)(raw & 0x3FFFFFF);
             break;
         case Instructions::JUMP:
         case Instructions::BRANCH: {

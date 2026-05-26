@@ -58,7 +58,7 @@ private:
     Trie trie;
     void init_trie();
 
-    std::array<std::uint32_t, 16> prev_registers{0};
+    std::array<std::uint32_t, 17> prev_registers{0};
     int last_changed_reg = -1;
 
     // IPS Monitoring

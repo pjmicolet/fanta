@@ -5,7 +5,7 @@
 
 namespace Instructions {
 
-enum InstFormat { THREE_OP, TWO_OP, MEM, JUMP, BRANCH, HALT, RET };
+enum InstFormat { THREE_OP, TWO_OP, MEM, JUMP, BRANCH, HALT, RET, STACK_INST };
 
 struct InstMetadata {
   InstFormat fmt;
@@ -58,7 +58,7 @@ struct class_name {};\
 static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::JUMP, op, 0});\
 \
 template<int32_t Dest>\
-struct class_name<Target<Dest>> { static constexpr auto emit() { return Emitter::branch(op, Dest);}\
+struct class_name<Target<Dest>> { static constexpr auto emit() { return Emitter::single_inst(op, Dest);}\
 };\
 
 #define BRANCH_INST( class_name, mnemonic, op) \
@@ -67,9 +67,17 @@ struct class_name {};\
 static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::BRANCH, op, 0});\
 \
 template<int32_t Dest>\
-struct class_name<Target<Dest>> { static constexpr auto emit() { return Emitter::branch(op, Dest);}\
+struct class_name<Target<Dest>> { static constexpr auto emit() { return Emitter::single_inst(op, Dest);}\
 };\
 
+#define STACK_INST( class_name, mnemonic, op) \
+template<typename Dest>\
+struct class_name {};\
+static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::STACK_INST, op, 0});\
+\
+template<int32_t Dest>\
+struct class_name<Target<Dest>> { static constexpr auto emit() { return Emitter::single_inst(op, Dest);}\
+};\
 
 #define MEM_INST( class_name, mnemonic, op) \
 template<typename SrcVal, typename DestMem, typename Offset>\
@@ -82,8 +90,6 @@ struct class_name<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {\
     return Emitter::three_op_imm(op, Dest, Reg1, Imm);\
   }\
 };\
-
-
 
 #define HALT_INST( class_name, mnemonic, op) \
 static inline bool reg##class_name = Registry::register_inst(mnemonic, { InstFormat::HALT, op, 0});
@@ -107,27 +113,6 @@ struct Registry {
     return true;
 
   }
-};
-
-enum class Opcode {
-  HALT,
-  ADD,
-  MOV,
-  SUB,
-  JMP,
-  STORE,
-  LOAD,
-  BEQ,
-  BNE,
-  LSH,
-  CMP,
-  BEC,
-  BMI,
-  BPL,
-  JREL,
-  NOP,
-  CALL,
-  RET,
 };
 
 struct Decode {
@@ -189,7 +174,7 @@ struct Emitter {
     return uint32_t(op << 26) | uint32_t(d & 0x1f) << 21 | uint32_t(s1 & 0x1f) << 16 | uint32_t(imm & 0xffff);
   }
 
-  static constexpr uint32_t branch(uint8_t op, int32_t dest) {
+  static constexpr uint32_t single_inst(uint8_t op, int32_t dest) {
     return uint32_t(op << 26) | uint32_t(dest & 0x3FFFFFF);
   }
 
@@ -223,6 +208,8 @@ static inline bool ret = Registry::register_inst("RET", { InstFormat::RET, 0x16,
 THREE_OP_INST(And, "AND", 0x17, 0x18)
 THREE_OP_INST(Or, "OR", 0x19, 0x1A)
 THREE_OP_INST(Xor, "XOR", 0x1B, 0x1C)
+STACK_INST(Push, "PUSH", 0x1D)
+STACK_INST(Pop, "POP", 0x1E)
 
 struct Ret {
   static constexpr auto emit() {

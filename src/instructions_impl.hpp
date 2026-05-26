@@ -183,6 +183,21 @@ struct Call {
   }
 };
 
+struct Pop {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto dest = inst & 0x3FFFFFF;
+    auto res = cpu.pop_stack();
+    cpu.registers[dest] = res;
+  }
+};
+
+struct Push {
+  static auto exec(CPU& cpu, uint32_t inst) {
+    auto dest = inst & 0x3FFFFFF;
+    cpu.push_stack(cpu.registers[dest]);
+  }
+};
+
 constexpr auto op_plus = [](uint32_t a, uint32_t b) { return a + b; };
 constexpr auto op_minus = [](uint32_t a, uint32_t b) { return a - b; };
 constexpr auto op_and = [](uint32_t a, uint32_t b) { return a & b; };
@@ -190,23 +205,16 @@ constexpr auto op_lsh = [](uint32_t a, uint32_t b) { return a << b; };
 constexpr auto op_or = [](uint32_t a, uint32_t b) { return a | b; };
 constexpr auto op_xor = [](uint32_t a, uint32_t b) { return a ^ b; };
 
-using AddReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_plus, ARITH_ADD>;
-using AddImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_plus, ARITH_ADD>;
+#define INSTRUCTION_3(Name, Op, FlagType)\
+using Name##Reg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, Op, FlagType>;\
+using Name##Imm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, Op, FlagType>;\
 
-using SubReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_minus, ARITH_SUB>;
-using SubImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_minus, ARITH_SUB>;
-
-using AndReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_and, LOGICAL>;
-using AndImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_and, LOGICAL>;
-
-using LshReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_lsh, LSHIFT>;
-using LshImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_lsh, LSHIFT>;
-
-using OrReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_or, LOGICAL>;
-using OrImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_or, LOGICAL>;
-
-using XorReg = OpArithLogical<DecodeDest, DecodeSource1, DecodeSource2, op_xor, LOGICAL>;
-using XorImm = OpArithLogical<DecodeDest, DecodeSource1, DecodeImm, op_xor, LOGICAL>;
+INSTRUCTION_3(Add, op_plus, ARITH_ADD)
+INSTRUCTION_3(Sub, op_minus, ARITH_SUB)
+INSTRUCTION_3(And, op_and, LOGICAL)
+INSTRUCTION_3(Or, op_or, LOGICAL)
+INSTRUCTION_3(Xor, op_xor, LOGICAL)
+INSTRUCTION_3(Lsh, op_lsh, LSHIFT)
 
 using CmpReg = OpCmp<DecodeS1Cmp, DecodeSource1>;
 using CmpImm = OpCmp<DecodeS1Cmp, DecodeImm>;
