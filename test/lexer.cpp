@@ -104,3 +104,20 @@ TEST_CASE("Basic integer parsing") {
   auto res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::IntLiteral, res);
 }
+
+TEST_CASE("Tokenize Assignment") {
+  std::string case1 = "let hello : int = 12";
+  Lexer simple{case1};
+  auto res = simple.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::KeywordLet, res);
+  res = simple.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, res);
+  res = simple.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Colon, res);
+  res = simple.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Type, res);
+  res = simple.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Equal, res);
+  res = simple.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::IntLiteral, res);
+}

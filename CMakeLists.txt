@@ -21,6 +21,7 @@ add_executable(ops_test test/ops.cpp)
 add_executable(cpu_test test/cpu.cpp)
 add_executable(string_assembler test/string_assembler.cpp)
 add_executable(lexer_test test/lexer.cpp)
+add_executable(parser_test test/parser.cpp)
 
 # Link the library
 # We manually add the src directory as SYSTEM to satisfy the requirement
@@ -37,12 +38,16 @@ target_link_libraries(string_assembler PRIVATE fanta_lib test_framework)
 target_include_directories(lexer_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(lexer_test PRIVATE fanta_lib test_framework)
 
+target_include_directories(parser_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(parser_test PRIVATE fanta_lib test_framework)
+
 # Enable testing
 enable_testing()
 add_test(NAME ops_test COMMAND ops_test)
 add_test(NAME cpu_test COMMAND cpu_test)
 add_test(NAME string_assembler COMMAND string_assembler)
 add_test(NAME lexer_test COMMAND lexer_test)
+add_test(NAME parser_test COMMAND parser_test)
 
 # Main Application
 find_package(SDL2 REQUIRED)

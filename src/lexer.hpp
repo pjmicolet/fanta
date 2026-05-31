@@ -104,6 +104,7 @@ private:
       case '}' : return Token{TokenType::CloseBrace, body_.substr(cursor_, 1), 0, cursor_, cursor_++};
       case ')' : return Token{TokenType::CloseParam, body_.substr(cursor_, 1), 0, cursor_, cursor_++};
       case ',' : return Token{TokenType::Comma, body_.substr(cursor_, 1), 0, cursor_, cursor_++};
+      case ':' : return Token{TokenType::Colon, body_.substr(cursor_, 1), 0, cursor_, cursor_++};
     }
     return std::unexpected(LexError{LexErrorType::UnknownToken, 0, cursor_, cursor_++});
   }
