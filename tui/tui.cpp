@@ -332,18 +332,28 @@ void TUI::draw_vram_preview() {
     uint32_t* vram = (uint32_t*)cpu.get_vram();
     bool use_color = (COLORS >= 256);
 
-    // Optimized scaling using fixed-point
-    const int sx = (320 << 16) / preview_w;
-    const int sy = (240 << 16) / preview_h;
+    // Centered magnifying glass calculations
+    double visible_w = 320.0 / zoom_scale;
+    double visible_h = 240.0 / zoom_scale;
+    double zoom_start_x = zoom_cx - (visible_w / 2.0);
+    double zoom_start_y = zoom_cy - (visible_h / 2.0);
+
+    // Clamp viewport to VRAM boundaries
+    if (zoom_start_x < 0.0) zoom_start_x = 0.0;
+    if (zoom_start_x + visible_w > 320.0) zoom_start_x = 320.0 - visible_w;
+    if (zoom_start_y < 0.0) zoom_start_y = 0.0;
+    if (zoom_start_y + visible_h > 240.0) zoom_start_y = 240.0 - visible_h;
 
     for (int y = 0; y < preview_h; ++y) {
-        int vy = (y * sy) >> 16;
+        int vy = (int)(zoom_start_y + (y * visible_h) / preview_h);
+        if (vy < 0) vy = 0;
         if (vy >= 240) break;
         uint32_t* row = vram + (vy * 320);
         
         move(start_y + y, start_col);
         for (int x = 0; x < preview_w; ++x) {
-            int vx = (x * sx) >> 16;
+            int vx = (int)(zoom_start_x + (x * visible_w) / preview_w);
+            if (vx < 0) vx = 0;
             if (vx >= 320) break;
             
             uint32_t pixel = row[vx];
@@ -367,6 +377,17 @@ void TUI::draw_vram_preview() {
             }
         }
     }
+
+    // Draw vivid '+' crosshair cursor at the zoom center coordinate in ZOOM mode
+    if (mode == Mode::ZOOM) {
+        int cur_sx = start_col + (int)((zoom_cx - zoom_start_x) * preview_w / visible_w);
+        int cur_sy = start_y + (int)((zoom_cy - zoom_start_y) * preview_h / visible_h);
+        if (cur_sx >= 0 && cur_sx < term_w && cur_sy >= 0 && cur_sy < term_h) {
+            attron(COLOR_PAIR(3) | A_BOLD | A_REVERSE);
+            mvaddch(cur_sy, cur_sx, '+');
+            attroff(COLOR_PAIR(3) | A_BOLD | A_REVERSE);
+        }
+    }
 }
 
 void TUI::handle_input() {
@@ -377,6 +398,9 @@ void TUI::handle_input() {
         is_running_continuously = false;
         if (mode == Mode::ZOOM) {
             mode = Mode::NORMAL;
+            zoom_scale = 1.0;
+            zoom_cx = 160.0;
+            zoom_cy = 120.0;
             return;
         }
     }
@@ -391,7 +415,42 @@ void TUI::handle_input() {
             case 's': if (!cpu.halted) cpu.run_cycle(); break;
             case 'c': if (!cpu.halted) is_running_continuously = !is_running_continuously; break;
             case 'r': handle_normal_mode('r'); break; // Reuse reset logic
-            case 'z': mode = Mode::NORMAL; break;
+            case 'z': 
+                mode = Mode::NORMAL; 
+                zoom_scale = 1.0; 
+                zoom_cx = 160.0;
+                zoom_cy = 120.0;
+                break;
+            case '+':
+            case '=':
+                zoom_scale += 0.25;
+                if (zoom_scale > 10.0) zoom_scale = 10.0;
+                break;
+            case '-':
+                zoom_scale -= 0.25;
+                if (zoom_scale < 1.0) zoom_scale = 1.0;
+                break;
+            case 'h':
+            case KEY_LEFT:
+                zoom_cx -= 4.0;
+                if (zoom_cx < 0.0) zoom_cx = 0.0;
+                break;
+            case 'l':
+            case KEY_RIGHT:
+                zoom_cx += 4.0;
+                if (zoom_cx > 320.0) zoom_cx = 320.0;
+                break;
+            case 'i':
+            case 'k':
+            case KEY_UP:
+                zoom_cy -= 4.0;
+                if (zoom_cy < 0.0) zoom_cy = 0.0;
+                break;
+            case 'j':
+            case KEY_DOWN:
+                zoom_cy += 4.0;
+                if (zoom_cy > 240.0) zoom_cy = 240.0;
+                break;
         }
     } else if (mode == Mode::COMMAND) {
         handle_command_mode(ch);

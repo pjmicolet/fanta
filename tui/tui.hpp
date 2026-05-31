@@ -65,4 +65,9 @@ private:
     uint64_t total_cycles = 0;
     double current_ips = 0;
     std::chrono::steady_clock::time_point last_ips_time;
+
+    // Zooming
+    double zoom_scale = 1.0;
+    double zoom_cx = 160.0;
+    double zoom_cy = 120.0;
 };

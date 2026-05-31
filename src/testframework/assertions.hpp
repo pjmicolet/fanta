@@ -1,6 +1,7 @@
 #pragma once
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <functional>
 
@@ -45,12 +46,17 @@ inline auto require_same(const int line, const T &expected, const R &got, std::f
 
     if constexpr(std::is_integral<T>::value) {
       expectedS = std::to_string(expected);
-    } else {
+    } else if constexpr(std::is_enum_v<T>) {
+      expectedS = std::to_string(static_cast<std::underlying_type_t<T>>(expected));
+    }
+    else {
       expectedS = std::string(expected);
     }
 
     if constexpr(std::is_integral<R>::value) {
       gotS = std::to_string(got);
+    } else if constexpr(std::is_enum_v<R>) {
+      gotS = std::to_string(static_cast<std::underlying_type_t<R>>(got));
     } else {
       gotS = std::string(got);
     }
