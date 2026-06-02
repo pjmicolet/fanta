@@ -20,7 +20,14 @@ struct Parser {
 
   auto walk() -> void {
     if(accept(Lexer::TokenType::KeywordLet)) {
-      walkLet();
+      roots.push_back(walkLet());
+    }
+    else if(accept(Lexer::TokenType::KeywordFn)) {
+      walkFn();
+    } else {
+      auto expr = walkExpression(Precedence::LOWEST);
+      auto good = expect(Lexer::TokenType::SemiColon);
+      roots.push_back(expr);
     }
   }
 
@@ -35,6 +42,7 @@ struct Parser {
   constexpr auto tokenTypeToString(Lexer::TokenType t) -> std::string_view {
       switch (t) {
           case Lexer::TokenType::Plus:      return "+";
+          case Lexer::TokenType::Equal:      return "=";
           case Lexer::TokenType::Minus:     return "-";
           case Lexer::TokenType::Mult:      return "*";
           case Lexer::TokenType::Slash:     return "/";
@@ -42,6 +50,15 @@ struct Parser {
           case Lexer::TokenType::KeywordFn:  return "fn";
           case Lexer::TokenType::Identifier: return "Identifier";
           case Lexer::TokenType::IntLiteral: return "IntLiteral";
+          case Lexer::TokenType::Colon: return ":";
+          case Lexer::TokenType::OpenBrace: return "{";
+          case Lexer::TokenType::CloseBrace: return "}";
+          case Lexer::TokenType::SemiColon: return ";";
+          case Lexer::TokenType::Arrow: return "->";
+          case Lexer::TokenType::Comma: return ",";
+          case Lexer::TokenType::OpenParam: return "(";
+          case Lexer::TokenType::CloseParam: return ")";
+          case Lexer::TokenType::Type: return "Type";
           default:                           return "Unknown";
       }
   }
@@ -66,6 +83,29 @@ struct Parser {
         std::println("{}BinaryOperator({})",pad,tokenTypeToString(binaryOp.type));
         printAST(binaryOp.lhsOp, indent+1);
         printAST(binaryOp.rhsOp,indent+1);
+      },
+      [&](const Fanta::AST::FunctionCall& fc) { 
+        std::println("{}FunctionCall()",pad);
+        printAST(fc.funcNameIdx, indent+1);
+        for(auto& c : fc.params) {
+          printAST(c, indent+1);
+        }
+      },
+      [&](const Fanta::AST::FunctionDef& fc) { 
+        std::println("{}FunctionDef({} -> {})",pad, fc.name, fc.retType);
+        for(auto& p : fc.params) {
+          printAST(p, indent+1);
+        }
+        printAST(fc.body);
+      },
+      [&](const Fanta::AST::FunctionParamDef& p) {
+        std::println("{}FunctionParamDef({}:{})",pad, p.name, p.type);
+      },
+      [&](const Fanta::AST::FunctionBody& p) {
+        std::println("{}FunctionBody",pad);
+        for(auto& b : p.expressions) {
+          printAST(b, indent+1);
+        }
       }
     }, node.t);
   }
@@ -105,17 +145,63 @@ private:
        if(!name.has_value()) return ret_val;\
 
   #define EXTRACT_TOKEN(type)\
-       if(!expect(type).has_value()) return;\
+       if(!expect(type).has_value()) return -1;\
 
-  auto walkLet() -> void {
-    EXTRACT_TOKEN_TO_VAR(identifier, Lexer::TokenType::Identifier);
+  auto walkLet() -> Fanta::AST::NodeIndex {
+    EXTRACT_TOKEN_TO_VAR_WRET(identifier, Lexer::TokenType::Identifier, -1);
     EXTRACT_TOKEN(Lexer::TokenType::Colon);
-    EXTRACT_TOKEN_TO_VAR(type, Lexer::TokenType::Type);
+    EXTRACT_TOKEN_TO_VAR_WRET(type, Lexer::TokenType::Type, -1);
     EXTRACT_TOKEN(Lexer::TokenType::Equal);
     auto index = walkExpression(Precedence::ASSIGN);
     Fanta::AST::VariableDecl var{identifier->lexeme, type->lexeme, index};
     asts.push_back({var,0});
+    return asts.size() -1;
+  }
+
+  auto walkFn() -> void {
+    EXTRACT_TOKEN_TO_VAR(identifier, Lexer::TokenType::Identifier);
+
+    auto paramStart = expect(Lexer::TokenType::OpenParam); // TODO break if not there;
+
+    Fanta::AST::FunctionDef func{};
+    func.name = identifier->lexeme;
+    while(currentToken.t != Lexer::TokenType::CloseParam) {
+      auto paramName = expect(Lexer::TokenType::Identifier);
+      if(paramName) {
+        auto colon = expect(Lexer::TokenType::Colon);
+        EXTRACT_TOKEN_TO_VAR(type, Lexer::TokenType::Type);
+        Fanta::AST::FunctionParamDef def{paramName->lexeme, type->lexeme};
+        asts.push_back({def, 0});
+        func.params.push_back(asts.size()-1);
+        auto c = expect(Lexer::TokenType::Comma);
+      }
+    }
+    auto close = expect(Lexer::TokenType::CloseParam);
+
+    auto arrowType = expect(Lexer::TokenType::Arrow);
+
+    EXTRACT_TOKEN_TO_VAR(funcRet, Lexer::TokenType::Type);
+
+    func.retType = funcRet->lexeme;
+    func.body = walkBody();
+    asts.push_back({func,0});
     roots.push_back(asts.size()-1);
+  }
+
+  auto walkBody() -> Fanta::AST::NodeIndex {
+    auto start = expect(Lexer::TokenType::OpenBrace);
+    Fanta::AST::FunctionBody body;
+    while(currentToken.t != Lexer::TokenType::CloseBrace){
+      if(accept(Lexer::TokenType::KeywordLet)) {
+        body.expressions.push_back(walkLet());
+      } else {
+        auto idx = walkExpression(Precedence::LOWEST);
+        body.expressions.push_back(idx);
+      }
+      auto sc = expect(Lexer::TokenType::SemiColon);
+    }
+    asts.push_back({body, 0});
+    return asts.size() - 1;
   }
 
   auto walkExpression(Precedence p) -> Fanta::AST::NodeIndex {
@@ -130,10 +216,23 @@ private:
   }
 
   auto walkInfix(Fanta::AST::NodeIndex idx, Lexer::Token t) -> Fanta::AST::NodeIndex {
-    auto rhsExpr = walkExpression(getPrecedence(t.t));
-    Fanta::AST::BinaryOperator op{idx,rhsExpr,t.t};
-    asts.push_back({op,0});
-    return asts.size()-1;
+    if(t.t == Lexer::TokenType::OpenParam) {
+      std::vector<Fanta::AST::NodeIndex> args;
+      while(currentToken.t != Lexer::TokenType::CloseParam) {
+        auto expr = walkExpression(Precedence::LOWEST);
+        args.push_back(expr);
+        auto c = expect(Lexer::TokenType::Comma);
+      }
+      auto b = expect(Lexer::TokenType::CloseParam);
+      Fanta::AST::FunctionCall fc{idx, args};
+      asts.push_back({fc,0});
+      return asts.size()-1;
+    } else {
+      auto rhsExpr = walkExpression(getPrecedence(t.t));
+      Fanta::AST::BinaryOperator op{idx,rhsExpr,t.t};
+      asts.push_back({op,0});
+      return asts.size()-1;
+    }
   }
     
   auto walkPrefix() -> Fanta::AST::NodeIndex {
@@ -169,6 +268,7 @@ private:
       case Lexer::TokenType::Plus: return Precedence::SUM;
       case Lexer::TokenType::SemiColon: return Precedence::LOWEST;
       case Lexer::TokenType::Slash: return Precedence::DIVIDE;
+      case Lexer::TokenType::OpenParam: return Precedence::CALL;
       default:
         return Precedence::LOWEST;
     }

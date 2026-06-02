@@ -24,7 +24,7 @@ struct Lexer {
   enum class TokenType {
     IntLiteral, Eof, KeywordLet, KeywordFn, OpenParam, CloseParam, 
     OpenBrace, CloseBrace, SemiColon, Comma, Plus, Minus, Slash, Mult,
-    Arrow, Identifier, Equal, Colon, If, Else, Type
+    Arrow, Identifier, Equal, Colon, If, Else, Type, Return
   };
 
   struct Token {
@@ -63,6 +63,7 @@ private:
     if(lexeme == "fn") return Token{TokenType::KeywordFn, lexeme, 0 /*TODO: Add line*/, start, cursor_};
     if(lexeme == "if") return Token{TokenType::If, lexeme, 0 /*TODO: Add line*/, start, cursor_};
     if(lexeme == "else") return Token{TokenType::Else, lexeme, 0 /*TODO: Add line*/, start, cursor_};
+    if(lexeme == "return") return Token{TokenType::Return, lexeme, 0 /*TODO: Add line*/, start, cursor_};
     if(isType(lexeme)) return Token{TokenType::Type, lexeme, 0, start, cursor_}; 
     return Token{TokenType::Identifier, lexeme, 0, start, cursor_}; 
   }

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <vector>
 #include <variant>
 
 #include "lexer.hpp"
@@ -28,7 +29,29 @@ namespace AST {
     NodeIndex defineNode;
   };
 
-  using AstNodeType = std::variant<BinaryOperator, IntLiteral, Identifier, VariableDecl>;
+
+  struct FunctionCall {
+    NodeIndex funcNameIdx;
+    std::vector<NodeIndex> params;
+  };
+
+  struct FunctionDef {
+    std::string_view name;
+    std::vector<NodeIndex> params;
+    NodeIndex body;
+    std::string_view retType;
+  };
+
+  struct FunctionParamDef {
+    std::string_view name;
+    std::string_view type;
+  };
+
+  struct FunctionBody {
+    std::vector<NodeIndex> expressions;
+  };
+
+  using AstNodeType = std::variant<BinaryOperator, IntLiteral, Identifier, VariableDecl, FunctionCall, FunctionDef, FunctionParamDef, FunctionBody>;
   
   struct AstNode {
     AstNodeType t;
