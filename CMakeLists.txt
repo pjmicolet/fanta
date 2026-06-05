@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Create a static library for the core logic
-add_library(fanta_lib STATIC src/cpu.cpp)
+add_library(fanta_lib STATIC src/cpu.cpp src/codegen.cpp)
 target_include_directories(fanta_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Create an interface library for the test framework
@@ -22,6 +22,7 @@ add_executable(cpu_test test/cpu.cpp)
 add_executable(string_assembler test/string_assembler.cpp)
 add_executable(lexer_test test/lexer.cpp)
 add_executable(parser_test test/parser.cpp)
+add_executable(codegen_test test/codegen.cpp)
 
 # Link the library
 # We manually add the src directory as SYSTEM to satisfy the requirement
@@ -41,6 +42,9 @@ target_link_libraries(lexer_test PRIVATE fanta_lib test_framework)
 target_include_directories(parser_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(parser_test PRIVATE fanta_lib test_framework)
 
+target_include_directories(codegen_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(codegen_test PRIVATE fanta_lib test_framework)
+
 # Enable testing
 enable_testing()
 add_test(NAME ops_test COMMAND ops_test)
@@ -48,6 +52,7 @@ add_test(NAME cpu_test COMMAND cpu_test)
 add_test(NAME string_assembler COMMAND string_assembler)
 add_test(NAME lexer_test COMMAND lexer_test)
 add_test(NAME parser_test COMMAND parser_test)
+add_test(NAME codegen_test COMMAND codegen_test)
 
 # Main Application
 find_package(SDL2 REQUIRED)

@@ -19,6 +19,7 @@ struct Parser {
   }
 
   auto walk() -> void {
+    if(currentToken.t == Lexer::TokenType::Eof) return;
     if(accept(Lexer::TokenType::KeywordLet)) {
       roots.push_back(walkLet());
     }
@@ -31,11 +32,21 @@ struct Parser {
     }
   }
 
+  auto fullWalk() -> void {
+    while(currentToken.t != Lexer::TokenType::Eof) {
+      walk();
+    }
+  }
+
   auto getCurrentRoot() const -> Fanta::AST::AstNode {
     return asts[roots.back()];
   }
 
-  auto getNodeAtIndex(Fanta::AST::NodeIndex idx) -> Fanta::AST::AstNode {
+  auto getRootIndices() const -> const std::vector<Fanta::AST::NodeIndex>& {
+    return roots;
+  }
+
+  auto getNodeAtIndex(Fanta::AST::NodeIndex idx) const -> Fanta::AST::AstNode {
     return asts[idx];
   }
 
@@ -200,6 +211,7 @@ private:
       }
       auto sc = expect(Lexer::TokenType::SemiColon);
     }
+    auto end = expect(Lexer::TokenType::CloseBrace);
     asts.push_back({body, 0});
     return asts.size() - 1;
   }
