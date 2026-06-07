@@ -12,14 +12,17 @@ struct SimpleIRPass {
 private:
   auto emitGlobalVariableIR(const Parser &p, const AST::VariableDecl &decl,
                             IR &ir) -> void;
-  auto emitVariableIR(const Parser &p, const AST::VariableDecl &decl, IR &ir,
-                      const GlobalTable &gt, LocalTable &lt) -> void;
+  auto emitVariableIR(const Parser &p, const AST::VariableDecl &decl,
+                      IRListing &ir, const GlobalTable &gt, LocalTable &lt)
+      -> void;
   auto emitFunctionDef(const Parser &p, const AST::FunctionDef &decl, IR &ir,
                        const GlobalTable &gt) -> void;
-  auto emitBinaryOpIR(const AST::BinaryOperator &bOp, IR &ir, LocalTable &lt)
-      -> void;
-  auto emitGlobalNameBase(IR &ir, const GlobalTable &gt, LocalTable &lt)
+  auto emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,
+                      LocalTable &lt) -> void;
+  auto emitGlobalNameBase(IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> TempReg;
+  auto emitFunctionPrelude(const Parser &p, const AST::FunctionDef &decl,
+                           FunctionIR &ir, LocalTable &lt) -> void;
 };
 
 } // namespace Fanta

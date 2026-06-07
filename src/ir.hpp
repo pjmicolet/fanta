@@ -1,17 +1,15 @@
 #pragma once
-#include <variant>
 #include <cstdint>
 #include <string_view>
+#include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace Fanta {
-using InstOp = std::uint16_t; //Opcode
+using InstOp = std::uint16_t; // Opcode
 using Operand = std::uint16_t;
 
-enum Source2Type {
-  Register,
-  Immediate
-};
+enum Source2Type { Register, Immediate };
 
 struct IROp {
   InstOp opcode;
@@ -27,29 +25,30 @@ struct FuncParam {
   std::uint32_t frameOffset;
 };
 
-struct FuncPrelude {
-  std::vector<FuncParam> params;
-  std::uint32_t localVarCount;
-  std::vector<Operand> calleeRegs;
-};
-
 struct CallFunc {
   std::vector<FuncParam> args;
   std::string_view name;
   Operand dest;
 };
 
-struct FuncPostlude {
+using IRInst = std::variant<IROp, CallFunc>;
+
+using IRListing = std::vector<IRInst>;
+
+struct FunctionIR {
+  std::unordered_map<std::string_view, FuncParam> params;
+  std::uint32_t localVarCount;
   std::vector<Operand> calleeRegs;
+  IRListing insts;
 };
 
-using IRInst = std::variant<IROp, FuncPrelude, CallFunc, FuncPostlude>;
-
 struct IR {
-  std::vector<IRInst> insts;
+  std::vector<FunctionIR> functions;
+  IRListing globalInits;
 };
 
 struct RegAllocIR {
-  std::vector<IRInst> insts;
+  std::vector<FunctionIR> functions;
+  IRListing globalInits;
 };
-}
+} // namespace Fanta
