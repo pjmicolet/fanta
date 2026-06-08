@@ -40,6 +40,7 @@ struct FunctionIR {
   std::uint32_t localVarCount;
   std::vector<Operand> calleeRegs;
   IRListing insts;
+  std::string_view name;
 };
 
 struct IR {

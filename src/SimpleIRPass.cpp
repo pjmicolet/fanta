@@ -32,13 +32,14 @@ auto SimpleIRPass::emitGlobalVariableIR(const Parser &p,
 auto SimpleIRPass::emitFunctionDef(const Parser &p,
                                    const AST::FunctionDef &fdef, IR &irDef,
                                    const GlobalTable &gt) -> void {
-  const auto &bodyNode =
+  const auto bodyNode =
       std::get<AST::FunctionBody>(p.getNodeAtIndex(fdef.body).t);
 
   LocalTable lt{};
   FunctionIR func{};
   auto &ir = func.insts;
 
+  func.name = fdef.name;
   emitFunctionPrelude(p, fdef, func, lt);
   for (const auto &idx : bodyNode.expressions) {
     std::visit(overloaded{[&](const AST::BinaryOperator &bOp) {
@@ -50,6 +51,7 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
                           [&](const auto &other) {}},
                p.getNodeAtIndex(idx).t);
   }
+  irDef.functions.push_back(func);
 }
 
 auto getOpcodeFromString(Lexer::TokenType t, bool isReg) -> uint32_t {
@@ -167,9 +169,10 @@ auto SimpleIRPass::emitFunctionPrelude(const Parser &p,
                                        FunctionIR &ir, LocalTable &lt) -> void {
   uint32_t offset = 8; // RET + PREVIOUS SP
   for (const auto &paramId : funcDef.params) {
-    const auto &param =
+    const auto param =
         std::get<AST::FunctionParamDef>(p.getNodeAtIndex(paramId).t);
-    ir.params[param.name] = {param.name, lt.allocateAnonymous(), offset};
+    ir.params[param.name] = {param.name,
+                             lt.allocateNamed(param.name, param.type), offset};
     offset += calculateOffset(param.type);
   }
 }
