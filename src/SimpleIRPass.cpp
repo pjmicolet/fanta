@@ -1,5 +1,6 @@
 #include "SimpleIRPass.hpp"
 #include "ast.hpp"
+#include "ir.hpp"
 #include <variant>
 
 namespace Fanta {
@@ -51,6 +52,19 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
   }
 }
 
+auto getOpcodeFromString(Lexer::TokenType t, bool isReg) -> uint32_t {
+  switch (t) {
+  case Lexer::TokenType::Plus:
+    return isReg ? 0x1 : 0x2;
+  case Lexer::TokenType::Equal:
+    return isReg ? 0x3 : 0x4;
+  case Lexer::TokenType::Minus:
+    return isReg ? 0x5 : 0x6;
+  default:
+    return 0;
+  }
+}
+
 auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
                                   IRListing &ir, const GlobalTable &gt,
                                   LocalTable &lt, TempReg dest) -> void {
@@ -60,6 +74,7 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
                    if (lt.namedVars.contains(ident.name)) {
                      IROp moveOp{};
                      moveOp.destination = dest;
+                     moveOp.opcode = 0x3;
                      moveOp.source2 = lt.namedVars[ident.name].tr;
                      moveOp.s2type = Source2Type::Immediate;
                      ir.push_back(moveOp);
@@ -70,6 +85,7 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
                  [&](const AST::IntLiteral &intLiteral) {
                    IROp moveOp{};
                    moveOp.destination = dest;
+                   moveOp.opcode = 0x4;
                    moveOp.source2 = intLiteral.literal;
                    moveOp.s2type = Source2Type::Immediate;
                    ir.push_back(moveOp);
@@ -81,13 +97,27 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
 
                    if (std::holds_alternative<AST::IntLiteral>(
                            p.getNodeAtIndex(binaryOp.rhsOp).t)) {
+                     IROp op{};
+                     op.opcode = getOpcodeFromString(binaryOp.type, false);
+                     op.source1 = lhsReg;
+                     op.source2 = std::get<AST::IntLiteral>(
+                                      p.getNodeAtIndex(binaryOp.rhsOp).t)
+                                      .literal;
+                     op.destination = dest;
+                     op.s2type = Immediate;
+                     ir.push_back(op);
                    } else {
                      auto rhsReg = lt.allocateAnonymous();
                      emitExpression(p, p.getNodeAtIndex(binaryOp.rhsOp), ir, gt,
                                     lt, rhsReg);
 
                      IROp op{};
-                     op.opcode = 0x1;
+                     op.opcode = getOpcodeFromString(binaryOp.type, true);
+                     op.source1 = lhsReg;
+                     op.source2 = rhsReg;
+                     op.destination = dest;
+                     op.s2type = Register;
+                     ir.push_back(op);
                    }
                  },
                  [&](const auto &other) {},
