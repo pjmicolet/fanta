@@ -20,7 +20,7 @@ auto Codegen::extractGlobalNames(const Parser &p) -> void {
                             GlobalFuncInfo gni{
                                 0, d.retType, ridx, d.params.size(), {}};
                             for (const auto &pType : d.params) {
-                              const auto &var =
+                              const auto var =
                                   std::get<Fanta::AST::FunctionParamDef>(
                                       p.getNodeAtIndex(pType).t);
                               gni.paramTypes.push_back(var.type);
