@@ -23,6 +23,9 @@ private:
       -> TempReg;
   auto emitFunctionPrelude(const Parser &p, const AST::FunctionDef &decl,
                            FunctionIR &ir, LocalTable &lt) -> void;
+  auto emitExpression(const Parser &p, const AST::AstNode &node, IRListing &ir,
+                      const GlobalTable &gt, LocalTable &lt, TempReg tr)
+      -> void;
 };
 
 } // namespace Fanta

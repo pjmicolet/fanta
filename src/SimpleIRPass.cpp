@@ -51,6 +51,50 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
   }
 }
 
+auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
+                                  IRListing &ir, const GlobalTable &gt,
+                                  LocalTable &lt, TempReg dest) -> void {
+  std::visit(overloaded{
+                 [&](const AST::Identifier &ident) {
+                   // We look at the local table first (scoping)
+                   if (lt.namedVars.contains(ident.name)) {
+                     IROp moveOp{};
+                     moveOp.destination = dest;
+                     moveOp.source2 = lt.namedVars[ident.name].tr;
+                     moveOp.s2type = Source2Type::Immediate;
+                     ir.push_back(moveOp);
+                   } else if (gt.contains(ident.name)) {
+                     emitGlobalNameBase(ir, gt, lt);
+                   }
+                 },
+                 [&](const AST::IntLiteral &intLiteral) {
+                   IROp moveOp{};
+                   moveOp.destination = dest;
+                   moveOp.source2 = intLiteral.literal;
+                   moveOp.s2type = Source2Type::Immediate;
+                   ir.push_back(moveOp);
+                 },
+                 [&](const AST::BinaryOperator &binaryOp) {
+                   auto lhsReg = lt.allocateAnonymous();
+                   emitExpression(p, p.getNodeAtIndex(binaryOp.lhsOp), ir, gt,
+                                  lt, lhsReg);
+
+                   if (std::holds_alternative<AST::IntLiteral>(
+                           p.getNodeAtIndex(binaryOp.rhsOp).t)) {
+                   } else {
+                     auto rhsReg = lt.allocateAnonymous();
+                     emitExpression(p, p.getNodeAtIndex(binaryOp.rhsOp), ir, gt,
+                                    lt, rhsReg);
+
+                     IROp op{};
+                     op.opcode = 0x1;
+                   }
+                 },
+                 [&](const auto &other) {},
+             },
+             node.t);
+}
+
 auto SimpleIRPass::emitVariableIR(const Parser &p,
                                   const AST::VariableDecl &vdec, IRListing &ir,
                                   const GlobalTable &gt, LocalTable &lt)
@@ -59,13 +103,7 @@ auto SimpleIRPass::emitVariableIR(const Parser &p,
   auto varTReg = lt.allocateNamed(vdec.name, vdec.type);
 
   const auto &defineNode = p.getNodeAtIndex(vdec.defineNode);
-
-  std::visit(overloaded{
-                 [&](const AST::Identifier &ident) {},
-                 [&](const AST::IntLiteral &intLiteral) {},
-                 [&](const auto &other) {},
-             },
-             defineNode.t);
+  emitExpression(p, defineNode, ir, gt, lt, varTReg);
 }
 
 auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &gt,
@@ -83,7 +121,6 @@ auto SimpleIRPass::emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,
                                   LocalTable &lt) -> void {}
 
 auto calculateOffset(const std::string_view &type) -> std::uint32_t {
-
   if (type == "int")
     return 4;
   if (type == "long")
