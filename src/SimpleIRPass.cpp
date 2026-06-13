@@ -70,61 +70,64 @@ auto getOpcodeFromString(Lexer::TokenType t, bool isReg) -> uint32_t {
 auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
                                   IRListing &ir, const GlobalTable &gt,
                                   LocalTable &lt, TempReg dest) -> void {
-  std::visit(overloaded{
-                 [&](const AST::Identifier &ident) {
-                   // We look at the local table first (scoping)
-                   if (lt.namedVars.contains(ident.name)) {
-                     IROp moveOp{};
-                     moveOp.destination = dest;
-                     moveOp.opcode = 0x3;
-                     moveOp.source2 = lt.namedVars[ident.name].tr;
-                     moveOp.s2type = Source2Type::Immediate;
-                     ir.push_back(moveOp);
-                   } else if (gt.contains(ident.name)) {
-                     emitGlobalNameBase(ir, gt, lt);
-                   }
-                 },
-                 [&](const AST::IntLiteral &intLiteral) {
-                   IROp moveOp{};
-                   moveOp.destination = dest;
-                   moveOp.opcode = 0x4;
-                   moveOp.source2 = intLiteral.literal;
-                   moveOp.s2type = Source2Type::Immediate;
-                   ir.push_back(moveOp);
-                 },
-                 [&](const AST::BinaryOperator &binaryOp) {
-                   auto lhsReg = lt.allocateAnonymous();
-                   emitExpression(p, p.getNodeAtIndex(binaryOp.lhsOp), ir, gt,
-                                  lt, lhsReg);
+  std::visit(
+      overloaded{
+          [&](const AST::Identifier &ident) {
+            // We look at the local table first (scoping)
+            if (lt.namedVars.contains(ident.name)) {
+              IROp moveOp{};
+              moveOp.destination = {dest, true};
+              moveOp.opcode = 0x3;
+              moveOp.source2 = {lt.namedVars[ident.name].tr, true};
+              moveOp.s2type = Source2Type::Immediate;
+              ir.push_back(moveOp);
+            } else if (gt.contains(ident.name)) {
+              emitGlobalNameBase(ir, gt, lt);
+            }
+          },
+          [&](const AST::IntLiteral &intLiteral) {
+            IROp moveOp{};
+            moveOp.destination = {dest, true};
+            moveOp.opcode = 0x4;
+            moveOp.source2 = {static_cast<uint32_t>(intLiteral.literal), false};
+            moveOp.s2type = Source2Type::Immediate;
+            ir.push_back(moveOp);
+          },
+          [&](const AST::BinaryOperator &binaryOp) {
+            auto lhsReg = lt.allocateAnonymous();
+            emitExpression(p, p.getNodeAtIndex(binaryOp.lhsOp), ir, gt, lt,
+                           lhsReg);
 
-                   if (std::holds_alternative<AST::IntLiteral>(
-                           p.getNodeAtIndex(binaryOp.rhsOp).t)) {
-                     IROp op{};
-                     op.opcode = getOpcodeFromString(binaryOp.type, false);
-                     op.source1 = lhsReg;
-                     op.source2 = std::get<AST::IntLiteral>(
-                                      p.getNodeAtIndex(binaryOp.rhsOp).t)
-                                      .literal;
-                     op.destination = dest;
-                     op.s2type = Immediate;
-                     ir.push_back(op);
-                   } else {
-                     auto rhsReg = lt.allocateAnonymous();
-                     emitExpression(p, p.getNodeAtIndex(binaryOp.rhsOp), ir, gt,
-                                    lt, rhsReg);
+            if (std::holds_alternative<AST::IntLiteral>(
+                    p.getNodeAtIndex(binaryOp.rhsOp).t)) {
+              IROp op{};
+              op.opcode = getOpcodeFromString(binaryOp.type, false);
+              op.source1 = {lhsReg, true};
+              op.source2 = {
+                  static_cast<uint32_t>(std::get<AST::IntLiteral>(
+                                            p.getNodeAtIndex(binaryOp.rhsOp).t)
+                                            .literal),
+                  false};
+              op.destination = {dest, true};
+              op.s2type = Immediate;
+              ir.push_back(op);
+            } else {
+              auto rhsReg = lt.allocateAnonymous();
+              emitExpression(p, p.getNodeAtIndex(binaryOp.rhsOp), ir, gt, lt,
+                             rhsReg);
 
-                     IROp op{};
-                     op.opcode = getOpcodeFromString(binaryOp.type, true);
-                     op.source1 = lhsReg;
-                     op.source2 = rhsReg;
-                     op.destination = dest;
-                     op.s2type = Register;
-                     ir.push_back(op);
-                   }
-                 },
-                 [&](const auto &other) {},
-             },
-             node.t);
+              IROp op{};
+              op.opcode = getOpcodeFromString(binaryOp.type, true);
+              op.source1 = {lhsReg, true};
+              op.source2 = {rhsReg, true};
+              op.destination = {dest, true};
+              op.s2type = Register;
+              ir.push_back(op);
+            }
+          },
+          [&](const auto &other) {},
+      },
+      node.t);
 }
 
 auto SimpleIRPass::emitVariableIR(const Parser &p,
@@ -142,11 +145,11 @@ auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &gt,
                                       LocalTable &lt) -> TempReg {
   IROp moveOp{};
   moveOp.opcode = 0x4; // MovImm;
-  moveOp.destination = lt.allocateAnonymous();
-  moveOp.source1 = 0; // TODO do gt base
+  moveOp.destination = {lt.allocateAnonymous(), true};
+  moveOp.source1 = {0, true}; // TODO do gt base
   moveOp.s2type = Source2Type::Immediate;
   ir.push_back(moveOp);
-  return moveOp.destination;
+  return moveOp.destination.val;
 }
 
 auto SimpleIRPass::emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,
@@ -171,9 +174,18 @@ auto SimpleIRPass::emitFunctionPrelude(const Parser &p,
   for (const auto &paramId : funcDef.params) {
     const auto param =
         std::get<AST::FunctionParamDef>(p.getNodeAtIndex(paramId).t);
-    ir.params[param.name] = {param.name,
-                             lt.allocateNamed(param.name, param.type), offset};
+    auto vReg = lt.allocateNamed(param.name, param.type);
+    ir.params[param.name] = {param.name, {vReg, true}, offset};
+    IROp load{};
+    load.opcode = 0x9; // LOAD
+    load.destination = {vReg, true};
+    load.source1 = {15, false}; // R15
+    load.source2 = {offset, false};
+    load.s2type = Immediate;
+    ir.insts.push_back(load);
     offset += calculateOffset(param.type);
   }
+
+  // LOAD
 }
 } // namespace Fanta

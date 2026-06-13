@@ -7,7 +7,11 @@
 
 namespace Fanta {
 using InstOp = std::uint16_t; // Opcode
-using Operand = std::uint16_t;
+
+struct Operand {
+  uint32_t val;
+  bool isVirtual;
+};
 
 enum Source2Type { Register, Immediate };
 
@@ -52,4 +56,7 @@ struct RegAllocIR {
   std::vector<FunctionIR> functions;
   IRListing globalInits;
 };
+
+auto printIR(const IR &irlisting) -> void;
+
 } // namespace Fanta
