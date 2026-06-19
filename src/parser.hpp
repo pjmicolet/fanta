@@ -21,7 +21,9 @@ struct Parser {
   auto walk() -> void {
     if(currentToken.t == Lexer::TokenType::Eof) return;
     if(accept(Lexer::TokenType::KeywordLet)) {
-      roots.push_back(walkLet());
+      auto idx = walkLet();
+      expect(Lexer::TokenType::SemiColon);
+      roots.push_back(idx);
     }
     else if(accept(Lexer::TokenType::KeywordFn)) {
       walkFn();

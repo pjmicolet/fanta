@@ -1,0 +1,127 @@
+#pragma once
+
+#include <cctype>
+#include <string>
+#include <charconv>
+#include <instructions.hpp>
+#include <ranges>
+#include <vector>
+
+struct Assembler {
+  static constexpr std::string _LITERAL = "#";
+
+  auto assemble(std::string_view inst) -> std::uint32_t {
+    auto tokens = split_inst(inst);
+    auto& mtdc = Instructions::Registry::fetch(std::string{tokens[0]});
+    switch(mtdc.fmt) {
+      break; case Instructions::THREE_OP: return parse_three(inst.substr(i), mtdc);
+      break; case Instructions::TWO_OP: return parse_two(inst.substr(i), mtdc);
+      break; case Instructions::MEM: return parse_mem(inst.substr(i), mtdc);
+      break; case Instructions::JUMP: return parse_one(inst.substr(i), mtdc);
+      break; case Instructions::BRANCH: return parse_one(tokens, mtdc);
+      break; case Instructions::HALT: return 0;
+    }
+    return -1;
+  }
+
+private:
+
+  auto split_inst(std::string_view text) -> std::vector<std::string_view> {
+    std::string copy{text};
+    for(auto& c : copy) {
+      if( c == '(' || c == ')' || c == ',') c = ' ';
+      else if( ::isalpha(c)) c = ::toupper(c);
+    }
+
+    auto tokens = copy | std::views::split(' ') | 
+      std::views::transform([](auto t) { return std::string_view{t}; }) | 
+      std::views::filter([](auto t) { return !t.empty(); }) |
+      std::ranges::to<std::vector>();
+    return tokens;
+  }
+
+  auto extract_val(std::string_view number) -> int {
+    auto base = 16;
+    bool isNeg = false;
+    if(number[0] == '-') {
+      isNeg = true;
+      number.remove_prefix(0);
+    }
+
+    int realNum = 0;
+    auto [ptr, ec] = std::from_chars(number.data(), number.data() + number.size(), realNum, 16);
+    return isNeg ? -realNum : realNum;
+  }
+
+  auto parse_one(std::vector<std::string_view>& tokens, Instructions::InstMetadata& mtd) -> uint32_t {
+    auto& cleanR1 = tokens[1];
+    int r1_int = extract_val(cleanR1);
+    return Instructions::parse_one(mtd.reg, r1_int);
+  }
+
+
+  auto parse_one(std::string_view rest, Instructions::InstMetadata& mtd) -> uint32_t {
+    std::string cleanR1{rest.substr(rest.find_first_not_of(" "))};
+    bool isNeg = cleanR1[0] == '-';
+    int r1_int = isNeg ? std::stoi("-0x"+cleanR1.substr(1), nullptr, 16) : std::stoi("0x"+cleanR1, nullptr, 16);
+    return Instructions::parse_one(mtd.reg, r1_int);
+  }
+
+  auto parse_two(std::string_view rest, Instructions::InstMetadata& mtd) -> uint32_t {
+    auto firstComma = rest.find(',');
+    auto secondComma = rest.find(',',firstComma+1);
+
+    auto r1 = rest.substr(0, firstComma);
+    auto r2 = rest.substr(firstComma+1, secondComma-firstComma-1);
+
+    std::string cleanR1{r1.substr(r1.find_first_not_of(" "))};
+    std::string cleanR2{r2.substr(r2.find_first_not_of(" "))};
+
+    bool isImm = cleanR2[0] != 'R';
+    int r1_int = std::stoi(cleanR1.substr(1));
+    int r2_int = isImm ? std::stoi("0x"+cleanR2.substr(1), nullptr, 16) : std::stoi(cleanR2.substr(1));
+    return Instructions::parse_two(isImm ? mtd.imm : mtd.reg, r1_int, r2_int, isImm);
+  }
+
+  auto parse_three(std::string_view rest, Instructions::InstMetadata& mtd) -> uint32_t {
+    auto firstComma = rest.find(',');
+    auto secondComma = rest.find(',',firstComma+1);
+
+    auto r1 = rest.substr(0, firstComma);
+    auto r2 = rest.substr(firstComma+1, secondComma-firstComma-1);
+    auto r3 = rest.substr(secondComma+1);
+
+    std::string cleanR1{r1.substr(r1.find_first_not_of(" "))};
+    std::string cleanR2{r2.substr(r2.find_first_not_of(" "))};
+    std::string cleanR3{r3.substr(r3.find_first_not_of(" "))};
+
+    bool isImm = cleanR3[0] != 'R';
+
+
+    int r1_int = std::stoi(cleanR1.substr(1));
+    int r2_int = std::stoi(cleanR2.substr(1));
+    int r3_int = isImm ? std::stoi("0x"+cleanR3.substr(1), nullptr, 16) : std::stoi(cleanR3.substr(1));
+    return Instructions::parse_three(isImm ? mtd.imm : mtd.reg, r1_int, r2_int, r3_int, isImm);
+  }
+
+  //LOAD R1, 10(R2)
+  //STORE R3, 10(R2)
+  auto parse_mem(std::string_view rest, Instructions::InstMetadata& mtd) -> uint32_t {
+    auto firstComma = rest.find(',');
+    auto immEnd = rest.find('(');
+    auto endOf = rest.find(')');
+
+    auto r1 = rest.substr(0, firstComma);
+    auto r2 = rest.substr(firstComma+1, immEnd-firstComma-1);
+    auto r3 = rest.substr(immEnd+1, endOf-(immEnd+1));
+
+    std::string cleanR1{r1.substr(r1.find_first_not_of(" "))};
+    std::string cleanR2{r2.substr(r2.find_first_not_of(" "))};
+    std::string cleanR3{r3.substr(r3.find_first_not_of(" "))};
+    int r1_int = std::stoi(cleanR1.substr(1));
+    int r2_int = std::stoi("0x"+cleanR2, nullptr, 16);
+    int r3_int = std::stoi(cleanR3.substr(1));
+
+    return Instructions::parse_three(mtd.reg, r1_int, r3_int, r2_int, true);
+  }
+};
