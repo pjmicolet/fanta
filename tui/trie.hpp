@@ -1,53 +1,55 @@
+#pragma once
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <cctype>
 
 class TrieNode {
 public:
-    std::unordered_map<char, std::shared_ptr<TrieNode>> children;
-    bool is_end = false;
-    std::string full_word;
+    std::unordered_map<char, std::unique_ptr<TrieNode>> children;
+    bool isEnd = false;
+    std::string fullWord;
 };
 
 class Trie {
 public:
-    Trie() : root(std::make_shared<TrieNode>()) {}
+    Trie() : root(std::make_unique<TrieNode>()) {}
 
     void insert(const std::string& word) {
-        auto curr = root;
+        TrieNode* curr = root.get();
         for (char c : word) {
             if (curr->children.find(c) == curr->children.end()) {
-                curr->children[c] = std::make_shared<TrieNode>();
+                curr->children[c] = std::make_unique<TrieNode>();
             }
-            curr = curr->children[c];
+            curr = curr->children[c].get();
         }
-        curr->is_end = true;
-        curr->full_word = word;
+        curr->isEnd = true;
+        curr->fullWord = word;
     }
 
-    std::string get_suggestion(const std::string& prefix) {
+    std::string getSuggestion(const std::string& prefix) {
         if (prefix.empty()) return "";
-        auto curr = root;
+        TrieNode* curr = root.get();
         for (char c : prefix) {
-            char upper_c = std::toupper(c);
-            if (curr->children.find(upper_c) == curr->children.end()) {
+            char upperC = std::toupper(c);
+            if (curr->children.find(upperC) == curr->children.end()) {
                 return "";
             }
-            curr = curr->children[upper_c];
+            curr = curr->children[upperC].get();
         }
         
         // Find the first complete word from this prefix
-        return find_first_word(curr);
+        return findFirstWord(curr);
     }
 
 private:
-    std::shared_ptr<TrieNode> root;
+    std::unique_ptr<TrieNode> root;
 
-    std::string find_first_word(std::shared_ptr<TrieNode> node) {
-        if (node->is_end) return node->full_word;
+    std::string findFirstWord(TrieNode* node) {
+        if (node->isEnd) return node->fullWord;
         for (auto const& [c, child] : node->children) {
-            std::string res = find_first_word(child);
+            std::string res = findFirstWord(child.get());
             if (!res.empty()) return res;
         }
         return "";

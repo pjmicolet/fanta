@@ -296,7 +296,7 @@ void TUI::draw_editor() {
             attroff(COLOR_PAIR(2));
             
             if (mode == Mode::INSERT && !line.empty() && line.find(' ') == std::string::npos) {
-                std::string suggestion = trie.get_suggestion(line);
+                std::string suggestion = trie.getSuggestion(line);
                 if (!suggestion.empty() && suggestion.size() > line.size()) {
                     attron(A_DIM);
                     mvprintw(win_y + i, 6 + line.size(), "%s", suggestion.substr(line.size()).c_str());
@@ -485,16 +485,18 @@ void TUI::handle_normal_mode(int ch) {
                 cpu.store(i, 0);
             }
             // Re-assemble current buffer back into the clean memory
-            for (size_t i = 0; i < editor_buffer.size(); ++i) {
-                // Trim trailing spaces
-                editor_buffer[i].erase(editor_buffer[i].find_last_not_of(" \n\r\t") + 1, std::string::npos);
-                uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
-                if (instr != (uint32_t)-1) {
-                    cpu.store(i * 4, instr);
-                } else {
-                    cpu.store(i * 4, 0x14 << 26); // Official NOP
+            try {
+                for (size_t i = 0; i < editor_buffer.size(); ++i) {
+                    // Trim trailing spaces
+                    editor_buffer[i].erase(editor_buffer[i].find_last_not_of(" \n\r\t") + 1, std::string::npos);
+                    uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
+                    if (instr != (uint32_t)-1) {
+                        cpu.store(i * 4, instr);
+                    } else {
+                        cpu.store(i * 4, 0x14 << 26); // Official NOP
+                    }
                 }
-            }
+            } catch (...) {}
             break;
         case 'i': mode = Mode::INSERT; curs_set(1); is_running_continuously = false; break;
         case 's': 
@@ -559,7 +561,7 @@ void TUI::handle_insert_mode(int ch) {
         case '\t': { // TAB completion
             std::string line = editor_buffer[cursor_y];
             if (line.find(' ') == std::string::npos && !line.empty()) {
-                std::string suggestion = trie.get_suggestion(line);
+                std::string suggestion = trie.getSuggestion(line);
                 if (!suggestion.empty()) {
                     editor_buffer[cursor_y] = suggestion + " ";
                     cursor_x = editor_buffer[cursor_y].size();
