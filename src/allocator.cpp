@@ -33,6 +33,15 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
                      }
                      fir.insts.push_back(assignedOp);
                    },
+                   [&](const LocalGlobalBase &lgb) {
+                     LocalGlobalBase assignedLgb = lgb;
+                     if (assignedLgb.dest.isVirtual) {
+                       assignedLgb.dest.val = getNextAvailable(
+                           fir, assignedLgb.dest.val, StoreAndLoad);
+                       assignedLgb.dest.isVirtual = false;
+                     }
+                     fir.insts.push_back(assignedLgb);
+                   },
                    [](const auto &other) {}},
         ir);
   }

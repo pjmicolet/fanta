@@ -145,7 +145,6 @@ auto printIR(const IR &irlisting) -> void {
   for (const auto &func : irlisting.functions) {
     std::println("{}:", func.name);
     for (const auto &ir : func.insts) {
-
       std::visit(
           overloaded{
               [&](const IROp &irop) {
@@ -171,7 +170,9 @@ auto printIR(const IR &irlisting) -> void {
                 }
                 }
               },
-              [&](const CallFunc &cfunc) {}},
+              [&](const CallFunc &cfunc) {},
+              [&](const LocalGlobalBase &base) {},
+          },
           ir);
     }
   }

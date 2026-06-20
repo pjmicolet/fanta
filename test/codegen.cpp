@@ -3,7 +3,7 @@
 
 TEST_CASE("Global Namespace") {
   std::string code = "let a : int = 123;"
-                     "fn run(b:int, c:float) -> int {"
+                     "fn main(b:int, c:float) -> int {"
                      "let d : int = b + c;"
                      "}";
 
@@ -16,12 +16,13 @@ TEST_CASE("Global Namespace") {
 
   REQUIRE_SAME(cg.globalNameSpace.size(), 2);
 
-  REQUIRE_TRUE(
-      std::holds_alternative<Fanta::GlobalFuncInfo>(cg.globalNameSpace["run"]));
+  REQUIRE_TRUE(std::holds_alternative<Fanta::GlobalFuncInfo>(
+      cg.globalNameSpace["main"]));
   REQUIRE_TRUE(
       std::holds_alternative<Fanta::GlobalVarInfo>(cg.globalNameSpace["a"]));
 
-  const auto &func = std::get<Fanta::GlobalFuncInfo>(cg.globalNameSpace["run"]);
+  const auto &func =
+      std::get<Fanta::GlobalFuncInfo>(cg.globalNameSpace["main"]);
 
   REQUIRE_SAME(func.paramTypes.size(), 2);
   REQUIRE_SAME(func.paramTypes[0], "int");
@@ -34,7 +35,7 @@ TEST_CASE("Global Namespace") {
 #include <instruction_emit.hpp>
 
 TEST_CASE("Instruction Emitter & Execution Test") {
-  std::string code = "fn run(b: int, c: int) -> int {"
+  std::string code = "fn main(b: int, c: int) -> int {"
                      "let d : int = b + c;"
                      "}";
 
@@ -70,15 +71,11 @@ TEST_CASE("Instruction Emitter & Execution Test") {
   sp -= 4;
   cpu.store(sp, 10);
 
-  // Store dummy return address (0xFFFF) at 0x7FFFF7
-  sp -= 4;
-  cpu.store(sp, 0xFFFF);
-
-  // Set SP to 0x7FFFF3 (the next free slot where R15 will be pushed)
+  // Set SP to 0x7FFFF7 (the next free slot where R15 will be pushed)
   cpu.registers[16] = sp - 4;
 
-  // Run the CPU for 14 cycles (covering the prelude and function body)
-  for (int i = 0; i < 14; i++) {
+  // Run the CPU for 17 cycles to stop right before epilogue pops registers
+  for (int i = 0; i < 17; i++) {
     cpu.run_cycle();
   }
 
@@ -87,4 +84,3 @@ TEST_CASE("Instruction Emitter & Execution Test") {
   // computed into R4. So R4 should contain 30 before epilogue pops.
   REQUIRE_SAME(30, cpu.registers[4]);
 }
-

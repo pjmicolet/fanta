@@ -22,6 +22,7 @@ private:
   std::unordered_map<funcName, std::vector<std::pair<index, globalName>>>
       missingLinks;
   std::unordered_map<funcName, uint32_t> resolvedAddresses;
+  std::vector<index> globalBaseMovs;
 };
 
 } // namespace Fanta

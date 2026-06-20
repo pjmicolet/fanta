@@ -11,7 +11,7 @@ struct SimpleIRPass {
 
 private:
   auto emitGlobalVariableIR(const Parser &p, const AST::VariableDecl &decl,
-                            IR &ir) -> void;
+                            FunctionIR &ir, GlobalTable &gt) -> void;
   auto emitVariableIR(const Parser &p, const AST::VariableDecl &decl,
                       IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> void;
@@ -26,6 +26,7 @@ private:
   auto emitExpression(const Parser &p, const AST::AstNode &node, IRListing &ir,
                       const GlobalTable &gt, LocalTable &lt, TempReg tr)
       -> void;
+  uint32_t globalOffsets = 0;
 };
 
 } // namespace Fanta

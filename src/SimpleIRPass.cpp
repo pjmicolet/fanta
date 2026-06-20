@@ -1,5 +1,6 @@
 #include "SimpleIRPass.hpp"
 #include "ast.hpp"
+#include "cpu_info.hpp"
 #include "ir.hpp"
 #include <variant>
 
@@ -13,21 +14,50 @@ template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 auto SimpleIRPass::outputIR(Parser &p, GlobalTable &gt) -> IR {
   IR ir{};
 
-  const auto &cr = p.getCurrentRoot();
-  std::visit(overloaded{[&](const AST::VariableDecl &vdec) {
-                          emitGlobalVariableIR(p, vdec, ir);
-                        },
-                        [&](const AST::FunctionDef &fdef) {
-                          emitFunctionDef(p, fdef, ir, gt);
-                        },
-                        [&](const auto &other) {}},
-             cr.t);
+  FunctionIR initFunc{};
+  initFunc.name = "__init";
+  for (const auto &idx : p.getRootIndices()) {
+    const auto &cr = p.getNodeAtIndex(idx);
+    std::visit(overloaded{[&](const AST::VariableDecl &vdec) {
+                            emitGlobalVariableIR(p, vdec, initFunc, gt);
+                          },
+                          [&](const AST::FunctionDef &fdef) {
+                            emitFunctionDef(p, fdef, ir, gt);
+                          },
+                          [&](const auto &other) {}},
+               cr.t);
+  }
+  ir.functions.insert(ir.functions.begin(), initFunc);
   return ir;
 }
 
 auto SimpleIRPass::emitGlobalVariableIR(const Parser &p,
-                                        const AST::VariableDecl &decl, IR &ir)
-    -> void {}
+                                        const AST::VariableDecl &decl,
+                                        FunctionIR &ir, GlobalTable &gt)
+    -> void {
+  auto &varName = decl.name;
+  GlobalVarInfo info{};
+  LocalTable lt{};
+  auto dest = lt.allocateAnonymous();
+  if (gt.contains(varName)) {
+    info = std::get<GlobalVarInfo>(gt[varName]);
+  } else {
+    info.rt = decl.type;
+    info.offsetFromBase = globalOffsets;
+    globalOffsets += 4;
+    gt[varName] = info;
+  }
+
+  emitExpression(p, p.getNodeAtIndex(decl.defineNode), ir.insts, gt, lt, dest);
+
+  auto baseReg = emitGlobalNameBase(ir.insts, gt, lt);
+  IROp store{};
+  store.opcode = Info::Instructions::STORE;
+  store.destination = {dest, true};
+  store.source1 = {baseReg, false};
+  store.source2 = {info.offsetFromBase, false};
+  ir.insts.push_back(store);
+}
 
 auto SimpleIRPass::emitFunctionDef(const Parser &p,
                                    const AST::FunctionDef &fdef, IR &irDef,
@@ -82,7 +112,16 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
               moveOp.s2type = Source2Type::Immediate;
               ir.push_back(moveOp);
             } else if (gt.contains(ident.name)) {
-              emitGlobalNameBase(ir, gt, lt);
+              auto baseReg = emitGlobalNameBase(ir, gt, lt);
+              IROp loadGlobal{};
+              loadGlobal.opcode = Info::Instructions::LOAD;
+              loadGlobal.destination = {dest, true};
+              loadGlobal.source1 = {baseReg, true};
+              loadGlobal.source2 = {
+                  std::get<GlobalVarInfo>(gt.at(ident.name)).offsetFromBase,
+                  false};
+              loadGlobal.s2type = Source2Type::Immediate;
+              ir.push_back(loadGlobal);
             }
           },
           [&](const AST::IntLiteral &intLiteral) {
@@ -143,13 +182,10 @@ auto SimpleIRPass::emitVariableIR(const Parser &p,
 
 auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &gt,
                                       LocalTable &lt) -> TempReg {
-  IROp moveOp{};
-  moveOp.opcode = 0x4; // MovImm;
-  moveOp.destination = {lt.allocateAnonymous(), true};
-  moveOp.source1 = {0, true}; // TODO do gt base
-  moveOp.s2type = Source2Type::Immediate;
-  ir.push_back(moveOp);
-  return moveOp.destination.val;
+  LocalGlobalBase lgb{};
+  lgb.dest = {lt.allocateAnonymous(), true};
+  ir.push_back(lgb);
+  return lgb.dest.val;
 }
 
 auto SimpleIRPass::emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,

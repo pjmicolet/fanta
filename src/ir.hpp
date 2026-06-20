@@ -35,7 +35,11 @@ struct CallFunc {
   Operand dest;
 };
 
-using IRInst = std::variant<IROp, CallFunc>;
+struct LocalGlobalBase {
+  Operand dest;
+};
+
+using IRInst = std::variant<IROp, CallFunc, LocalGlobalBase>;
 
 using IRListing = std::vector<IRInst>;
 
