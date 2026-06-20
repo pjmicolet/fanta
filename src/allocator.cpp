@@ -45,7 +45,8 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
                               // pointer offset will be
 
   auto spillSize = fir.calleeRegs.size() * 4;
-  auto adjustment = offset + spillSize + 4;
+  auto adjustment =
+      offset + spillSize + 4; // Account for the R15 save later in the code
 
   for (auto i = 0; i < std::min(fir.calleeRegs.size(), fir.insts.size()); i++) {
     std::visit(overloaded{[&](IROp &op) {
