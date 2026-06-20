@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Create a static library for the core logic
-add_library(fanta_lib STATIC src/cpu.cpp src/codegen.cpp src/SimpleIRPass.cpp src/ir.cpp src/allocator.cpp)
+add_library(fanta_lib STATIC src/cpu.cpp src/codegen.cpp src/SimpleIRPass.cpp src/ir.cpp src/allocator.cpp src/instruction_emit.cpp)
 target_include_directories(fanta_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Create an interface library for the test framework
