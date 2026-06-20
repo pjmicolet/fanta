@@ -1,4 +1,5 @@
 #include "allocator.hpp"
+#include "cpu_info.hpp"
 #include "ir.hpp"
 
 template <class... Ts> struct overloaded : Ts... {
@@ -50,7 +51,8 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
 
   for (auto i = 0; i < std::min(fir.calleeRegs.size(), fir.insts.size()); i++) {
     std::visit(overloaded{[&](IROp &op) {
-                            if (op.opcode == 0x9 && op.source1.val == 15 &&
+                            if (op.opcode == Info::Instructions::LOAD &&
+                                op.source1.val == Info::Registers::FP &&
                                 op.s2type == Immediate) {
                               op.source2.val += adjustment;
                             }
@@ -114,7 +116,7 @@ auto Allocator::stashAndLoad(FunctionIR &func, uint32_t reg,
 auto Allocator::emitLoad(FunctionIR &func, uint32_t vreg, uint32_t preg)
     -> void {
   IROp load{};
-  load.opcode = 0x9;
+  load.opcode = Info::Instructions::LOAD;
   load.destination = {preg, false};
   load.source1 = {15, false};
   load.source2 = {virtToStackOffset[vreg], false};
@@ -125,7 +127,7 @@ auto Allocator::emitLoad(FunctionIR &func, uint32_t vreg, uint32_t preg)
 auto Allocator::emitStore(FunctionIR &func, uint32_t vreg, uint32_t preg)
     -> void {
   IROp store{};
-  store.opcode = 0x8;
+  store.opcode = Info::Instructions::STORE;
   store.destination = {preg, false};
   store.source1 = {15, false};
   store.source2 = {virtToStackOffset[vreg], false};
