@@ -41,6 +41,23 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
       fir.calleeRegs.push_back({i, false});
     }
   }
+  fir.localVarCount = offset; // reusing this varcount to know how big our frame
+                              // pointer offset will be
+
+  auto spillSize = fir.calleeRegs.size() * 4;
+  auto adjustment = offset + spillSize + 4;
+
+  for (auto i = 0; i < std::min(fir.calleeRegs.size(), fir.insts.size()); i++) {
+    std::visit(overloaded{[&](IROp &op) {
+                            if (op.opcode == 0x9 && op.source1.val == 15 &&
+                                op.s2type == Immediate) {
+                              op.source2.val += adjustment;
+                            }
+                          },
+                          [](const auto &other) {}},
+               fir.insts[i]);
+  }
+
   return fir;
 }
 

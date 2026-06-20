@@ -27,3 +27,64 @@ TEST_CASE("Global Namespace") {
   REQUIRE_SAME(func.paramTypes[0], "int");
   REQUIRE_SAME(func.paramTypes[1], "float");
 }
+
+#include <SimpleIRPass.hpp>
+#include <allocator.hpp>
+#include <cpu.hpp>
+#include <instruction_emit.hpp>
+
+TEST_CASE("Instruction Emitter & Execution Test") {
+  std::string code = "fn run(b: int, c: int) -> int {"
+                     "let d : int = b + c;"
+                     "}";
+
+  Parser p{code};
+  p.fullWalk();
+
+  Fanta::GlobalTable gt;
+  Fanta::SimpleIRPass pass;
+  auto virtualIR = pass.outputIR(p, gt);
+
+  Fanta::Allocator alloc{};
+  Fanta::RegAllocIR rir;
+  for (const auto &func : virtualIR.functions) {
+    rir.functions.push_back(alloc.assignFunc(func));
+  }
+
+  Fanta::InstructionEmitter emitter{};
+  auto insts = emitter.outputInstructions(rir, gt);
+
+  REQUIRE_TRUE(insts.size() > 0);
+
+  CPU cpu{};
+  for (size_t i = 0; i < insts.size(); i++) {
+    cpu.store(i * 4, insts[i]);
+  }
+
+  uint32_t sp = cpu.registers[16]; // 0x7FFFFF
+
+  // Store parameter 2 (c = 20) at 0x7FFFFF
+  cpu.store(sp, 20);
+
+  // Store parameter 1 (b = 10) at 0x7FFFFB
+  sp -= 4;
+  cpu.store(sp, 10);
+
+  // Store dummy return address (0xFFFF) at 0x7FFFF7
+  sp -= 4;
+  cpu.store(sp, 0xFFFF);
+
+  // Set SP to 0x7FFFF3 (the next free slot where R15 will be pushed)
+  cpu.registers[16] = sp - 4;
+
+  // Run the CPU for 14 cycles (covering the prelude and function body)
+  for (int i = 0; i < 14; i++) {
+    cpu.run_cycle();
+  }
+
+  // Under the physical register assignments for this function,
+  // b will be loaded into R0, c into R1, and d (the result of b + c) will be
+  // computed into R4. So R4 should contain 30 before epilogue pops.
+  REQUIRE_SAME(30, cpu.registers[4]);
+}
+
