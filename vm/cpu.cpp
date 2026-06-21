@@ -1,20 +1,25 @@
 #include "cpu.hpp"
 #include "instructions_impl.hpp"
 
-#define EXEC_INST(OpCode, Name)\
-  case OpCode: {\
-    Name::exec(*this, instr);\
-    break;\
-  }\
+static constexpr uint32_t CYCLES_PER_FRAME = 50000;
+uint32_t inst_count = 0;
 
-auto decodeOpt(uint32_t inst) {
-  return (inst >> 26) & 0x3F;
-}
+#define EXEC_INST(OpCode, Name)                                                \
+  case OpCode: {                                                               \
+    Name::exec(*this, instr);                                                  \
+    break;                                                                     \
+  }
+
+auto decodeOpt(uint32_t inst) { return (inst >> 26) & 0x3F; }
 
 auto CPU::run_cycle() -> void {
   auto instr = fetch();
   auto byte = decodeOpt(instr);
-  switch(byte) {
+  if (inst_count >= CYCLES_PER_FRAME) {
+    cip_interrupts[0] = 1;
+    inst_count = 0;
+  }
+  switch (byte) {
     EXEC_INST(0, Halt)
     EXEC_INST(0x1, AddReg)
     EXEC_INST(0x2, AddImm)
@@ -46,11 +51,13 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x1C, XorImm)
     EXEC_INST(0x1D, Push)
     EXEC_INST(0x1E, Pop)
+    EXEC_INST(0x1F, Cip)
   }
+  inst_count++;
 }
 
 auto CPU::run_until_halt() -> void {
-  while(!halted) {
+  while (!halted) {
     run_cycle();
   }
 }

@@ -11,11 +11,12 @@ struct InstructionEmitter {
 
 private:
   auto outputInstructionsForFunc(const FunctionIR &fir, GlobalTable &gt,
-                                 InstructionList &il)
-      -> void;
+                                 InstructionList &il) -> void;
   auto emitInst(const IROp &op, GlobalTable &gt, InstructionList &il) -> void;
 
   auto link(InstructionList &il) -> void;
+
+  auto dummy() -> void;
 
   auto reset() -> void;
 

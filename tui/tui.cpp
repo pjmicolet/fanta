@@ -706,6 +706,10 @@ std::string TUI::disassemble(uint32_t addr) {
             break;
         case Instructions::JUMP:
         case Instructions::BRANCH: {
+            if (name == "CIP") {
+                ss << "#" << (raw & 0x3FFFFFF);
+                break;
+            }
             int32_t offset = (int32_t)(raw & 0x3FFFFFF);
             // Sign extend 26-bit to 32-bit
             if (offset & 0x2000000) offset |= 0xFC000000;

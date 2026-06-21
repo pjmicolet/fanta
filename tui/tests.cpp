@@ -22,6 +22,13 @@ void test_disassembler() {
     res = tui.disassemble(4);
     std::cout << "ADD: " << res << std::endl;
     assert(res == "ADD R1, R2, R3");
+
+    // Test CIP #0 (Opcode 0x1F)
+    uint32_t cip_instr = (0x1F << 26) | 0;
+    cpu.ram.write32(8, cip_instr);
+    res = tui.disassemble(8);
+    std::cout << "CIP: " << res << std::endl;
+    assert(res == "CIP #0");
 }
 
 void test_bounds() {

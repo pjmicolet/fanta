@@ -42,6 +42,11 @@ namespace Registers {
 constexpr static uint32_t FP = 15;
 constexpr static uint32_t SP = 16;
 } // namespace Registers
-} // namespace Info
+//
 
+namespace Cpu {
+constexpr static uint32_t INTERRUPT_BASE = 0x100;
+};
+
+} // namespace Info
 } // namespace Fanta
