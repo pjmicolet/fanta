@@ -67,4 +67,7 @@ TEST_CASE("Label corner cases") {
   std::string code = "    START     :\nADD R1, R1, #1";
   assem.scan_for_labels(code);
   REQUIRE_SAME("START", assem.get_label_for(0));
+  std::string code2 = "    STARTWITHCODE     :ADD R1, R1, #1";
+  assem.scan_for_labels(code2);
+  REQUIRE_SAME("STARTWITHCODE", assem.get_label_for(0));
 }
