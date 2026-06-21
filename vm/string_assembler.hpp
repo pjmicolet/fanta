@@ -87,7 +87,21 @@ private:
     auto code = line.substr(0, line.find(';'));
     if (code.empty() || code[0] == ';')
       return false;
-    return code.contains(':');
+    if (!code.contains(":"))
+      return false;
+
+    auto colon_pos = code.find(":");
+    if (colon_pos == code.npos)
+      return false;
+    auto label = code.substr(0, code.find(":"));
+    auto start = label.find_first_not_of(" \t\r\n");
+    if (start == label.npos)
+      return false;
+    auto end = label.find_first_not_of(" \t\r\n");
+    if (end == label.npos)
+      return false;
+    auto pureLabel = label.substr(start, end - start);
+    return is_label(pureLabel);
   }
 
   auto is_pure_comment(std::string_view line) -> bool { return line[0] == ';'; }
