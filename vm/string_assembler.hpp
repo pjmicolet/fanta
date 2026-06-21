@@ -100,7 +100,7 @@ private:
     auto end = label.find_first_not_of(" \t\r\n");
     if (end == label.npos)
       return false;
-    auto pureLabel = label.substr(start, end - start);
+    auto pureLabel = label.substr(start, end - start + 1);
     return is_label(pureLabel);
   }
 
