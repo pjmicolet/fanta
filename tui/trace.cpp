@@ -22,34 +22,45 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::ifstream in(filename);
-    if (!in) {
-        std::println(std::cerr, "Error: Could not open file {}", filename);
-        return 1;
-    }
-
-    std::vector<std::string> lines;
-    std::string line;
-    std::string full_code;
-    while (std::getline(in, line)) {
-        lines.push_back(line);
-        full_code += line + "\n";
-    }
-
     CPU cpu;
-    Assembler assem;
 
-    // Pass 1: Labels
-    assem.scan_for_labels(full_code);
+    if (filename.ends_with(".bin")) {
+        std::ifstream in(filename, std::ios::binary);
+        if (!in) {
+            std::println(std::cerr, "Error: Could not open binary file {}", filename);
+            return 1;
+        }
+        uint32_t instr;
+        size_t addr = 0;
+        while (in.read(reinterpret_cast<char*>(&instr), sizeof(uint32_t))) {
+            cpu.store(addr, instr);
+            addr += 4;
+        }
+    } else {
+        std::ifstream in(filename);
+        if (!in) {
+            std::println(std::cerr, "Error: Could not open file {}", filename);
+            return 1;
+        }
 
-    // Pass 2: Assemble and load
-    for (size_t i = 0; i < lines.size(); ++i) {
-        uint32_t instr = assem.assemble(lines[i], i * 4);
-        if (instr != (uint32_t)-1) {
-            cpu.store(i * 4, instr);
-        } else {
-            // NOP for labels/empty lines
-            cpu.store(i * 4, 0x14 << 26);
+        std::vector<std::string> lines;
+        std::string line;
+        std::string full_code;
+        while (std::getline(in, line)) {
+            lines.push_back(line);
+            full_code += line + "\n";
+        }
+
+        Assembler assem;
+        assem.scan_for_labels(full_code);
+
+        for (size_t i = 0; i < lines.size(); ++i) {
+            uint32_t instr = assem.assemble(lines[i], i * 4);
+            if (instr != (uint32_t)-1) {
+                cpu.store(i * 4, instr);
+            } else {
+                cpu.store(i * 4, 0x14 << 26);
+            }
         }
     }
 
