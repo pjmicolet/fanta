@@ -76,13 +76,18 @@ struct Assembler {
     return "";
   }
 
+  auto does_label_exist(std::string label) -> bool {
+    return labels_.contains(label);
+  }
+
 private:
   std::string last_copy; // Store the modified string to keep string_views valid
 
   auto is_label_define(std::string_view line) -> bool {
-    if (line.empty() || line[0] == ';')
+    auto code = line.substr(0, line.find(';'));
+    if (code.empty() || code[0] == ';')
       return false;
-    return line.contains(':');
+    return code.contains(':');
   }
 
   auto is_pure_comment(std::string_view line) -> bool { return line[0] == ';'; }

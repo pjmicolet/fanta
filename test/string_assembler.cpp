@@ -70,4 +70,13 @@ TEST_CASE("Label corner cases") {
   std::string code2 = "    STARTWITHCODE     :ADD R1, R1, #1";
   assem.scan_for_labels(code2);
   REQUIRE_SAME("STARTWITHCODE", assem.get_label_for(0));
+  std::string code3 = "    STARTCOMMENT     :ADD R1, R1, #1; "
+                      "FAKELABEL:\nNICELABEL:\n;JUSTCOMMENT:\n";
+  assem.scan_for_labels(code3);
+  REQUIRE_TRUE(assem.does_label_exist("STARTCOMMENT"));
+  REQUIRE_TRUE(assem.does_label_exist("NICELABEL"));
+  REQUIRE_TRUE(assem.does_label_exist("NICELABEL"));
+  REQUIRE_TRUE(!assem.does_label_exist("JUSTCOMMENT"));
+  REQUIRE_TRUE(!assem.does_label_exist("JUSTCOMMENT"));
+  REQUIRE_TRUE(!assem.does_label_exist("FAKELABEL"));
 }
