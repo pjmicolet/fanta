@@ -11,16 +11,18 @@ struct InstructionEmitter {
 
 private:
   auto outputInstructionsForFunc(const FunctionIR &fir, GlobalTable &gt,
-                                 InstructionList &il) -> void;
+                                 InstructionList &il)
+      -> void;
   auto emitInst(const IROp &op, GlobalTable &gt, InstructionList &il) -> void;
 
   auto link(InstructionList &il) -> void;
 
+  auto reset() -> void;
+
   using index = size_t;
   using funcName = std::string_view;
   using globalName = std::string_view;
-  std::unordered_map<funcName, std::vector<std::pair<index, globalName>>>
-      missingLinks;
+  std::vector<std::pair<index, globalName>> missingLinks;
   std::unordered_map<funcName, uint32_t> resolvedAddresses;
   std::vector<index> globalBaseMovs;
 };

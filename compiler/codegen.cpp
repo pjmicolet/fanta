@@ -9,12 +9,14 @@ template <class... Ts> struct overloaded : Ts... {
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 auto Codegen::extractGlobalNames(const Parser &p) -> void {
+  uint32_t globalOffsets = 0;
   for (auto &ridx : p.getRootIndices()) {
     const auto &node = p.getNodeAtIndex(ridx);
 
     std::visit(overloaded{[&](const Fanta::AST::VariableDecl &d) {
-                            GlobalVarInfo gni{0, 0, d.type};
+                            GlobalVarInfo gni{globalOffsets, 0, d.type};
                             globalNameSpace[d.name] = gni;
+                            globalOffsets += 4;
                           },
                           [&](const Fanta::AST::FunctionDef &d) {
                             GlobalFuncInfo gni{
@@ -24,8 +26,8 @@ auto Codegen::extractGlobalNames(const Parser &p) -> void {
                                   std::get<Fanta::AST::FunctionParamDef>(
                                       p.getNodeAtIndex(pType).t);
                               gni.paramTypes.push_back(var.type);
-                              globalNameSpace[d.name] = gni;
                             }
+                            globalNameSpace[d.name] = gni;
                           },
                           [&](const auto &other) {}},
                node.t);

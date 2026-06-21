@@ -4,6 +4,7 @@
 #include "instructions.hpp"
 #include "ir.hpp"
 #include <ranges>
+#include <string>
 #include <variant>
 
 namespace Fanta {
@@ -11,15 +12,13 @@ auto InstructionEmitter::outputInstructions(RegAllocIR &rir, GlobalTable &gt)
     -> InstructionList {
   InstructionList list{};
 
+  reset();
+
   // Emit the actual instructions within the instruction
   for (const auto &func : rir.functions) {
-    InstructionList funcList{}; // this is just so I can track where the start
-                                // of each func is
     auto baseAddr = list.size();
-    outputInstructionsForFunc(func, gt, funcList);
-    list.reserve(list.size() + funcList.size());
-    list.append_range(funcList);
     resolvedAddresses[func.name] = baseAddr;
+    outputInstructionsForFunc(func, gt, list);
   }
 
   link(list);
@@ -35,27 +34,22 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
     il[movId] = Instructions::Emitter::two_op_imm(Info::Instructions::MOV_IMM,
                                                   reg, globalBaseAddr);
   }
-  for (const auto &[funcName, baseAddr] : resolvedAddresses) {
-    if (missingLinks.contains(funcName)) {
-      const auto &list = missingLinks[funcName];
-      for (const auto &[idx, linkName] : list) {
-        if (!resolvedAddresses.contains(linkName)) {
-        } // BLOW UP
-        const auto &func = il[baseAddr + idx];
-        if ((func >> 26 & 0xFF) == 0x15) {
-          auto newAddr = (resolvedAddresses[linkName] - (baseAddr + idx)) * 4;
-          auto newFunc = Instructions::Emitter::single_inst(0x15, newAddr);
-          il[baseAddr + idx] = newFunc;
-        } // it's a call
-      }
+  for (const auto &[idx, linkName] : missingLinks) {
+    if (!resolvedAddresses.contains(linkName)) {
+      throw std::runtime_error("Unknown symbol: " + std::string{linkName});
     }
+    const auto &func = il[idx];
+    if ((func >> 26 & 0xFF) == 0x15) {
+      auto newAddr = (resolvedAddresses[linkName] - (idx)) * 4;
+      auto newFunc = Instructions::Emitter::single_inst(0x15, newAddr);
+      il[idx] = newFunc;
+    } // it's a call
   }
 }
 
 auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
                                                    GlobalTable &gt,
-                                                   InstructionList &il)
-    -> void {
+                                                   InstructionList &il) -> void {
 
   auto maxOffset = fir.localVarCount;
 
@@ -84,7 +78,8 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
                      il.push_back(Instructions::Emitter::single_inst(
                          Info::Instructions::CALL,
                          -1)); // We probably don't know the callsite yet.
-                     missingLinks[fir.name].push_back({il.size() - 1, op.name});
+                     missingLinks.push_back(
+                         {il.size() - 1, op.name});
                    },
                    [&](const LocalGlobalBase &lgb) {
                      auto movGlobal = Instructions::Emitter::two_op_imm(
@@ -114,7 +109,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
   if (fir.name == "__init") {
     il.push_back(
         Instructions::Emitter::single_inst(Info::Instructions::CALL, -1));
-    missingLinks[fir.name].push_back({il.size() - 1, "main"});
+    missingLinks.push_back({il.size() - 1, "main"});
     il.push_back(
         Instructions::Emitter::single_inst(Info::Instructions::HALT, -1));
   } else {
@@ -191,5 +186,11 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,
     SINGLE(Info::Instructions::PUSH)
     SINGLE(Info::Instructions::POP)
   }
+}
+
+auto InstructionEmitter::reset() -> void {
+  globalBaseMovs.clear();
+  missingLinks.clear();
+  resolvedAddresses.clear();
 }
 } // namespace Fanta
