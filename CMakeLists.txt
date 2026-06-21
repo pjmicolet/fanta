@@ -8,15 +8,42 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Create a static library for the core logic
-add_library(fanta_lib STATIC src/cpu.cpp src/codegen.cpp src/SimpleIRPass.cpp src/ir.cpp src/allocator.cpp src/instruction_emit.cpp)
-target_include_directories(fanta_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+# ---------------------------------------------------------
+# Libraries
+# ---------------------------------------------------------
 
-# Create an interface library for the test framework
+# VM runtime library (CPU & memory mechanics)
+add_library(vm_lib STATIC vm/cpu.cpp)
+target_include_directories(vm_lib PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/vm
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
+)
+
+# Compiler core library
+add_library(compiler_lib STATIC 
+    compiler/codegen.cpp 
+    compiler/SimpleIRPass.cpp 
+    compiler/ir.cpp 
+    compiler/allocator.cpp 
+    compiler/instruction_emit.cpp
+)
+target_include_directories(compiler_lib PUBLIC 
+    ${CMAKE_CURRENT_SOURCE_DIR}/compiler
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
+)
+
+# Interface library for tests
 add_library(test_framework INTERFACE)
-target_include_directories(test_framework INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(test_framework INTERFACE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/compiler
+    ${CMAKE_CURRENT_SOURCE_DIR}/vm
+)
 
-# Test executable
+# ---------------------------------------------------------
+# Test Executables
+# ---------------------------------------------------------
+
 add_executable(ops_test test/ops.cpp)
 add_executable(cpu_test test/cpu.cpp)
 add_executable(string_assembler test/string_assembler.cpp)
@@ -25,29 +52,14 @@ add_executable(parser_test test/parser.cpp)
 add_executable(codegen_test test/codegen.cpp)
 add_executable(simpleirpass_test test/simpleirpass.cpp)
 
-# Link the library
-# We manually add the src directory as SYSTEM to satisfy the requirement
-# that headers in src/ are available as system headers (suppressing warnings).
-target_include_directories(ops_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(ops_test PRIVATE fanta_lib test_framework)
-
-target_include_directories(cpu_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(cpu_test PRIVATE fanta_lib test_framework)
-
-target_include_directories(string_assembler SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(string_assembler PRIVATE fanta_lib test_framework)
-
-target_include_directories(lexer_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(lexer_test PRIVATE fanta_lib test_framework)
-
-target_include_directories(parser_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(parser_test PRIVATE fanta_lib test_framework)
-
-target_include_directories(codegen_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(codegen_test PRIVATE fanta_lib test_framework)
-
-target_include_directories(simpleirpass_test SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(simpleirpass_test PRIVATE fanta_lib test_framework)
+# Link targets
+target_link_libraries(ops_test PRIVATE vm_lib test_framework)
+target_link_libraries(cpu_test PRIVATE vm_lib test_framework)
+target_link_libraries(string_assembler PRIVATE vm_lib test_framework)
+target_link_libraries(lexer_test PRIVATE compiler_lib test_framework)
+target_link_libraries(parser_test PRIVATE compiler_lib test_framework)
+target_link_libraries(simpleirpass_test PRIVATE compiler_lib test_framework)
+target_link_libraries(codegen_test PRIVATE compiler_lib vm_lib test_framework)
 
 # Enable testing
 enable_testing()
@@ -59,28 +71,41 @@ add_test(NAME parser_test COMMAND parser_test)
 add_test(NAME codegen_test COMMAND codegen_test)
 add_test(NAME simpleirpass_test COMMAND simpleirpass_test)
 
-# Main Application
-find_package(SDL2 REQUIRED)
-add_executable(fanta src/main.cpp)
-target_link_libraries(fanta PRIVATE fanta_lib SDL2::SDL2)
+# ---------------------------------------------------------
+# Main Executables
+# ---------------------------------------------------------
 
-# TUI Application
+# The Fanta Console (VM Runtime)
+find_package(SDL2 REQUIRED)
+add_executable(fanta vm/main.cpp)
+target_link_libraries(fanta PRIVATE vm_lib SDL2::SDL2)
+
+# The Fanta Compiler
+add_executable(fanta-compiler compiler/compiler_main.cpp)
+target_link_libraries(fanta-compiler PRIVATE compiler_lib)
+
+# ---------------------------------------------------------
+# Modal TUI & Debug Utils
+# ---------------------------------------------------------
+
 find_package(Curses REQUIRED)
+
+# The Interactive Debugger TUI
 add_executable(fanta-tui tui/main.cpp tui/tui.cpp)
-target_include_directories(fanta-tui PRIVATE tui src)
-target_link_libraries(fanta-tui PRIVATE fanta_lib ${CURSES_LIBRARIES})
+target_include_directories(fanta-tui PRIVATE tui vm compiler common)
+target_link_libraries(fanta-tui PRIVATE vm_lib compiler_lib ${CURSES_LIBRARIES})
 
 # TUI Tests
 add_executable(tui-tests tui/tests.cpp tui/tui.cpp)
-target_include_directories(tui-tests PRIVATE tui src)
-target_link_libraries(tui-tests PRIVATE fanta_lib ${CURSES_LIBRARIES})
+target_include_directories(tui-tests PRIVATE tui vm compiler common)
+target_link_libraries(tui-tests PRIVATE vm_lib compiler_lib ${CURSES_LIBRARIES})
 
 # Trace Utility
 add_executable(fanta-trace tui/trace.cpp)
-target_include_directories(fanta-trace PRIVATE tui src)
-target_link_libraries(fanta-trace PRIVATE fanta_lib)
+target_include_directories(fanta-trace PRIVATE tui vm compiler common)
+target_link_libraries(fanta-trace PRIVATE vm_lib)
 
 # Diff Utility
 add_executable(fanta-diff tui/diff.cpp)
-target_include_directories(fanta-diff PRIVATE tui src)
-target_link_libraries(fanta-diff PRIVATE fanta_lib)
+target_include_directories(fanta-diff PRIVATE tui vm compiler common)
+target_link_libraries(fanta-diff PRIVATE vm_lib)
