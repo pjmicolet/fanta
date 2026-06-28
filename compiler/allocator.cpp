@@ -27,11 +27,23 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
                        assignedOp.source2.isVirtual = false;
                      }
                      if (op.destination.isVirtual) {
+                       auto mechanism = op.opcode == Info::Instructions::PUSH
+                                            ? StoreAndLoad
+                                            : Store;
                        assignedOp.destination.val =
-                           getNextAvailable(fir, op.destination.val, Store);
+                           getNextAvailable(fir, op.destination.val, mechanism);
                        assignedOp.destination.isVirtual = false;
                      }
                      fir.insts.push_back(assignedOp);
+                   },
+                   [&](const CallFunc &cf) {
+                     CallFunc assignedCf = cf;
+                     if (cf.dest) {
+                       assignedCf.dest->val =
+                           getNextAvailable(fir, cf.dest->val, StoreAndLoad);
+                       assignedCf.dest->isVirtual = false;
+                     }
+                     fir.insts.push_back(assignedCf);
                    },
                    [&](const LocalGlobalBase &lgb) {
                      LocalGlobalBase assignedLgb = lgb;
@@ -99,7 +111,7 @@ auto Allocator::getNextAvailable(FunctionIR &func, uint32_t reg,
   }
 
   auto allocatedReg = next;
-  next = (next + 1) % 15;
+  next = (next + 1) % 14;
   virtToReg[reg] = allocatedReg;
   regToVirt[allocatedReg] = reg;
   virtToStackOffset[reg] = offset + 4;

@@ -32,7 +32,7 @@ struct FuncParam {
 struct CallFunc {
   std::vector<FuncParam> args;
   std::string_view name;
-  Operand dest;
+  std::optional<Operand> dest; // some calls are void
 };
 
 struct LocalGlobalBase {

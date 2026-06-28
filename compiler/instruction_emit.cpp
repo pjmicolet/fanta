@@ -18,7 +18,11 @@ auto InstructionEmitter::outputInstructions(RegAllocIR &rir, GlobalTable &gt)
   for (const auto &func : rir.functions) {
     auto baseAddr = list.size();
     resolvedAddresses[func.name] = baseAddr;
-    outputInstructionsForFunc(func, gt, list);
+    if (func.name == "__init") {
+      outputInitFunc(func, gt, list);
+    } else {
+      outputInstructionsForFunc(func, gt, list);
+    }
   }
 
   link(list);
@@ -47,16 +51,50 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
   }
 }
 
+auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
+                                        InstructionList &il) -> void {
+
+  for (auto &ir : fir.insts) {
+    std::visit(
+        overloaded{[&](const IROp &op) { emitInst(op, gt, il); },
+                   [&](const CallFunc &op) {
+                     il.push_back(Instructions::Emitter::single_inst(
+                         Info::Instructions::CALL,
+                         -1)); // We probably don't know the callsite yet.
+                     missingLinks.push_back({il.size() - 1, op.name});
+                     if (op.dest) {
+                       il.push_back(Instructions::Emitter::two_op(
+                           Info::Instructions::MOV_REG, op.dest->val, 0));
+                     }
+                   },
+                   [&](const LocalGlobalBase &lgb) {
+                     auto movGlobal = Instructions::Emitter::two_op_imm(
+                         Info::Instructions::MOV_IMM, lgb.dest.val, 0);
+                     il.push_back(movGlobal);
+                     globalBaseMovs.push_back(il.size() - 1);
+                   },
+                   [](const auto &other) {}},
+        ir);
+  }
+
+  il.push_back(
+      Instructions::Emitter::single_inst(Info::Instructions::CALL, -1));
+  missingLinks.push_back({il.size() - 1, "main"});
+  il.push_back(
+      Instructions::Emitter::single_inst(Info::Instructions::HALT, -1));
+}
+
 auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
                                                    GlobalTable &gt,
-                                                   InstructionList &il) -> void {
+                                                   InstructionList &il)
+    -> void {
 
   auto maxOffset = fir.localVarCount;
 
   il.push_back(Instructions::Emitter::single_inst(Info::Instructions::PUSH,
                                                   Info::Registers::FP));
 
-  // First save caller registers into the stack, we do 0 -> 14
+  // First save caller registers into the stack, we do 1 -> 14
   for (const auto &reg : fir.calleeRegs) {
     il.push_back(
         Instructions::Emitter::single_inst(Info::Instructions::PUSH, reg.val));
@@ -78,8 +116,11 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
                      il.push_back(Instructions::Emitter::single_inst(
                          Info::Instructions::CALL,
                          -1)); // We probably don't know the callsite yet.
-                     missingLinks.push_back(
-                         {il.size() - 1, op.name});
+                     missingLinks.push_back({il.size() - 1, op.name});
+                     if (op.dest) {
+                       il.push_back(Instructions::Emitter::two_op(
+                           Info::Instructions::MOV_REG, op.dest->val, 0));
+                     }
                    },
                    [&](const LocalGlobalBase &lgb) {
                      auto movGlobal = Instructions::Emitter::two_op_imm(
@@ -106,18 +147,9 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
   // Pop the caller FP
   il.push_back(Instructions::Emitter::single_inst(Info::Instructions::POP,
                                                   Info::Registers::FP));
-  if (fir.name == "__init") {
-    il.push_back(
-        Instructions::Emitter::single_inst(Info::Instructions::CALL, -1));
-    missingLinks.push_back({il.size() - 1, "main"});
-    il.push_back(
-        Instructions::Emitter::single_inst(Info::Instructions::HALT, -1));
-  } else {
-    // Call ret (TODO: Currently Ret doesn't push values or anything so we
-    // should have to do some work to push values to R0)
-    il.push_back(
-        Instructions::Emitter::single_inst(Info::Instructions::RET, 0));
-  }
+  // Call ret (TODO: Currently Ret doesn't push values or anything so we
+  // should have to do some work to push values to R0)
+  il.push_back(Instructions::Emitter::single_inst(Info::Instructions::RET, 0));
 }
 
 auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,

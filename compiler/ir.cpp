@@ -168,9 +168,19 @@ auto printIR(const IR &irlisting) -> void {
                                getopName(irop.opcode), s2c, irop.source2.val);
                   break;
                 }
+                case 0:
+                  std::println("    {}", getopName(irop.opcode));
                 }
               },
-              [&](const CallFunc &cfunc) {},
+              [&](const CallFunc &cfunc) {
+                if (cfunc.dest) {
+                  std::println("    {}{} = CALL {}",
+                               cfunc.dest->isVirtual ? "v_" : "R",
+                               cfunc.dest->val, cfunc.name);
+                } else {
+                  std::println("    CALL {}", cfunc.name);
+                }
+              },
               [&](const LocalGlobalBase &base) {},
           },
           ir);

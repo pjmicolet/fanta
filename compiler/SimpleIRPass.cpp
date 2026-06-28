@@ -16,6 +16,7 @@ auto SimpleIRPass::outputIR(Parser &p, GlobalTable &gt) -> IR {
 
   FunctionIR initFunc{};
   initFunc.name = "__init";
+  initFunc.calleeRegs = {};
   for (const auto &idx : p.getRootIndices()) {
     const auto &cr = p.getNodeAtIndex(idx);
     std::visit(overloaded{[&](const AST::VariableDecl &vdec) {
@@ -77,6 +78,12 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
                           },
                           [&](const AST::VariableDecl &vdec) {
                             emitVariableIR(p, vdec, ir, gt, lt);
+                          },
+                          [&](const AST::ReturnVal &rval) {
+                            emitReturnIR(p, rval, ir, gt, lt);
+                          },
+                          [&](const AST::FunctionCall &fcall) {
+                            emitCall(p, fcall, ir, gt, lt);
                           },
                           [&](const auto &other) {}},
                p.getNodeAtIndex(idx).t);
@@ -164,9 +171,81 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
               ir.push_back(op);
             }
           },
+          [&](const AST::FunctionCall &fcall) {
+            CallFunc cf;
+            cf.dest = {dest, true};
+            cf.name =
+                std::get<AST::Identifier>(p.getNodeAtIndex(fcall.funcNameIdx).t)
+                    .name;
+            for (auto it = fcall.params.rbegin(); it != fcall.params.rend();
+                 ++it) {
+              auto expr = lt.allocateAnonymous();
+              emitExpression(p, p.getNodeAtIndex(*it), ir, gt, lt, expr);
+              IROp op{};
+              op.opcode = Info::Instructions::PUSH;
+              op.destination = {expr, true};
+              ir.push_back(op);
+            }
+            ir.push_back(cf);
+            // Restore stack pointer at the end
+            if (!fcall.params.empty()) {
+              IROp restoreStack{};
+              restoreStack.opcode = Info::Instructions::ADD_IMM;
+              restoreStack.source2 = {
+                  static_cast<uint32_t>(4 * fcall.params.size()), false};
+              restoreStack.source1 = {Info::Registers::SP, false};
+              restoreStack.destination = {Info::Registers::SP, false};
+              restoreStack.s2type = Immediate;
+              ir.push_back(restoreStack);
+            }
+          },
           [&](const auto &other) {},
       },
       node.t);
+}
+
+auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
+                            IRListing &ir, const GlobalTable &gt,
+                            LocalTable &lt) -> void {
+  CallFunc cf;
+  cf.name =
+      std::get<AST::Identifier>(p.getNodeAtIndex(fcall.funcNameIdx).t).name;
+  for (auto it = fcall.params.rbegin(); it != fcall.params.rend(); ++it) {
+    auto expr = lt.allocateAnonymous();
+    emitExpression(p, p.getNodeAtIndex(*it), ir, gt, lt, expr);
+    IROp op{};
+    op.opcode = Info::Instructions::PUSH;
+    op.destination = {expr, true};
+    ir.push_back(op);
+  }
+  ir.push_back(cf);
+  // Restore stack pointer at the end
+  if (!fcall.params.empty()) {
+    IROp restoreStack{};
+    restoreStack.opcode = Info::Instructions::ADD_IMM;
+    restoreStack.source2 = {static_cast<uint32_t>(4 * fcall.params.size()),
+                            false};
+    restoreStack.source1 = {Info::Registers::SP, false};
+    restoreStack.destination = {Info::Registers::SP, false};
+    restoreStack.s2type = Immediate;
+    ir.push_back(restoreStack);
+  }
+}
+
+// We don't emit the ret here as the ret will need to be inserted in all
+// cases and we need to insert the stack pop later
+auto SimpleIRPass::emitReturnIR(const Parser &p, const AST::ReturnVal &vdec,
+                                IRListing &ir, const GlobalTable &gt,
+                                LocalTable &lt) -> void {
+  auto varTReg = lt.allocateAnonymous();
+  const auto &defineNode = p.getNodeAtIndex(vdec.returnVal);
+  emitExpression(p, defineNode, ir, gt, lt, varTReg);
+  IROp movRetToR0{};
+  movRetToR0.destination = {0, false};
+  movRetToR0.source2 = {varTReg, true};
+  movRetToR0.s2type = Register;
+  movRetToR0.opcode = Info::Instructions::MOV_REG;
+  ir.push_back(movRetToR0);
 }
 
 auto SimpleIRPass::emitVariableIR(const Parser &p,

@@ -12,7 +12,7 @@ struct Allocator {
 
 private:
   auto reset() -> void {
-    next = 0;
+    next = 1;
     for (int i = 0; i < usedRegisters.size(); i++)
       usedRegisters[i] = false;
     virtToReg.clear();

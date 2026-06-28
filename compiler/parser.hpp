@@ -156,7 +156,7 @@ struct Parser {
 private:
   enum class Precedence : uint8_t {
     LOWEST = 0,
-    ASSIGN = 1,
+    ASSIGN_OR_RET = 1,
     SUM = 2,
     MINUS = 2,
     MULT = 3,
@@ -197,7 +197,7 @@ private:
     EXTRACT_TOKEN(Lexer::TokenType::Colon);
     EXTRACT_TOKEN_TO_VAR_WRET(type, Lexer::TokenType::Type, -1);
     EXTRACT_TOKEN(Lexer::TokenType::Equal);
-    auto index = walkExpression(Precedence::ASSIGN);
+    auto index = walkExpression(Precedence::ASSIGN_OR_RET);
     Fanta::AST::VariableDecl var{identifier->lexeme, type->lexeme, index};
     asts.push_back({var, 0});
     return asts.size() - 1;
@@ -234,14 +234,33 @@ private:
     roots.push_back(asts.size() - 1);
   }
 
+  auto walkReturn() -> Fanta::AST::NodeIndex {
+    auto index = walkExpression(Precedence::ASSIGN_OR_RET);
+    Fanta::AST::ReturnVal var{"unknown",
+                              index}; // we don't know the return type yet
+    asts.push_back({var, 0});
+    return asts.size() - 1;
+  }
+
   auto walkBody() -> Fanta::AST::NodeIndex {
     auto start = expect(Lexer::TokenType::OpenBrace);
     Fanta::AST::FunctionBody body;
+    bool hasReturn = false;
     while (currentToken.t != Lexer::TokenType::CloseBrace) {
       if (accept(Lexer::TokenType::KeywordLet)) {
         body.expressions.push_back(walkLet());
+      } else if (accept(Lexer::TokenType::Return)) {
+        hasReturn = true;
+        auto idx = walkReturn();
+        body.expressions.push_back(idx);
       } else {
         auto idx = walkExpression(Precedence::LOWEST);
+        if (hasReturn) {
+          // We've already seen a return, anything else should be discarded.
+          // That being said we should walk through the rest just so that we can
+          // properly parse the function I'll write a warning here
+          continue;
+        }
         body.expressions.push_back(idx);
       }
       auto sc = expect(Lexer::TokenType::SemiColon);
@@ -313,9 +332,11 @@ private:
   auto getPrecedence(Lexer::TokenType t) -> Precedence {
     switch (t) {
     case Lexer::TokenType::KeywordLet:
-      return Precedence::ASSIGN;
+      return Precedence::ASSIGN_OR_RET;
     case Lexer::TokenType::Equal:
-      return Precedence::ASSIGN;
+      return Precedence::ASSIGN_OR_RET;
+    case Lexer::TokenType::Return:
+      return Precedence::ASSIGN_OR_RET;
     case Lexer::TokenType::Mult:
       return Precedence::MULT;
     case Lexer::TokenType::Minus:

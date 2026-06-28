@@ -23,11 +23,13 @@ public:
     void run();
     void dump_state(const std::string& filename);
     std::string disassemble(uint32_t addr);
+    bool load_file(const std::string& filename);
 
 private:
     void update();
     void draw_registers();
     void draw_memory();
+    void draw_stack();
     void draw_disassembly();
     void draw_status();
     void draw_editor();

@@ -12,6 +12,8 @@ struct InstructionEmitter {
 private:
   auto outputInstructionsForFunc(const FunctionIR &fir, GlobalTable &gt,
                                  InstructionList &il) -> void;
+  auto outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
+                      InstructionList &il) -> void;
   auto emitInst(const IROp &op, GlobalTable &gt, InstructionList &il) -> void;
 
   auto link(InstructionList &il) -> void;

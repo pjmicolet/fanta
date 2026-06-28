@@ -1,5 +1,6 @@
 #include <codegen.hpp>
 #include <testframework/testing.hpp>
+#include "../tui/disasm.hpp"
 
 TEST_CASE("Global Namespace") {
   std::string code = "let a : int = 123;"
@@ -55,6 +56,9 @@ TEST_CASE("Instruction Emitter & Execution Test") {
   Fanta::InstructionEmitter emitter{};
   auto insts = emitter.outputInstructions(rir, gt);
 
+  std::println("=== Compiled Program Disassembly ===");
+  std::print("{}", Fanta::disassembleProgram(insts));
+
   REQUIRE_TRUE(insts.size() > 0);
 
   CPU cpu{};
@@ -81,6 +85,6 @@ TEST_CASE("Instruction Emitter & Execution Test") {
 
   // Under the physical register assignments for this function,
   // b will be loaded into R0, c into R1, and d (the result of b + c) will be
-  // computed into R4. So R4 should contain 30 before epilogue pops.
-  REQUIRE_SAME(30, cpu.registers[4]);
+  // computed into R5. So R5 should contain 30 before epilogue pops.
+  REQUIRE_SAME(30, cpu.registers[5]);
 }

@@ -15,6 +15,8 @@ private:
   auto emitVariableIR(const Parser &p, const AST::VariableDecl &decl,
                       IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> void;
+  auto emitReturnIR(const Parser &p, const AST::ReturnVal &decl, IRListing &ir,
+                    const GlobalTable &gt, LocalTable &lt) -> void;
   auto emitFunctionDef(const Parser &p, const AST::FunctionDef &decl, IR &ir,
                        const GlobalTable &gt) -> void;
   auto emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,
@@ -26,6 +28,8 @@ private:
   auto emitExpression(const Parser &p, const AST::AstNode &node, IRListing &ir,
                       const GlobalTable &gt, LocalTable &lt, TempReg tr)
       -> void;
+  auto emitCall(const Parser &p, const AST::FunctionCall &node, IRListing &ir,
+                const GlobalTable &gt, LocalTable &lt) -> void;
   uint32_t globalOffsets = 0;
 };
 
