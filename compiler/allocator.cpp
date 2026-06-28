@@ -111,7 +111,7 @@ auto Allocator::getNextAvailable(FunctionIR &func, uint32_t reg,
   }
 
   auto allocatedReg = next;
-  next = (next + 1) % 14;
+  next = next == 14 ? 1 : (next + 1);
   virtToReg[reg] = allocatedReg;
   regToVirt[allocatedReg] = reg;
   virtToStackOffset[reg] = offset + 4;
