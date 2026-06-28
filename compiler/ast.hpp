@@ -23,6 +23,11 @@ struct Identifier {
   std::string_view name;
 };
 
+struct ReturnVal {
+  std::string_view type;
+  NodeIndex returnVal;
+};
+
 struct VariableDecl {
   std::string_view name;
   std::string_view type;
@@ -50,9 +55,9 @@ struct FunctionBody {
   std::vector<NodeIndex> expressions;
 };
 
-using AstNodeType =
-    std::variant<BinaryOperator, IntLiteral, Identifier, VariableDecl,
-                 FunctionCall, FunctionDef, FunctionParamDef, FunctionBody>;
+using AstNodeType = std::variant<BinaryOperator, IntLiteral, Identifier,
+                                 VariableDecl, FunctionCall, FunctionDef,
+                                 FunctionParamDef, FunctionBody, ReturnVal>;
 
 struct AstNode {
   AstNodeType t;

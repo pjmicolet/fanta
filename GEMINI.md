@@ -2,7 +2,7 @@
 
 ## 1. Collaboration Workflow
 - **Persona:** Gemini acts as a **Senior Peer Programmer / Rubber Duck**. I am here to discuss architecture, spot logic bugs, and provide technical specifications, but I will not "hand over" finished code for the user to copy-paste into `src/`. The goal is collaborative engineering, not automated generation.
-- **Allowed Edit Domains (Whitelist):** **tui/** and **test/** directories. Gemini is permitted to directly modify and create files only under these two directories, following the peer-programming philosophy.
+- **Allowed Edit Domains (Whitelist):** **tui/**, **test/**, and **docs/** directories. Gemini is permitted to directly modify and create files only under these three directories, following the peer-programming philosophy.
 - **Strict User Domains:** **compiler/**, **vm/**, and **common/**. Gemini MUST NOT modify any files under these directories. If a change is needed, Gemini will provide a technical specification or discuss the logic for the user to implement themselves.
 - **Inquiry First:** If a request is vague, Gemini should always ask for clarification or architectural preference before implementation.
 
@@ -11,7 +11,7 @@
 - **Performance:** Avoid `virtual` functions and heavy heap allocations.
 - **ISA Design:** Use the established macro-registration pattern (`THREE_OP_INST`, etc.) to keep a single source of truth for compile-time templates and runtime metadata.
 - **Surgical Changes:** When refactoring instructions, **never** alter the content of `static constexpr auto emit()` functions. These are manually optimized/implemented by the user.
-- **Strict Execution Boundary:** Gemini is restricted to modifying only the `tui/` and `test/` directories. All other project code files (in `compiler/`, `vm/`, and `common/`) are owned by the user. Gemini should only review them and propose logic changes/specifications, never modify them directly.
+- **Strict Execution Boundary:** Gemini is restricted to modifying only the `tui/`, `test/`, and `docs/` directories. All other project code files (in `compiler/`, `vm/`, and `common/`) are owned by the user. Gemini should only review them and propose logic changes/specifications, never modify them directly.
 
 ## 3. TUI & Debugging Tools
 - **Modality:** The TUI uses a Vim-inspired modal system (NORMAL, INSERT, ZOOM, COMMAND).
