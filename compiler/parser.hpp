@@ -270,6 +270,26 @@ private:
     return asts.size() - 1;
   }
 
+  /**
+   * @brief Starting point of pratt parser to deal with operand precedence.
+   *
+   * @details Expressions start with lowest precedence, using walkInfix we
+   * recursively descend through the expression
+   *
+   * To give an example of how it works take 3 * 2 + 1, we'll have:
+   *  walkExpression(p=LOWEST)
+   *   prefix = 3
+   *   p < getPrecedence(*)
+   *   walkInfix(3, *)
+   *    walkExpression(p=precedence(*))
+   *     prefix = 2
+   *     p < getPrecedence(+) // BREAKS LOOP
+   *  p < getPrecedence(+)
+   *    walkInfix(*, +)
+   *  DONE
+   *
+   * @param p: precedence of incoming token
+   */
   auto walkExpression(Precedence p) -> Fanta::AST::NodeIndex {
     auto prefix = walkPrefix();
 
