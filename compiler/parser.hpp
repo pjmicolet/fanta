@@ -178,14 +178,14 @@ struct Parser {
 private:
   enum class Precedence : uint8_t {
     LOWEST = 0,
-    ASSIGN_OR_RET = 1,
-    CALL = 2,
+    IFELSE = 1,
+    ASSIGN_OR_RET = 2,
     SUM = 3,
     MINUS = 4,
     MULT = 5,
     DIVIDE = 6,
     COMP = 7,
-    IFELSE = 8
+    CALL = 8,
   };
 
   std::string program_;
@@ -386,6 +386,12 @@ private:
       Fanta::AST::IntLiteral id{val};
       asts.push_back({id, 0});
       return asts.size() - 1;
+    }
+    case Lexer::TokenType::OpenParam: {
+      nextToken();
+      auto expr = walkExpression(Precedence::LOWEST);
+      auto close = expect(Lexer::TokenType::CloseParam);
+      return expr;
     }
     case Lexer::TokenType::SemiColon: {
       return -1;
