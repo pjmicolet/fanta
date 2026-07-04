@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -55,9 +56,16 @@ struct FunctionBody {
   std::vector<NodeIndex> expressions;
 };
 
-using AstNodeType = std::variant<BinaryOperator, IntLiteral, Identifier,
-                                 VariableDecl, FunctionCall, FunctionDef,
-                                 FunctionParamDef, FunctionBody, ReturnVal>;
+struct IfStm {
+  NodeIndex cond;
+  NodeIndex body;
+  std::optional<NodeIndex> elbody;
+};
+
+using AstNodeType =
+    std::variant<BinaryOperator, IntLiteral, Identifier, VariableDecl,
+                 FunctionCall, FunctionDef, FunctionParamDef, FunctionBody,
+                 ReturnVal, IfStm>;
 
 struct AstNode {
   AstNodeType t;

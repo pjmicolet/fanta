@@ -39,7 +39,13 @@ struct Lexer {
     If,
     Else,
     Type,
-    Return
+    Return,
+    EqualComp,
+    Greater,
+    Lesser,
+    GreaterEq,
+    LesserEq,
+    NotEq,
   };
 
   struct Token {
@@ -135,10 +141,51 @@ private:
     case '+':
       return Token{TokenType::Plus, body_.substr(cursor_, 1), 0, cursor_,
                    cursor_++};
-    case '=':
+    case '=': {
+      auto next = peek();
+      if (next == '=') {
+        auto start = cursor_;
+        cursor_++;
+        return Token{TokenType::EqualComp, body_.substr(start, 2), 0, start,
+                     cursor_++};
+      }
       return Token{
           TokenType::Equal, body_.substr(cursor_, 1), 0, cursor_,
           cursor_++}; // Ugly hack but I need to increment cursor at some point
+    }
+    case '>': {
+      auto next = peek();
+      if (next == '=') {
+        auto start = cursor_;
+        cursor_++;
+        return Token{TokenType::GreaterEq, body_.substr(start, 2), 0, start,
+                     cursor_++};
+      }
+      return Token{
+          TokenType::Greater, body_.substr(cursor_, 1), 0, cursor_,
+          cursor_++}; // Ugly hack but I need to increment cursor at some point
+    }
+    case '<': {
+      auto next = peek();
+      if (next == '=') {
+        auto start = cursor_;
+        cursor_++;
+        return Token{TokenType::LesserEq, body_.substr(start, 2), 0, start,
+                     cursor_++};
+      }
+      return Token{
+          TokenType::Lesser, body_.substr(cursor_, 1), 0, cursor_,
+          cursor_++}; // Ugly hack but I need to increment cursor at some point
+    }
+    case '!': {
+      auto next = peek();
+      if (next == '=') {
+        auto start = cursor_;
+        cursor_++;
+        return Token{TokenType::NotEq, body_.substr(start, 2), 0, start,
+                     cursor_++};
+      }
+    }
     case '*':
       return Token{TokenType::Mult, body_.substr(cursor_, 1), 0, cursor_,
                    cursor_++};

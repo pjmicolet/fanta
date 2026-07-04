@@ -90,6 +90,18 @@ struct Parser {
       return ")";
     case Lexer::TokenType::Type:
       return "Type";
+    case Lexer::TokenType::EqualComp:
+      return "==";
+    case Lexer::TokenType::GreaterEq:
+      return ">=";
+    case Lexer::TokenType::Greater:
+      return ">";
+    case Lexer::TokenType::LesserEq:
+      return "<=";
+    case Lexer::TokenType::Lesser:
+      return "<";
+    case Lexer::TokenType::NotEq:
+      return "!=";
     default:
       return "Unknown";
     }
@@ -149,7 +161,17 @@ struct Parser {
                           [&](const Fanta::AST::ReturnVal &r) {
                             std::println("{}Return<{}>:", pad, r.type);
                             printAST(r.returnVal, indent + 1);
-                          }},
+                          },
+                          [&](const Fanta::AST::IfStm &ifStm) {
+                            std::println("{}If", pad);
+                            printAST(ifStm.cond, indent + 1);
+                            printAST(ifStm.body, indent + 2);
+                            if (ifStm.elbody) {
+                              std::println("{}Else", pad);
+                              printAST(*ifStm.elbody, indent + 1);
+                            }
+                          },
+                          [](const auto &id) {}},
                node.t);
   }
 
@@ -157,11 +179,13 @@ private:
   enum class Precedence : uint8_t {
     LOWEST = 0,
     ASSIGN_OR_RET = 1,
-    SUM = 2,
-    MINUS = 2,
-    MULT = 3,
-    DIVIDE = 3,
-    CALL = 4
+    CALL = 2,
+    SUM = 3,
+    MINUS = 4,
+    MULT = 5,
+    DIVIDE = 6,
+    COMP = 7,
+    IFELSE = 8
   };
 
   std::string program_;
@@ -253,6 +277,9 @@ private:
         hasReturn = true;
         auto idx = walkReturn();
         body.expressions.push_back(idx);
+      } else if (accept(Lexer::TokenType::If)) {
+        auto idx = walkIf();
+        body.expressions.push_back(idx);
       } else {
         auto idx = walkExpression(Precedence::LOWEST);
         if (hasReturn) {
@@ -267,6 +294,25 @@ private:
     }
     auto end = expect(Lexer::TokenType::CloseBrace);
     asts.push_back({body, 0});
+    return asts.size() - 1;
+  }
+
+  auto walkIf() -> Fanta::AST::NodeIndex {
+    Fanta::AST::IfStm ifStm{};
+    auto openParam = expect(Lexer::TokenType::OpenParam);
+    if (!openParam.has_value()) {
+      return -1;
+    }
+    auto condStatement = walkExpression(Precedence::LOWEST);
+    auto closeParam = expect(Lexer::TokenType::CloseParam);
+    auto body = walkBody();
+    if (accept(Lexer::TokenType::Else)) {
+      auto elseBody = walkBody();
+      ifStm.elbody = elseBody;
+    }
+    ifStm.cond = condStatement;
+    ifStm.body = body;
+    asts.push_back({ifStm, 0});
     return asts.size() - 1;
   }
 
@@ -357,6 +403,8 @@ private:
       return Precedence::ASSIGN_OR_RET;
     case Lexer::TokenType::Return:
       return Precedence::ASSIGN_OR_RET;
+    case Lexer::TokenType::OpenParam:
+      return Precedence::CALL;
     case Lexer::TokenType::Mult:
       return Precedence::MULT;
     case Lexer::TokenType::Minus:
@@ -367,8 +415,16 @@ private:
       return Precedence::LOWEST;
     case Lexer::TokenType::Slash:
       return Precedence::DIVIDE;
-    case Lexer::TokenType::OpenParam:
-      return Precedence::CALL;
+    case Lexer::TokenType::NotEq:
+    case Lexer::TokenType::EqualComp:
+    case Lexer::TokenType::Lesser:
+    case Lexer::TokenType::LesserEq:
+    case Lexer::TokenType::GreaterEq:
+    case Lexer::TokenType::Greater:
+      return Precedence::COMP;
+    case Lexer::TokenType::If:
+    case Lexer::TokenType::Else:
+      return Precedence::IFELSE;
     default:
       return Precedence::LOWEST;
     }
