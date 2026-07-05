@@ -45,8 +45,8 @@ Rather than double a double Branch of either zero is set or carry is set
 
 So this leaves us with:
 
-- >= : CMP + Bmi 
-- > : CMP + Bnc
+- \>= : CMP + Bmi 
+- \> : CMP + Bnc
 - == : CMP + Bne
 - != : CMP + Beq
 - <= : CMP + Bec
