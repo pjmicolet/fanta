@@ -237,5 +237,6 @@ using MovImm = OpMov<DecodeDest, DecodeImm>;
 using Beq = Branch<CPU::FLAG::ZERO, false>;
 using Bne = Branch<CPU::FLAG::ZERO, true>;
 using Bec = Branch<CPU::FLAG::CARRY, false>;
+using Bnc = Branch<CPU::FLAG::CARRY, true>;
 using Bmi = Branch<CPU::FLAG::NEGATIVE, false>;
 using Bpl = Branch<CPU::FLAG::NEGATIVE, true>;

@@ -52,6 +52,7 @@ auto CPU::run_cycle() -> void {
     EXEC_INST(0x1D, Push)
     EXEC_INST(0x1E, Pop)
     EXEC_INST(0x1F, Cip)
+    EXEC_INST(0x20, Bnc)
   }
   inst_count++;
 }
