@@ -102,6 +102,10 @@ struct Parser {
       return "<";
     case Lexer::TokenType::NotEq:
       return "!=";
+    case Lexer::TokenType::And:
+      return "&&";
+    case Lexer::TokenType::Or:
+      return "||";
     default:
       return "Unknown";
     }
@@ -180,9 +184,10 @@ private:
     LOWEST = 0,
     IFELSE = 1,
     ASSIGN_OR_RET = 2,
-    SUM = 3,
-    MINUS = 4,
-    MULT = 5,
+    LOGIC = 3,
+    SUM = 4,
+    MINUS = 5,
+    MULT = 6, // Should collapse mult-divide to one
     DIVIDE = 6,
     COMP = 7,
     CALL = 8,
@@ -266,6 +271,8 @@ private:
     return asts.size() - 1;
   }
 
+  auto walkFor() -> Fanta::AST::NodeIndex { return asts.size() - 1; }
+
   auto walkBody() -> Fanta::AST::NodeIndex {
     auto start = expect(Lexer::TokenType::OpenBrace);
     Fanta::AST::FunctionBody body;
@@ -338,7 +345,6 @@ private:
    */
   auto walkExpression(Precedence p) -> Fanta::AST::NodeIndex {
     auto prefix = walkPrefix();
-
     while (p < getPrecedence(currentToken.t)) {
       auto current = currentToken;
       nextToken();
@@ -431,6 +437,9 @@ private:
     case Lexer::TokenType::If:
     case Lexer::TokenType::Else:
       return Precedence::IFELSE;
+    case Lexer::TokenType::And:
+    case Lexer::TokenType::Or:
+      return Precedence::LOGIC;
     default:
       return Precedence::LOWEST;
     }

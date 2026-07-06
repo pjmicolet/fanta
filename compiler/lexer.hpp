@@ -46,6 +46,10 @@ struct Lexer {
     GreaterEq,
     LesserEq,
     NotEq,
+    For,
+    Or,
+    And,
+    Not,
   };
 
   struct Token {
@@ -98,6 +102,9 @@ private:
                    cursor_};
     if (lexeme == "return")
       return Token{TokenType::Return, lexeme, 0 /*TODO: Add line*/, start,
+                   cursor_};
+    if (lexeme == "for")
+      return Token{TokenType::For, lexeme, 0 /*TODO: Add line*/, start,
                    cursor_};
     if (isType(lexeme))
       return Token{TokenType::Type, lexeme, 0, start, cursor_};
@@ -183,6 +190,26 @@ private:
         auto start = cursor_;
         cursor_++;
         return Token{TokenType::NotEq, body_.substr(start, 2), 0, start,
+                     cursor_++};
+      }
+      return Token{TokenType::Not, body_.substr(cursor_, 1), 0, cursor_,
+                   cursor_++};
+    }
+    case '&': {
+      auto next = peek();
+      if (next == '&') {
+        auto start = cursor_;
+        cursor_++;
+        return Token{TokenType::And, body_.substr(start, 2), 0, start,
+                     cursor_++};
+      }
+    }
+    case '|': {
+      auto next = peek();
+      if (next == '|') {
+        auto start = cursor_;
+        cursor_++;
+        return Token{TokenType::Or, body_.substr(start, 2), 0, start,
                      cursor_++};
       }
     }
