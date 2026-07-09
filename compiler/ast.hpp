@@ -62,10 +62,17 @@ struct IfStm {
   std::optional<NodeIndex> elbody;
 };
 
+struct For {
+  NodeIndex init;
+  NodeIndex comp;
+  NodeIndex incr;
+  NodeIndex body;
+};
+
 using AstNodeType =
     std::variant<BinaryOperator, IntLiteral, Identifier, VariableDecl,
                  FunctionCall, FunctionDef, FunctionParamDef, FunctionBody,
-                 ReturnVal, IfStm>;
+                 ReturnVal, IfStm, For>;
 
 struct AstNode {
   AstNodeType t;

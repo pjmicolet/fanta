@@ -35,6 +35,9 @@ struct LocalVarInfo {
 
 struct LocalTable {
 
+  LocalTable(std::string funcName)
+      : funcName(funcName), numberOfTemps(0), labelCount(0) {};
+
   auto allocateAnonymous() -> TempReg { return numberOfTemps++; }
 
   auto allocateNamed(std::string_view vname, std::string_view type) -> TempReg {
@@ -43,9 +46,15 @@ struct LocalTable {
     return numberOfTemps++;
   }
 
+  auto generateNewLabel() -> std::string {
+    return funcName + "_" + std::to_string(labelCount++);
+  }
+
   std::unordered_map<std::string_view, LocalVarInfo> namedVars;
 
 private:
+  std::string funcName;
+  int labelCount = 0;
   TempReg numberOfTemps;
 };
 

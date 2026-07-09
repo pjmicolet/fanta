@@ -71,6 +71,10 @@ auto getopName(const InstOp op) -> std::string {
     return "Push";
   if (op == 0x1E)
     return "Pop";
+  if (op == 0x1F)
+    return "Cip";
+  if (op == 0x20)
+    return "Bnc";
   return "Nop";
 }
 
@@ -137,6 +141,10 @@ auto numberOfSources(const InstOp op) -> int {
     return 1;
   if (op == 0x1E)
     return 1;
+  if (op == 0x1F)
+    return 1;
+  if (op == 0x20)
+    return 0;
   return 0;
 }
 
@@ -180,6 +188,9 @@ auto printIR(const IR &irlisting) -> void {
                 } else {
                   std::println("    CALL {}", cfunc.name);
                 }
+              },
+              [&](const IRLabel &label) {
+                std::println("LABEL={}", label.name);
               },
               [&](const LocalGlobalBase &base) {},
           },

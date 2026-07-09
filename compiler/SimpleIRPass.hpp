@@ -30,6 +30,8 @@ private:
       -> void;
   auto emitCall(const Parser &p, const AST::FunctionCall &node, IRListing &ir,
                 const GlobalTable &gt, LocalTable &lt) -> void;
+  auto emitIfCond(const Parser &p, const AST::IfStm &ifStm, IRListing &ir,
+                  const GlobalTable &gt, LocalTable &lt) -> void;
   uint32_t globalOffsets = 0;
 };
 

@@ -35,11 +35,17 @@ struct CallFunc {
   std::optional<Operand> dest; // some calls are void
 };
 
+// Useful for if statements, we add a label after the instructions of the if
+// body so that we can later calculate the jump
+struct IRLabel {
+  std::string name;
+};
+
 struct LocalGlobalBase {
   Operand dest;
 };
 
-using IRInst = std::variant<IROp, CallFunc, LocalGlobalBase>;
+using IRInst = std::variant<IROp, CallFunc, LocalGlobalBase, IRLabel>;
 
 using IRListing = std::vector<IRInst>;
 

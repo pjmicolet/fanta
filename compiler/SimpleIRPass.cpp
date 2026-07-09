@@ -38,7 +38,7 @@ auto SimpleIRPass::emitGlobalVariableIR(const Parser &p,
     -> void {
   auto &varName = decl.name;
   GlobalVarInfo info{};
-  LocalTable lt{};
+  LocalTable lt{std::string(varName)};
   auto dest = lt.allocateAnonymous();
   if (gt.contains(varName)) {
     info = std::get<GlobalVarInfo>(gt[varName]);
@@ -66,7 +66,7 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
   const auto bodyNode =
       std::get<AST::FunctionBody>(p.getNodeAtIndex(fdef.body).t);
 
-  LocalTable lt{};
+  LocalTable lt{std::string(fdef.name)};
   FunctionIR func{};
   auto &ir = func.insts;
 
@@ -199,9 +199,36 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
               ir.push_back(restoreStack);
             }
           },
+          [&](const AST::IfStm &ifStm) {},
           [&](const auto &other) {},
       },
       node.t);
+}
+
+enum BranchType { BEQ, BNE, BEC, BMI, BPL, BNC };
+
+// auto compToBtype(TokenType tt) -> BranchType {}
+
+auto SimpleIRPass::emitIfCond(const Parser &p, const AST::IfStm &ifStm,
+                              IRListing &ir, const GlobalTable &gt,
+                              LocalTable &lt) -> void {
+  auto jumpLabel = lt.generateNewLabel();
+  std::visit(overloaded{
+                 [&](const AST::BinaryOperator &bcall) {
+                   // the top token defines our branch type
+                 },
+                 [&](const auto &other) {},
+             },
+             p.getNodeAtIndex(ifStm.cond).t);
+  // PUSH BACK JUMP WITH LABEL
+
+  auto body = p.getNodeAtIndex(ifStm.body).t;
+
+  // emit body emit(p, body, ir, gt, lt);
+  ir.push_back(IRLabel{jumpLabel});
+  if (ifStm.elbody) {
+    // emitElBody
+  }
 }
 
 auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
