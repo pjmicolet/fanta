@@ -14,47 +14,51 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
   fir.insts.clear();
   for (auto &ir : function.insts) {
     std::visit(
-        overloaded{[&](const IROp &op) {
-                     IROp assignedOp = op;
-                     if (op.source1.isVirtual) {
-                       assignedOp.source1.val =
-                           getNextAvailable(fir, op.source1.val, StoreAndLoad);
-                       assignedOp.source1.isVirtual = false;
-                     }
-                     if (op.source2.isVirtual) {
-                       assignedOp.source2.val =
-                           getNextAvailable(fir, op.source2.val, StoreAndLoad);
-                       assignedOp.source2.isVirtual = false;
-                     }
-                     if (op.destination.isVirtual) {
-                       auto mechanism = op.opcode == Info::Instructions::PUSH
-                                            ? StoreAndLoad
-                                            : Store;
-                       assignedOp.destination.val =
-                           getNextAvailable(fir, op.destination.val, mechanism);
-                       assignedOp.destination.isVirtual = false;
-                     }
-                     fir.insts.push_back(assignedOp);
-                   },
-                   [&](const CallFunc &cf) {
-                     CallFunc assignedCf = cf;
-                     if (cf.dest) {
-                       assignedCf.dest->val =
-                           getNextAvailable(fir, cf.dest->val, StoreAndLoad);
-                       assignedCf.dest->isVirtual = false;
-                     }
-                     fir.insts.push_back(assignedCf);
-                   },
-                   [&](const LocalGlobalBase &lgb) {
-                     LocalGlobalBase assignedLgb = lgb;
-                     if (assignedLgb.dest.isVirtual) {
-                       assignedLgb.dest.val = getNextAvailable(
-                           fir, assignedLgb.dest.val, StoreAndLoad);
-                       assignedLgb.dest.isVirtual = false;
-                     }
-                     fir.insts.push_back(assignedLgb);
-                   },
-                   [](const auto &other) {}},
+        overloaded{
+            [&](const IROp &op) {
+              IROp assignedOp = op;
+              if (op.source1.isVirtual) {
+                assignedOp.source1.val =
+                    getNextAvailable(fir, op.source1.val, StoreAndLoad);
+                assignedOp.source1.isVirtual = false;
+              }
+              if (op.source2.isVirtual) {
+                assignedOp.source2.val =
+                    getNextAvailable(fir, op.source2.val, StoreAndLoad);
+                assignedOp.source2.isVirtual = false;
+              }
+              if (op.destination.isVirtual) {
+                auto mechanism = op.opcode == Info::Instructions::PUSH
+                                     ? StoreAndLoad
+                                     : Store;
+                assignedOp.destination.val =
+                    getNextAvailable(fir, op.destination.val, mechanism);
+                assignedOp.destination.isVirtual = false;
+              }
+              fir.insts.push_back(assignedOp);
+            },
+            [&](const CallFunc &cf) {
+              CallFunc assignedCf = cf;
+              if (cf.dest) {
+                assignedCf.dest->val =
+                    getNextAvailable(fir, cf.dest->val, StoreAndLoad);
+                assignedCf.dest->isVirtual = false;
+              }
+              fir.insts.push_back(assignedCf);
+            },
+            [&](const LocalGlobalBase &lgb) {
+              LocalGlobalBase assignedLgb = lgb;
+              if (assignedLgb.dest.isVirtual) {
+                assignedLgb.dest.val =
+                    getNextAvailable(fir, assignedLgb.dest.val, StoreAndLoad);
+                assignedLgb.dest.isVirtual = false;
+              }
+              fir.insts.push_back(assignedLgb);
+            },
+            [&](const Branch &bop) { fir.insts.push_back(bop); },
+            [&](const Return &ret) { fir.insts.push_back(ret); },
+            [&](const IRLabel &irlabel) { fir.insts.push_back(irlabel); },
+            [](const auto &other) {}},
         ir);
   }
 

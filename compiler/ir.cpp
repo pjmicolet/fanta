@@ -192,6 +192,11 @@ auto printIR(const IR &irlisting) -> void {
               [&](const IRLabel &label) {
                 std::println("LABEL={}", label.name);
               },
+              [&](const Branch &branch) {
+                std::println("    {} {}", getopName(branch.opcode),
+                             branch.label);
+              },
+              [&](const Return &ret) { std::println("    RET"); },
               [&](const LocalGlobalBase &base) {},
           },
           ir);

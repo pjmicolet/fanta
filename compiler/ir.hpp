@@ -23,6 +23,9 @@ struct IROp {
   Source2Type s2type;
 };
 
+// Empty but we know what to do
+struct Return {};
+
 struct FuncParam {
   std::string_view name;
   Operand reg;
@@ -35,6 +38,11 @@ struct CallFunc {
   std::optional<Operand> dest; // some calls are void
 };
 
+struct Branch {
+  InstOp opcode;
+  std::string label;
+};
+
 // Useful for if statements, we add a label after the instructions of the if
 // body so that we can later calculate the jump
 struct IRLabel {
@@ -45,7 +53,8 @@ struct LocalGlobalBase {
   Operand dest;
 };
 
-using IRInst = std::variant<IROp, CallFunc, LocalGlobalBase, IRLabel>;
+using IRInst =
+    std::variant<IROp, CallFunc, LocalGlobalBase, IRLabel, Branch, Return>;
 
 using IRListing = std::vector<IRInst>;
 

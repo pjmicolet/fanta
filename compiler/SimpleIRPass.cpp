@@ -80,10 +80,13 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
                             emitVariableIR(p, vdec, ir, gt, lt);
                           },
                           [&](const AST::ReturnVal &rval) {
-                            emitReturnIR(p, rval, ir, gt, lt);
+                            emitReturnPreludeIR(p, rval, ir, gt, lt);
                           },
                           [&](const AST::FunctionCall &fcall) {
                             emitCall(p, fcall, ir, gt, lt);
+                          },
+                          [&](const AST::IfStm &ifStm) {
+                            emitIf(p, ifStm, ir, gt, lt);
                           },
                           [&](const auto &other) {}},
                p.getNodeAtIndex(idx).t);
@@ -199,30 +202,123 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
               ir.push_back(restoreStack);
             }
           },
-          [&](const AST::IfStm &ifStm) {},
           [&](const auto &other) {},
       },
       node.t);
 }
 
-enum BranchType { BEQ, BNE, BEC, BMI, BPL, BNC };
+auto generateAnd() -> void {}
 
-// auto compToBtype(TokenType tt) -> BranchType {}
+auto generateOr() -> void {}
 
-auto SimpleIRPass::emitIfCond(const Parser &p, const AST::IfStm &ifStm,
-                              IRListing &ir, const GlobalTable &gt,
-                              LocalTable &lt) -> void {
+auto isComparator(const Lexer::TokenType ttype) -> bool {
+  return ttype == Lexer::TokenType::Greater ||
+         ttype == Lexer::TokenType::Lesser ||
+         ttype == Lexer::TokenType::GreaterEq ||
+         ttype == Lexer::TokenType::EqualComp ||
+         ttype == Lexer::TokenType::NotEq ||
+         ttype == Lexer::TokenType::LesserEq;
+}
+
+auto generateJump(IRListing &ir, const Lexer::TokenType compType,
+                  std::string &jmpLabel) -> void {
+  switch (compType) {
+  case Lexer::TokenType::Greater: {
+    Branch op{};
+    op.opcode = Info::Instructions::BNC;
+    op.label = jmpLabel;
+    ir.push_back(op);
+    break;
+  }
+  case Lexer::TokenType::Lesser: {
+    Branch op{};
+    op.opcode = Info::Instructions::BPL;
+    op.label = jmpLabel;
+    ir.push_back(op);
+    break;
+  }
+  case Lexer::TokenType::GreaterEq: {
+    Branch op{};
+    op.opcode = Info::Instructions::BMI;
+    op.label = jmpLabel;
+    ir.push_back(op);
+    break;
+  }
+  case Lexer::TokenType::EqualComp: {
+    Branch op{};
+    op.opcode = Info::Instructions::BNE;
+    op.label = jmpLabel;
+    ir.push_back(op);
+    break;
+  }
+  case Lexer::TokenType::NotEq: {
+    Branch op{};
+    op.opcode = Info::Instructions::BEQ;
+    op.label = jmpLabel;
+    ir.push_back(op);
+    break;
+  }
+  case Lexer::TokenType::LesserEq: {
+    Branch op{};
+    op.opcode = Info::Instructions::BEC;
+    op.label = jmpLabel;
+    ir.push_back(op);
+    break;
+  }
+  default:
+    return;
+  }
+}
+
+auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
+                          IRListing &ir, const GlobalTable &gt, LocalTable &lt)
+    -> void {
   auto jumpLabel = lt.generateNewLabel();
   std::visit(overloaded{
                  [&](const AST::BinaryOperator &bcall) {
                    // the top token defines our branch type
+                   auto ttype = bcall.type;
+                   if (isComparator(ttype)) {
+                     auto lhsVal = lt.allocateAnonymous();
+                     emitExpression(p, p.getNodeAtIndex(bcall.lhsOp), ir, gt,
+                                    lt, lhsVal);
+                     auto rhsVal = lt.allocateAnonymous();
+                     emitExpression(p, p.getNodeAtIndex(bcall.rhsOp), ir, gt,
+                                    lt, rhsVal);
+                     IROp cmp{};
+                     cmp.opcode = Info::Instructions::CMP_REG;
+                     cmp.destination = {lhsVal, true}; // CMP has no dest
+                     cmp.source2 = {rhsVal, true};
+                     cmp.s2type = Register;
+                     ir.push_back(cmp);
+                     generateJump(ir, ttype, jumpLabel);
+                   }
                  },
                  [&](const auto &other) {},
              },
              p.getNodeAtIndex(ifStm.cond).t);
   // PUSH BACK JUMP WITH LABEL
 
-  auto body = p.getNodeAtIndex(ifStm.body).t;
+  auto body = std::get<AST::FunctionBody>(p.getNodeAtIndex(ifStm.body).t);
+
+  for (const auto &idx : body.expressions) {
+    std::visit(overloaded{[&](const AST::BinaryOperator &bOp) {
+                            emitBinaryOpIR(bOp, ir, lt);
+                          },
+                          [&](const AST::VariableDecl &vdec) {
+                            emitVariableIR(p, vdec, ir, gt, lt);
+                          },
+                          [&](const AST::ReturnVal &rval) {
+                            emitReturnPreludeIR(p, rval, ir, gt, lt);
+                            Return ret{};
+                            ir.push_back(ret);
+                          },
+                          [&](const AST::FunctionCall &fcall) {
+                            emitCall(p, fcall, ir, gt, lt);
+                          },
+                          [&](const auto &other) {}},
+               p.getNodeAtIndex(idx).t);
+  }
 
   // emit body emit(p, body, ir, gt, lt);
   ir.push_back(IRLabel{jumpLabel});
@@ -261,9 +357,10 @@ auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
 
 // We don't emit the ret here as the ret will need to be inserted in all
 // cases and we need to insert the stack pop later
-auto SimpleIRPass::emitReturnIR(const Parser &p, const AST::ReturnVal &vdec,
-                                IRListing &ir, const GlobalTable &gt,
-                                LocalTable &lt) -> void {
+auto SimpleIRPass::emitReturnPreludeIR(const Parser &p,
+                                       const AST::ReturnVal &vdec,
+                                       IRListing &ir, const GlobalTable &gt,
+                                       LocalTable &lt) -> void {
   auto varTReg = lt.allocateAnonymous();
   const auto &defineNode = p.getNodeAtIndex(vdec.returnVal);
   emitExpression(p, defineNode, ir, gt, lt, varTReg);

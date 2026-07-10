@@ -185,11 +185,11 @@ private:
     IFELSE = 1,
     ASSIGN_OR_RET = 2,
     LOGIC = 3,
-    SUM = 4,
-    MINUS = 5,
-    MULT = 6, // Should collapse mult-divide to one
-    DIVIDE = 6,
-    COMP = 7,
+    COMP = 4,
+    SUM = 5,
+    MINUS = 6,
+    MULT = 7, // Should collapse mult-divide to one
+    DIVIDE = 7,
     CALL = 8,
   };
 

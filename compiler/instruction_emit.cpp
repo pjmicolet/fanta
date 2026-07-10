@@ -43,9 +43,16 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
       throw std::runtime_error("Unknown symbol: " + std::string{linkName});
     }
     const auto &func = il[idx];
-    if ((func >> 26 & 0xFF) == 0x15) {
+    const auto opcode = func >> 26 & 0xFF;
+    if ((opcode == Info::Instructions::CALL) ||
+        (opcode == Info::Instructions::BNC) ||
+        (opcode == Info::Instructions::BEQ) ||
+        (opcode == Info::Instructions::BEC) ||
+        (opcode == Info::Instructions::BNE) ||
+        (opcode == Info::Instructions::BPL) ||
+        (opcode == Info::Instructions::BMI)) {
       auto newAddr = (resolvedAddresses[linkName] - (idx)) * 4;
-      auto newFunc = Instructions::Emitter::single_inst(0x15, newAddr);
+      auto newFunc = Instructions::Emitter::single_inst(opcode, newAddr);
       il[idx] = newFunc;
     } // it's a call
   }
@@ -111,26 +118,56 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
 
   for (auto &ir : fir.insts) {
     std::visit(
-        overloaded{[&](const IROp &op) { emitInst(op, gt, il); },
-                   [&](const CallFunc &op) {
-                     il.push_back(Instructions::Emitter::single_inst(
-                         Info::Instructions::CALL,
-                         -1)); // We probably don't know the callsite yet.
-                     missingLinks.push_back({il.size() - 1, op.name});
-                     if (op.dest) {
-                       il.push_back(Instructions::Emitter::two_op(
-                           Info::Instructions::MOV_REG, op.dest->val, 0));
-                     }
-                   },
-                   [&](const LocalGlobalBase &lgb) {
-                     auto movGlobal = Instructions::Emitter::two_op_imm(
-                         Info::Instructions::MOV_IMM, lgb.dest.val, 0);
-                     il.push_back(movGlobal);
-                     globalBaseMovs.push_back(il.size() - 1);
-                   },
-                   [](const auto &other) {}},
+        overloaded{
+            [&](const IROp &op) { emitInst(op, gt, il); },
+            [&](const CallFunc &op) {
+              il.push_back(Instructions::Emitter::single_inst(
+                  Info::Instructions::CALL,
+                  -1)); // We probably don't know the callsite yet.
+              missingLinks.push_back({il.size() - 1, op.name});
+              if (op.dest) {
+                il.push_back(Instructions::Emitter::two_op(
+                    Info::Instructions::MOV_REG, op.dest->val, 0));
+              }
+            },
+            [&](const Branch &bop) {
+              il.push_back(Instructions::Emitter::single_inst(bop.opcode, -1));
+              missingLinks.push_back({il.size() - 1, bop.label});
+            },
+            [&](const Return &ret) {
+              // This sets us back to before any allocated vars in the stack
+              // pointer
+              if (maxOffset > 0) {
+                il.push_back(Instructions::Emitter::three_op_imm(
+                    Info::Instructions::ADD_IMM, Info::Registers::SP,
+                    Info::Registers::SP, maxOffset));
+              }
+
+              // Now issue the pop of registers
+              for (const auto &reg : std::views::reverse(fir.calleeRegs)) {
+                il.push_back(Instructions::Emitter::single_inst(
+                    Info::Instructions::POP, reg.val));
+              }
+              // Pop the caller FP
+              il.push_back(Instructions::Emitter::single_inst(
+                  Info::Instructions::POP, Info::Registers::FP));
+              // Call ret (TODO: Currently Ret doesn't push values or anything
+              // so we should have to do some work to push values to R0)
+              il.push_back(Instructions::Emitter::single_inst(
+                  Info::Instructions::RET, 0));
+            },
+            [&](const LocalGlobalBase &lgb) {
+              auto movGlobal = Instructions::Emitter::two_op_imm(
+                  Info::Instructions::MOV_IMM, lgb.dest.val, 0);
+              il.push_back(movGlobal);
+              globalBaseMovs.push_back(il.size() - 1);
+            },
+            [&](const IRLabel &label) {
+              resolvedAddresses[label.name] = il.size();
+            },
+            [](const auto &other) {}},
         ir);
-  }
+  } // namespace Fanta
 
   // This sets us back to before any allocated vars in the stack pointer
   if (maxOffset > 0) {
@@ -217,6 +254,7 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,
     THREE_IMM(Info::Instructions::XOR_IMM)
     SINGLE(Info::Instructions::PUSH)
     SINGLE(Info::Instructions::POP)
+    SINGLE(Info::Instructions::BNC)
   }
 }
 

@@ -36,6 +36,8 @@ constexpr static uint32_t XOR_REG = 0x1B;
 constexpr static uint32_t XOR_IMM = 0x1C;
 constexpr static uint32_t PUSH = 0x1D;
 constexpr static uint32_t POP = 0x1E;
+constexpr static uint32_t CIP = 0x1F;
+constexpr static uint32_t BNC = 0x20;
 } // namespace Instructions
 
 namespace Registers {
