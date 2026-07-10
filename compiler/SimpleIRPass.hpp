@@ -15,11 +15,13 @@ private:
   auto emitVariableIR(const Parser &p, const AST::VariableDecl &decl,
                       IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> void;
-  auto emitReturnPreludeIR(const Parser &p, const AST::ReturnVal &decl,
-                           IRListing &ir, const GlobalTable &gt, LocalTable &lt)
+  auto emitReturnIR(const Parser &p, const AST::ReturnVal &decl,
+                    IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> void;
   auto emitFunctionDef(const Parser &p, const AST::FunctionDef &decl, IR &ir,
                        const GlobalTable &gt) -> void;
+  auto emitStatement(const Parser &p, const AST::AstNode &node, IRListing &ir,
+                     const GlobalTable &gt, LocalTable &lt) -> void;
   auto emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,
                       LocalTable &lt) -> void;
   auto emitGlobalNameBase(IRListing &ir, const GlobalTable &gt, LocalTable &lt)

@@ -73,25 +73,34 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
   func.name = fdef.name;
   emitFunctionPrelude(p, fdef, func, lt);
   for (const auto &idx : bodyNode.expressions) {
-    std::visit(overloaded{[&](const AST::BinaryOperator &bOp) {
-                            emitBinaryOpIR(bOp, ir, lt);
-                          },
-                          [&](const AST::VariableDecl &vdec) {
-                            emitVariableIR(p, vdec, ir, gt, lt);
-                          },
-                          [&](const AST::ReturnVal &rval) {
-                            emitReturnPreludeIR(p, rval, ir, gt, lt);
-                          },
-                          [&](const AST::FunctionCall &fcall) {
-                            emitCall(p, fcall, ir, gt, lt);
-                          },
-                          [&](const AST::IfStm &ifStm) {
-                            emitIf(p, ifStm, ir, gt, lt);
-                          },
-                          [&](const auto &other) {}},
-               p.getNodeAtIndex(idx).t);
+    emitStatement(p, p.getNodeAtIndex(idx), ir, gt, lt);
   }
   irDef.functions.push_back(func);
+}
+
+// Lowers a single function-body-level statement. Shared by emitFunctionDef's
+// top-level body and emitIf's body/else blocks so every statement kind is
+// only handled in one place.
+auto SimpleIRPass::emitStatement(const Parser &p, const AST::AstNode &node,
+                                 IRListing &ir, const GlobalTable &gt,
+                                 LocalTable &lt) -> void {
+  std::visit(overloaded{[&](const AST::BinaryOperator &bOp) {
+                          emitBinaryOpIR(bOp, ir, lt);
+                        },
+                        [&](const AST::VariableDecl &vdec) {
+                          emitVariableIR(p, vdec, ir, gt, lt);
+                        },
+                        [&](const AST::ReturnVal &rval) {
+                          emitReturnIR(p, rval, ir, gt, lt);
+                        },
+                        [&](const AST::FunctionCall &fcall) {
+                          emitCall(p, fcall, ir, gt, lt);
+                        },
+                        [&](const AST::IfStm &ifStm) {
+                          emitIf(p, ifStm, ir, gt, lt);
+                        },
+                        [&](const auto &other) {}},
+             node.t);
 }
 
 auto getOpcodeFromString(Lexer::TokenType t, bool isReg) -> uint32_t {
@@ -302,22 +311,7 @@ auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
   auto body = std::get<AST::FunctionBody>(p.getNodeAtIndex(ifStm.body).t);
 
   for (const auto &idx : body.expressions) {
-    std::visit(overloaded{[&](const AST::BinaryOperator &bOp) {
-                            emitBinaryOpIR(bOp, ir, lt);
-                          },
-                          [&](const AST::VariableDecl &vdec) {
-                            emitVariableIR(p, vdec, ir, gt, lt);
-                          },
-                          [&](const AST::ReturnVal &rval) {
-                            emitReturnPreludeIR(p, rval, ir, gt, lt);
-                            Return ret{};
-                            ir.push_back(ret);
-                          },
-                          [&](const AST::FunctionCall &fcall) {
-                            emitCall(p, fcall, ir, gt, lt);
-                          },
-                          [&](const auto &other) {}},
-               p.getNodeAtIndex(idx).t);
+    emitStatement(p, p.getNodeAtIndex(idx), ir, gt, lt);
   }
 
   // emit body emit(p, body, ir, gt, lt);
@@ -355,12 +349,12 @@ auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
   }
 }
 
-// We don't emit the ret here as the ret will need to be inserted in all
-// cases and we need to insert the stack pop later
-auto SimpleIRPass::emitReturnPreludeIR(const Parser &p,
-                                       const AST::ReturnVal &vdec,
-                                       IRListing &ir, const GlobalTable &gt,
-                                       LocalTable &lt) -> void {
+// Computes the return value into R0, then pushes a Return marker so
+// instruction_emit generates the epilogue+RET right here rather than falling
+// through to whatever statement comes next.
+auto SimpleIRPass::emitReturnIR(const Parser &p, const AST::ReturnVal &vdec,
+                                IRListing &ir, const GlobalTable &gt,
+                                LocalTable &lt) -> void {
   auto varTReg = lt.allocateAnonymous();
   const auto &defineNode = p.getNodeAtIndex(vdec.returnVal);
   emitExpression(p, defineNode, ir, gt, lt, varTReg);
@@ -370,6 +364,7 @@ auto SimpleIRPass::emitReturnPreludeIR(const Parser &p,
   movRetToR0.s2type = Register;
   movRetToR0.opcode = Info::Instructions::MOV_REG;
   ir.push_back(movRetToR0);
+  ir.push_back(Return{});
 }
 
 auto SimpleIRPass::emitVariableIR(const Parser &p,

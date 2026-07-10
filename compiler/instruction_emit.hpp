@@ -15,6 +15,8 @@ private:
   auto outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                       InstructionList &il) -> void;
   auto emitInst(const IROp &op, GlobalTable &gt, InstructionList &il) -> void;
+  auto emitEpilogue(const FunctionIR &fir, uint32_t maxOffset,
+                    InstructionList &il) -> void;
 
   auto link(InstructionList &il) -> void;
 

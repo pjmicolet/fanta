@@ -134,28 +134,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
               il.push_back(Instructions::Emitter::single_inst(bop.opcode, -1));
               missingLinks.push_back({il.size() - 1, bop.label});
             },
-            [&](const Return &ret) {
-              // This sets us back to before any allocated vars in the stack
-              // pointer
-              if (maxOffset > 0) {
-                il.push_back(Instructions::Emitter::three_op_imm(
-                    Info::Instructions::ADD_IMM, Info::Registers::SP,
-                    Info::Registers::SP, maxOffset));
-              }
-
-              // Now issue the pop of registers
-              for (const auto &reg : std::views::reverse(fir.calleeRegs)) {
-                il.push_back(Instructions::Emitter::single_inst(
-                    Info::Instructions::POP, reg.val));
-              }
-              // Pop the caller FP
-              il.push_back(Instructions::Emitter::single_inst(
-                  Info::Instructions::POP, Info::Registers::FP));
-              // Call ret (TODO: Currently Ret doesn't push values or anything
-              // so we should have to do some work to push values to R0)
-              il.push_back(Instructions::Emitter::single_inst(
-                  Info::Instructions::RET, 0));
-            },
+            [&](const Return &ret) { emitEpilogue(fir, maxOffset, il); },
             [&](const LocalGlobalBase &lgb) {
               auto movGlobal = Instructions::Emitter::two_op_imm(
                   Info::Instructions::MOV_IMM, lgb.dest.val, 0);
@@ -167,8 +146,15 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
             },
             [](const auto &other) {}},
         ir);
-  } // namespace Fanta
+  }
 
+  // Falls off the end without an explicit return: still needs the epilogue.
+  emitEpilogue(fir, maxOffset, il);
+}
+
+auto InstructionEmitter::emitEpilogue(const FunctionIR &fir,
+                                      uint32_t maxOffset,
+                                      InstructionList &il) -> void {
   // This sets us back to before any allocated vars in the stack pointer
   if (maxOffset > 0) {
     il.push_back(Instructions::Emitter::three_op_imm(
