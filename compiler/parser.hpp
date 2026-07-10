@@ -187,9 +187,9 @@ private:
     LOGIC = 3,
     COMP = 4,
     SUM = 5,
-    MINUS = 6,
-    MULT = 7, // Should collapse mult-divide to one
-    DIVIDE = 7,
+    MINUS = 5, // Same precedence as SUM (left-associative +/-)
+    MULT = 6, // Should collapse mult-divide to one
+    DIVIDE = 6,
     CALL = 8,
   };
 

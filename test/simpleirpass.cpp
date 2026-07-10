@@ -17,9 +17,10 @@ TEST_CASE("SimpleIRPass & Allocator End-to-End Test") {
   Fanta::SimpleIRPass pass;
 
   auto actualIR = pass.outputIR(p, gt);
-  REQUIRE_TRUE(actualIR.functions.size() == 1);
+  // outputIR always prepends an __init function ahead of user functions.
+  REQUIRE_TRUE(actualIR.functions.size() == 2);
 
-  const auto &actualFunc = actualIR.functions[0];
+  const auto &actualFunc = actualIR.functions[1];
   REQUIRE_TRUE(actualFunc.insts.size() == 7);
   printIR(actualIR);
 
@@ -58,13 +59,14 @@ TEST_CASE("Register Spilling Under Register Pressure") {
   Fanta::SimpleIRPass pass;
 
   auto actualIR = pass.outputIR(p, gt);
-  REQUIRE_TRUE(actualIR.functions.size() == 1);
+  // outputIR always prepends an __init function ahead of user functions.
+  REQUIRE_TRUE(actualIR.functions.size() == 2);
 
   std::println("\n--- Spilling Test: Virtual IR ---");
   printIR(actualIR);
 
   Fanta::Allocator alloc{};
-  const auto &allocatedFunc = alloc.assignFunc(actualIR.functions[0]);
+  const auto &allocatedFunc = alloc.assignFunc(actualIR.functions[1]);
 
   std::println("\n--- Spilling Test: Allocated IR ---");
   Fanta::IR dmp{{allocatedFunc}, {}};
@@ -85,10 +87,11 @@ TEST_CASE("Register Allocation - Basic Reuse and Operand Update") {
   Fanta::SimpleIRPass pass;
 
   auto actualIR = pass.outputIR(p, gt);
-  REQUIRE_TRUE(actualIR.functions.size() == 1);
+  // outputIR always prepends an __init function ahead of user functions.
+  REQUIRE_TRUE(actualIR.functions.size() == 2);
 
   Fanta::Allocator alloc{};
-  const auto &allocatedFunc = alloc.assignFunc(actualIR.functions[0]);
+  const auto &allocatedFunc = alloc.assignFunc(actualIR.functions[1]);
 
   // Check that all operands in instructions have isVirtual == false
   for (const auto &inst : allocatedFunc.insts) {
@@ -138,8 +141,10 @@ TEST_CASE("Register Spilling - Specific Store and Load Verification") {
   Fanta::SimpleIRPass pass;
 
   auto actualIR = pass.outputIR(p, gt);
+  // outputIR always prepends an __init function ahead of user functions.
+  REQUIRE_TRUE(actualIR.functions.size() == 2);
   Fanta::Allocator alloc{};
-  const auto &allocatedFunc = alloc.assignFunc(actualIR.functions[0]);
+  const auto &allocatedFunc = alloc.assignFunc(actualIR.functions[1]);
 
   // Count the number of Store (0x8) and Load (0x9) instructions
   size_t storeCount = 0;
