@@ -166,3 +166,59 @@ TEST_CASE("If Statement - Not Equal") {
   REQUIRE_SAME(1, compileAndRun(ifComparisonProgram("!=", 4, 5)).registers[0]);
   REQUIRE_SAME(0, compileAndRun(ifComparisonProgram("!=", 4, 4)).registers[0]);
 }
+
+TEST_CASE("If/Else - Else Body Actually Executes When Condition Is False") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 3;"
+                     "let b: int = 5;"
+                     "if (a > b) {"
+                     "let x: int = 99;"
+                     "} else {"
+                     "return 2;"
+                     "}"
+                     "return 1;"
+                     "}";
+  REQUIRE_SAME(2, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("If/Else - True Branch Falls Through Past Else When Body Doesn't "
+         "Return") {
+  // Regression test: the if-body ("let x: int = 99;") doesn't return, so
+  // execution must jump past the else body ("return 2;") to the trailing
+  // "return 1;" rather than falling through into the else body.
+  std::string code = "fn main() -> int {"
+                     "let a: int = 5;"
+                     "let b: int = 3;"
+                     "if (a > b) {"
+                     "let x: int = 99;"
+                     "} else {"
+                     "return 2;"
+                     "}"
+                     "return 1;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("If/Else - Nested If With Return Doesn't Confuse Outer Else") {
+  // Regression test: a Return inside a nested if (taken or not) must not
+  // make the outer if think its own body ends in a return. Here the outer
+  // if-body's real tail ("let x: int = 7;") doesn't return, so the outer
+  // else ("return 2;") must still be skipped in favor of the trailing
+  // "return 1;".
+  std::string code = "fn main() -> int {"
+                     "let a: int = 5;"
+                     "let b: int = 3;"
+                     "let c: int = 1;"
+                     "let d: int = 10;"
+                     "if (a > b) {"
+                     "if (c > d) {"
+                     "return 99;"
+                     "}"
+                     "let x: int = 7;"
+                     "} else {"
+                     "return 2;"
+                     "}"
+                     "return 1;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}

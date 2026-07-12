@@ -50,7 +50,9 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
         (opcode == Info::Instructions::BEC) ||
         (opcode == Info::Instructions::BNE) ||
         (opcode == Info::Instructions::BPL) ||
-        (opcode == Info::Instructions::BMI)) {
+        (opcode == Info::Instructions::BMI) ||
+        (opcode == Info::Instructions::JREL) ||
+        (opcode == Info::Instructions::JUMP)) {
       auto newAddr = (resolvedAddresses[linkName] - (idx)) * 4;
       auto newFunc = Instructions::Emitter::single_inst(opcode, newAddr);
       il[idx] = newFunc;
@@ -118,33 +120,33 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
 
   for (auto &ir : fir.insts) {
     std::visit(
-        overloaded{
-            [&](const IROp &op) { emitInst(op, gt, il); },
-            [&](const CallFunc &op) {
-              il.push_back(Instructions::Emitter::single_inst(
-                  Info::Instructions::CALL,
-                  -1)); // We probably don't know the callsite yet.
-              missingLinks.push_back({il.size() - 1, op.name});
-              if (op.dest) {
-                il.push_back(Instructions::Emitter::two_op(
-                    Info::Instructions::MOV_REG, op.dest->val, 0));
-              }
-            },
-            [&](const Branch &bop) {
-              il.push_back(Instructions::Emitter::single_inst(bop.opcode, -1));
-              missingLinks.push_back({il.size() - 1, bop.label});
-            },
-            [&](const Return &ret) { emitEpilogue(fir, maxOffset, il); },
-            [&](const LocalGlobalBase &lgb) {
-              auto movGlobal = Instructions::Emitter::two_op_imm(
-                  Info::Instructions::MOV_IMM, lgb.dest.val, 0);
-              il.push_back(movGlobal);
-              globalBaseMovs.push_back(il.size() - 1);
-            },
-            [&](const IRLabel &label) {
-              resolvedAddresses[label.name] = il.size();
-            },
-            [](const auto &other) {}},
+        overloaded{[&](const IROp &op) { emitInst(op, gt, il); },
+                   [&](const CallFunc &op) {
+                     il.push_back(Instructions::Emitter::single_inst(
+                         Info::Instructions::CALL,
+                         -1)); // We probably don't know the callsite yet.
+                     missingLinks.push_back({il.size() - 1, op.name});
+                     if (op.dest) {
+                       il.push_back(Instructions::Emitter::two_op(
+                           Info::Instructions::MOV_REG, op.dest->val, 0));
+                     }
+                   },
+                   [&](const Branch &bop) {
+                     il.push_back(
+                         Instructions::Emitter::single_inst(bop.opcode, -1));
+                     missingLinks.push_back({il.size() - 1, bop.label});
+                   },
+                   [&](const Return &ret) { emitEpilogue(fir, maxOffset, il); },
+                   [&](const LocalGlobalBase &lgb) {
+                     auto movGlobal = Instructions::Emitter::two_op_imm(
+                         Info::Instructions::MOV_IMM, lgb.dest.val, 0);
+                     il.push_back(movGlobal);
+                     globalBaseMovs.push_back(il.size() - 1);
+                   },
+                   [&](const IRLabel &label) {
+                     resolvedAddresses[label.name] = il.size();
+                   },
+                   [](const auto &other) {}},
         ir);
   }
 
@@ -152,8 +154,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
   emitEpilogue(fir, maxOffset, il);
 }
 
-auto InstructionEmitter::emitEpilogue(const FunctionIR &fir,
-                                      uint32_t maxOffset,
+auto InstructionEmitter::emitEpilogue(const FunctionIR &fir, uint32_t maxOffset,
                                       InstructionList &il) -> void {
   // This sets us back to before any allocated vars in the stack pointer
   if (maxOffset > 0) {

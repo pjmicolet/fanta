@@ -84,23 +84,21 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
 auto SimpleIRPass::emitStatement(const Parser &p, const AST::AstNode &node,
                                  IRListing &ir, const GlobalTable &gt,
                                  LocalTable &lt) -> void {
-  std::visit(overloaded{[&](const AST::BinaryOperator &bOp) {
-                          emitBinaryOpIR(bOp, ir, lt);
-                        },
-                        [&](const AST::VariableDecl &vdec) {
-                          emitVariableIR(p, vdec, ir, gt, lt);
-                        },
-                        [&](const AST::ReturnVal &rval) {
-                          emitReturnIR(p, rval, ir, gt, lt);
-                        },
-                        [&](const AST::FunctionCall &fcall) {
-                          emitCall(p, fcall, ir, gt, lt);
-                        },
-                        [&](const AST::IfStm &ifStm) {
-                          emitIf(p, ifStm, ir, gt, lt);
-                        },
-                        [&](const auto &other) {}},
-             node.t);
+  std::visit(
+      overloaded{
+          [&](const AST::BinaryOperator &bOp) { emitBinaryOpIR(bOp, ir, lt); },
+          [&](const AST::VariableDecl &vdec) {
+            emitVariableIR(p, vdec, ir, gt, lt);
+          },
+          [&](const AST::ReturnVal &rval) {
+            emitReturnIR(p, rval, ir, gt, lt);
+          },
+          [&](const AST::FunctionCall &fcall) {
+            emitCall(p, fcall, ir, gt, lt);
+          },
+          [&](const AST::IfStm &ifStm) { emitIf(p, ifStm, ir, gt, lt); },
+          [&](const auto &other) {}},
+      node.t);
 }
 
 auto getOpcodeFromString(Lexer::TokenType t, bool isReg) -> uint32_t {
@@ -283,6 +281,8 @@ auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
                           IRListing &ir, const GlobalTable &gt, LocalTable &lt)
     -> void {
   auto jumpLabel = lt.generateNewLabel();
+  auto jumpPastEl = lt.generateNewLabel();
+  auto el = ifStm.elbody;
   std::visit(overloaded{
                  [&](const AST::BinaryOperator &bcall) {
                    // the top token defines our branch type
@@ -314,10 +314,26 @@ auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
     emitStatement(p, p.getNodeAtIndex(idx), ir, gt, lt);
   }
 
+  bool hasReturn = std::holds_alternative<Return>(ir.back());
+
+  if (!hasReturn && el) {
+    Branch jmp{};
+    jmp.opcode = Info::Instructions::JREL;
+    jmp.label = jumpPastEl;
+    ir.push_back(jmp);
+  }
+
   // emit body emit(p, body, ir, gt, lt);
   ir.push_back(IRLabel{jumpLabel});
-  if (ifStm.elbody) {
-    // emitElBody
+  if (el) {
+    auto elBody = std::get<AST::FunctionBody>(p.getNodeAtIndex(*el).t);
+    for (const auto &idx : elBody.expressions) {
+      emitStatement(p, p.getNodeAtIndex(idx), ir, gt, lt);
+    }
+  }
+
+  if (!hasReturn && el) {
+    ir.push_back(IRLabel{jumpPastEl});
   }
 }
 
