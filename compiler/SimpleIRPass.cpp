@@ -51,7 +51,7 @@ auto SimpleIRPass::emitGlobalVariableIR(const Parser &p,
   IROp store{};
   store.opcode = Info::Instructions::STORE;
   store.destination = {dest, true};
-  store.source1 = {baseReg, false};
+  store.source1 = {baseReg, true};
   store.source2 = {info.offsetFromBase, false};
   ir.insts.push_back(store);
 }
@@ -74,6 +74,28 @@ auto SimpleIRPass::emitFunctionDef(const Parser &p,
   irDef.functions.push_back(func);
 }
 
+auto SimpleIRPass::emitFor(const Parser &p, const AST::For &forStm,
+                           IRListing &ir, const GlobalTable &gt, LocalTable &lt)
+    -> void {
+  auto exitLabel = lt.generateNewLabel();
+  auto backLabel = lt.generateNewLabel();
+  emitVariableIR(p,
+                 std::get<AST::VariableDecl>(p.getNodeAtIndex(forStm.init).t),
+                 ir, gt, lt);
+
+  ir.push_back(IRLabel{backLabel});
+  emitCondFalse(p, p.getNodeAtIndex(forStm.comp), ir, gt, lt, exitLabel);
+  auto body = std::get<AST::FunctionBody>(p.getNodeAtIndex(forStm.body).t);
+
+  for (const auto &idx : body.expressions) {
+    emitStatement(p, p.getNodeAtIndex(idx), ir, gt, lt);
+  }
+
+  emitStatement(p, p.getNodeAtIndex(forStm.incr), ir, gt, lt);
+  ir.push_back(Branch{Info::Instructions::JREL, backLabel});
+  ir.push_back(IRLabel{exitLabel});
+}
+
 // Lowers a single function-body-level statement. Shared by emitFunctionDef's
 // top-level body and emitIf's body/else blocks so every statement kind is
 // only handled in one place.
@@ -82,7 +104,9 @@ auto SimpleIRPass::emitStatement(const Parser &p, const AST::AstNode &node,
                                  LocalTable &lt) -> void {
   std::visit(
       overloaded{
-          [&](const AST::BinaryOperator &bOp) { emitBinaryOpIR(bOp, ir, lt); },
+          [&](const AST::BinaryOperator &bOp) {
+            emitBinaryOpIR(p, bOp, ir, gt, lt);
+          },
           [&](const AST::VariableDecl &vdec) {
             emitVariableIR(p, vdec, ir, gt, lt);
           },
@@ -93,6 +117,7 @@ auto SimpleIRPass::emitStatement(const Parser &p, const AST::AstNode &node,
             emitCall(p, fcall, ir, gt, lt);
           },
           [&](const AST::IfStm &ifStm) { emitIf(p, ifStm, ir, gt, lt); },
+          [&](const AST::For &forStm) { emitFor(p, forStm, ir, gt, lt); },
           [&](const auto &other) {}},
       node.t);
 }
@@ -409,7 +434,7 @@ auto SimpleIRPass::emitCondFalse(const Parser &p, const AST::AstNode &node,
                                  LocalTable &lt, std::string falseLabel)
     -> void {
   auto trueLabel = lt.generateNewLabel();
-
+  bool needsLabel = false;
   std::visit(overloaded{[&](const AST::BinaryOperator &bop) {
                           auto ttype = bop.type;
                           if (isComparator(ttype)) {
@@ -418,11 +443,13 @@ auto SimpleIRPass::emitCondFalse(const Parser &p, const AST::AstNode &node,
                           } else {
                             handleLogicalCheck(p, bop, ir, gt, lt, ttype,
                                                falseLabel, trueLabel);
+                            needsLabel = true;
                           }
                         },
                         [&](const auto &other) {}},
              node.t);
-  ir.push_back(IRLabel{trueLabel});
+  if (needsLabel)
+    ir.push_back(IRLabel{trueLabel});
 };
 
 auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
@@ -530,8 +557,37 @@ auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &gt,
   return lgb.dest.val;
 }
 
-auto SimpleIRPass::emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,
-                                  LocalTable &lt) -> void {}
+auto SimpleIRPass::emitBinaryOpIR(const Parser &p,
+                                  const AST::BinaryOperator &bOp, IRListing &ir,
+                                  const GlobalTable &gt, LocalTable &lt)
+    -> void {
+  if (bOp.type != Lexer::TokenType::Equal) {
+    return; // only assignment is meaningful as a bare statement
+  }
+
+  auto lhsIdent = std::get<AST::Identifier>(p.getNodeAtIndex(bOp.lhsOp).t);
+
+  if (lt.namedVars.contains(lhsIdent.name)) {
+    // Local: no store needed, just recompute the RHS straight into the
+    // variable's already-allocated register.
+    auto dest = lt.namedVars[lhsIdent.name].tr;
+    emitExpression(p, p.getNodeAtIndex(bOp.rhsOp), ir, gt, lt, dest);
+  } else if (gt.contains(lhsIdent.name)) {
+    // Global: compute into a temp, then STORE to its memory slot.
+    auto valueReg = lt.allocateAnonymous();
+    emitExpression(p, p.getNodeAtIndex(bOp.rhsOp), ir, gt, lt, valueReg);
+
+    auto baseReg = emitGlobalNameBase(ir, gt, lt);
+    IROp store{};
+    store.opcode = Info::Instructions::STORE;
+    store.destination = {valueReg, true};
+    store.source1 = {baseReg, true};
+    store.source2 = {
+        std::get<GlobalVarInfo>(gt.at(lhsIdent.name)).offsetFromBase, false};
+    store.s2type = Immediate;
+    ir.push_back(store);
+  }
+}
 
 auto calculateOffset(const std::string_view &type) -> std::uint32_t {
   if (type == "int")

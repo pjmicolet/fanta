@@ -21,8 +21,9 @@ private:
                        const GlobalTable &gt) -> void;
   auto emitStatement(const Parser &p, const AST::AstNode &node, IRListing &ir,
                      const GlobalTable &gt, LocalTable &lt) -> void;
-  auto emitBinaryOpIR(const AST::BinaryOperator &bOp, IRListing &ir,
-                      LocalTable &lt) -> void;
+  auto emitBinaryOpIR(const Parser &p, const AST::BinaryOperator &bOp,
+                      IRListing &ir, const GlobalTable &gt, LocalTable &lt)
+      -> void;
   auto emitGlobalNameBase(IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> TempReg;
   auto emitFunctionPrelude(const Parser &p, const AST::FunctionDef &decl,
@@ -34,6 +35,8 @@ private:
                 const GlobalTable &gt, LocalTable &lt) -> void;
   auto emitIf(const Parser &p, const AST::IfStm &ifStm, IRListing &ir,
               const GlobalTable &gt, LocalTable &lt) -> void;
+  auto emitFor(const Parser &p, const AST::For &forStm, IRListing &ir,
+               const GlobalTable &gt, LocalTable &lt) -> void;
   uint32_t globalOffsets = 0;
 
   auto handleLogicalCheck(const Parser &p, const AST::BinaryOperator &bop,

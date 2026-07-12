@@ -410,3 +410,81 @@ TEST_CASE("Logical Nested - And-Inside-Or, All Wrong") {
                      "}";
   REQUIRE_SAME(0, compileAndRun(code).registers[0]);
 }
+
+// --- Assignment (emitBinaryOpIR) ---
+
+TEST_CASE("Assignment - Local Variable") {
+  std::string code = "fn main() -> int {"
+                     "let x: int = 5;"
+                     "x = 10;"
+                     "return x;"
+                     "}";
+  REQUIRE_SAME(10, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Assignment - Local Variable Reassigned From Expression") {
+  std::string code = "fn main() -> int {"
+                     "let x: int = 5;"
+                     "let y: int = 3;"
+                     "x = y + 20;"
+                     "return x;"
+                     "}";
+  REQUIRE_SAME(23, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Assignment - Global Variable Write Then Read") {
+  std::string code = "let g: int = 1;"
+                     "fn main() -> int {"
+                     "g = 42;"
+                     "return g;"
+                     "}";
+  REQUIRE_SAME(42, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Global Variable Initializer Takes Effect") {
+  // Regression test: emitGlobalVariableIR's STORE used isVirtual=false for
+  // its base-address register, so the allocator never assigned it a real
+  // physical register and the initial value landed at the wrong address.
+  std::string code = "let g: int = 7;"
+                     "fn main() -> int {"
+                     "return g;"
+                     "}";
+  REQUIRE_SAME(7, compileAndRun(code).registers[0]);
+}
+
+// --- for loops ---
+
+TEST_CASE("For Loop - Sums 0 Through 4") {
+  std::string code = "fn main() -> int {"
+                     "let sum: int = 0;"
+                     "for (let i: int = 0; i < 5; i = i + 1) {"
+                     "sum = sum + i;"
+                     "}"
+                     "return sum;"
+                     "}";
+  REQUIRE_SAME(10, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("For Loop - Condition False Up Front Never Runs Body") {
+  std::string code = "fn main() -> int {"
+                     "let sum: int = 99;"
+                     "for (let i: int = 0; i < 0; i = i + 1) {"
+                     "sum = 1;"
+                     "}"
+                     "return sum;"
+                     "}";
+  REQUIRE_SAME(99, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("For Loop - Nested If Inside Body") {
+  std::string code = "fn main() -> int {"
+                     "let count: int = 0;"
+                     "for (let i: int = 0; i < 10; i = i + 1) {"
+                     "if (i > 4) {"
+                     "count = count + 1;"
+                     "}"
+                     "}"
+                     "return count;"
+                     "}";
+  REQUIRE_SAME(5, compileAndRun(code).registers[0]);
+}
