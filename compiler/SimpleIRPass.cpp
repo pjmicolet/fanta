@@ -393,8 +393,7 @@ auto SimpleIRPass::handleNestedCondTrueLogicalCheck(
 
 auto SimpleIRPass::emitCondTrue(const Parser &p, const AST::AstNode &node,
                                 IRListing &ir, const GlobalTable &gt,
-                                LocalTable &lt, std::string trueLabel)
-    -> void {
+                                LocalTable &lt, std::string trueLabel) -> void {
   std::visit(overloaded{[&](const AST::BinaryOperator &bop) {
                           auto ttype = bop.type;
                           if (isComparator(ttype)) {
@@ -430,16 +429,6 @@ auto SimpleIRPass::emitCondFalse(const Parser &p, const AST::AstNode &node,
   ir.push_back(IRLabel{trueLabel});
 };
 
-auto SimpleIRPass::emitConditionalBranch(const Parser &p,
-                                         const AST::BinaryOperator &bcall,
-                                         IRListing &ir, const GlobalTable &gt,
-                                         LocalTable &lt,
-                                         std::string falseLabel) -> void {
-  auto ttype = bcall.type;
-  emitComparison(p, bcall, ir, gt, lt);
-  generateFailJump(ir, ttype, falseLabel);
-};
-
 auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
                           IRListing &ir, const GlobalTable &gt, LocalTable &lt)
     -> void {
@@ -447,20 +436,7 @@ auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
   auto jumpPastEl = lt.generateNewLabel();
   auto trueLabel = lt.generateNewLabel();
   auto el = ifStm.elbody;
-  std::visit(overloaded{
-                 [&](const AST::BinaryOperator &bcall) {
-                   // the top token defines our branch type
-                   auto ttype = bcall.type;
-                   if (isComparator(ttype)) {
-                     emitConditionalBranch(p, bcall, ir, gt, lt, falseLabel);
-                   } else {
-                     handleLogicalCheck(p, bcall, ir, gt, lt, ttype, falseLabel,
-                                        trueLabel);
-                   }
-                 },
-                 [&](const auto &other) {},
-             },
-             p.getNodeAtIndex(ifStm.cond).t);
+  emitCondFalse(p, p.getNodeAtIndex(ifStm.cond), ir, gt, lt, falseLabel);
   // PUSH BACK JUMP WITH LABEL
 
   auto body = std::get<AST::FunctionBody>(p.getNodeAtIndex(ifStm.body).t);

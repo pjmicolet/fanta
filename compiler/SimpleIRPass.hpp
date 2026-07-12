@@ -74,9 +74,6 @@ private:
   auto emitCondFalse(const Parser &p, const AST::AstNode &node, IRListing &ir,
                      const GlobalTable &gt, LocalTable &lt,
                      std::string falseLabel) -> void;
-  auto emitConditionalBranch(const Parser &p, const AST::BinaryOperator &node,
-                             IRListing &ir, const GlobalTable &gt,
-                             LocalTable &lt, std::string falseLabel) -> void;
 };
 
 } // namespace Fanta
