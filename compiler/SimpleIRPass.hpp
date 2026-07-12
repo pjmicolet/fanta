@@ -38,8 +38,8 @@ private:
 
   auto handleLogicalCheck(const Parser &p, const AST::BinaryOperator &bop,
                           IRListing &ir, const GlobalTable &gt, LocalTable &lt,
-                          Lexer::TokenType type, std::string exitLabel,
-                          std::string earlyEntry) -> void;
+                          Lexer::TokenType type, std::string falseLabel,
+                          std::string trueLabel) -> void;
 
   /**
    * Nested Logical if statements have a very specific check for and || or
@@ -63,20 +63,20 @@ private:
                                         const AST::BinaryOperator &bop,
                                         IRListing &ir, const GlobalTable &gt,
                                         LocalTable &lt, Lexer::TokenType type,
-                                        std::string happyPath) -> void;
+                                        std::string trueLabel) -> void;
 
   auto emitComparison(const Parser &p, const AST::BinaryOperator &node,
                       IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> void;
   auto emitCondTrue(const Parser &p, const AST::AstNode &node, IRListing &ir,
                     const GlobalTable &gt, LocalTable &lt,
-                    std::string jumpLabel) -> void;
+                    std::string trueLabel) -> void;
   auto emitCondFalse(const Parser &p, const AST::AstNode &node, IRListing &ir,
                      const GlobalTable &gt, LocalTable &lt,
-                     std::string jumpLabel) -> void;
+                     std::string falseLabel) -> void;
   auto emitConditionalBranch(const Parser &p, const AST::BinaryOperator &node,
                              IRListing &ir, const GlobalTable &gt,
-                             LocalTable &lt, std::string label) -> void;
+                             LocalTable &lt, std::string falseLabel) -> void;
 };
 
 } // namespace Fanta

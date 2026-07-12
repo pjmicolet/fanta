@@ -244,47 +244,47 @@ auto isComparator(const Lexer::TokenType ttype) -> bool {
 }
 
 auto generatePassJump(IRListing &ir, const Lexer::TokenType compType,
-                      std::string &jmpLabel) -> void {
+                      std::string &trueLabel) -> void {
   switch (compType) {
   case Lexer::TokenType::Greater: {
     Branch op{};
     op.opcode = Info::Instructions::BEC;
-    op.label = jmpLabel;
+    op.label = trueLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::Lesser: {
     Branch op{};
     op.opcode = Info::Instructions::BMI;
-    op.label = jmpLabel;
+    op.label = trueLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::GreaterEq: {
     Branch op{};
     op.opcode = Info::Instructions::BPL;
-    op.label = jmpLabel;
+    op.label = trueLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::EqualComp: {
     Branch op{};
     op.opcode = Info::Instructions::BEQ;
-    op.label = jmpLabel;
+    op.label = trueLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::NotEq: {
     Branch op{};
     op.opcode = Info::Instructions::BNE;
-    op.label = jmpLabel;
+    op.label = trueLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::LesserEq: {
     Branch op{};
     op.opcode = Info::Instructions::BNC;
-    op.label = jmpLabel;
+    op.label = trueLabel;
     ir.push_back(op);
     break;
   }
@@ -294,47 +294,47 @@ auto generatePassJump(IRListing &ir, const Lexer::TokenType compType,
 }
 
 auto generateFailJump(IRListing &ir, const Lexer::TokenType compType,
-                      std::string &jmpLabel) -> void {
+                      std::string &falseLabel) -> void {
   switch (compType) {
   case Lexer::TokenType::Greater: {
     Branch op{};
     op.opcode = Info::Instructions::BNC;
-    op.label = jmpLabel;
+    op.label = falseLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::Lesser: {
     Branch op{};
     op.opcode = Info::Instructions::BPL;
-    op.label = jmpLabel;
+    op.label = falseLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::GreaterEq: {
     Branch op{};
     op.opcode = Info::Instructions::BMI;
-    op.label = jmpLabel;
+    op.label = falseLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::EqualComp: {
     Branch op{};
     op.opcode = Info::Instructions::BNE;
-    op.label = jmpLabel;
+    op.label = falseLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::NotEq: {
     Branch op{};
     op.opcode = Info::Instructions::BEQ;
-    op.label = jmpLabel;
+    op.label = falseLabel;
     ir.push_back(op);
     break;
   }
   case Lexer::TokenType::LesserEq: {
     Branch op{};
     op.opcode = Info::Instructions::BEC;
-    op.label = jmpLabel;
+    op.label = falseLabel;
     ir.push_back(op);
     break;
   }
@@ -347,21 +347,21 @@ auto SimpleIRPass::handleLogicalCheck(const Parser &p,
                                       const AST::BinaryOperator &bop,
                                       IRListing &ir, const GlobalTable &gt,
                                       LocalTable &lt, Lexer::TokenType type,
-                                      std::string exitLabel,
-                                      std::string earlyEntry) -> void {
+                                      std::string falseLabel,
+                                      std::string trueLabel) -> void {
   switch (type) {
   case Lexer::TokenType::And: {
-    emitCondFalse(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, exitLabel);
-    emitCondTrue(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, earlyEntry);
+    emitCondFalse(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, falseLabel);
+    emitCondTrue(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, trueLabel);
     Branch jmp{};
     jmp.opcode = Info::Instructions::JREL;
-    jmp.label = exitLabel;
+    jmp.label = falseLabel;
     ir.push_back(jmp);
     break;
   }
   case Lexer::TokenType::Or: {
-    emitCondTrue(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, earlyEntry);
-    emitCondFalse(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, exitLabel);
+    emitCondTrue(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, trueLabel);
+    emitCondFalse(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, falseLabel);
     break;
   }
   default:
@@ -369,39 +369,21 @@ auto SimpleIRPass::handleLogicalCheck(const Parser &p,
   }
 }
 
-/**
- * Nested Logical if statements have a very specific check for and || or
- * basically when you have an and, if the lhs is false just skip checking rhs
- * since it won't matter
- *
- * For or, both sides can potentially let us jump to the happy path so check
- * both for true.
- *
- *  This handles cases such as:
- *
- *   if( (a > b && c > d) || (e > f))
- *               ^
- *               |_ finds itself on the emitCondTrue side
- *                    this means if a>b is bad, we can skip checking c > d and
- *                    just check e>f
- *                    however if a>b && c>d are good then skip e>f since we're
- *                    golden.
- */
 auto SimpleIRPass::handleNestedCondTrueLogicalCheck(
     const Parser &p, const AST::BinaryOperator &bop, IRListing &ir,
     const GlobalTable &gt, LocalTable &lt, Lexer::TokenType type,
-    std::string happyPath) -> void {
+    std::string trueLabel) -> void {
   switch (type) {
   case Lexer::TokenType::And: {
-    auto skipExpression = lt.generateNewLabel();
-    emitCondFalse(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, skipExpression);
-    emitCondTrue(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, happyPath);
-    ir.push_back(IRLabel{skipExpression});
+    auto falseLabel = lt.generateNewLabel();
+    emitCondFalse(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, falseLabel);
+    emitCondTrue(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, trueLabel);
+    ir.push_back(IRLabel{falseLabel});
     break;
   }
   case Lexer::TokenType::Or: {
-    emitCondTrue(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, happyPath);
-    emitCondTrue(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, happyPath);
+    emitCondTrue(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, trueLabel);
+    emitCondTrue(p, p.getNodeAtIndex(bop.rhsOp), ir, gt, lt, trueLabel);
     break;
   }
   default:
@@ -411,16 +393,16 @@ auto SimpleIRPass::handleNestedCondTrueLogicalCheck(
 
 auto SimpleIRPass::emitCondTrue(const Parser &p, const AST::AstNode &node,
                                 IRListing &ir, const GlobalTable &gt,
-                                LocalTable &lt, std::string earlyEntry)
+                                LocalTable &lt, std::string trueLabel)
     -> void {
   std::visit(overloaded{[&](const AST::BinaryOperator &bop) {
                           auto ttype = bop.type;
                           if (isComparator(ttype)) {
                             emitComparison(p, bop, ir, gt, lt);
-                            generatePassJump(ir, ttype, earlyEntry);
+                            generatePassJump(ir, ttype, trueLabel);
                           } else {
                             handleNestedCondTrueLogicalCheck(p, bop, ir, gt, lt,
-                                                             ttype, earlyEntry);
+                                                             ttype, trueLabel);
                           }
                         },
                         [&](const auto &other) {}},
@@ -429,51 +411,51 @@ auto SimpleIRPass::emitCondTrue(const Parser &p, const AST::AstNode &node,
 
 auto SimpleIRPass::emitCondFalse(const Parser &p, const AST::AstNode &node,
                                  IRListing &ir, const GlobalTable &gt,
-                                 LocalTable &lt, std::string jumpLabel)
+                                 LocalTable &lt, std::string falseLabel)
     -> void {
-  auto localSkip = lt.generateNewLabel();
+  auto trueLabel = lt.generateNewLabel();
 
   std::visit(overloaded{[&](const AST::BinaryOperator &bop) {
                           auto ttype = bop.type;
                           if (isComparator(ttype)) {
                             emitComparison(p, bop, ir, gt, lt);
-                            generateFailJump(ir, ttype, jumpLabel);
+                            generateFailJump(ir, ttype, falseLabel);
                           } else {
                             handleLogicalCheck(p, bop, ir, gt, lt, ttype,
-                                               jumpLabel, localSkip);
+                                               falseLabel, trueLabel);
                           }
                         },
                         [&](const auto &other) {}},
              node.t);
-  ir.push_back(IRLabel{localSkip});
+  ir.push_back(IRLabel{trueLabel});
 };
 
 auto SimpleIRPass::emitConditionalBranch(const Parser &p,
                                          const AST::BinaryOperator &bcall,
                                          IRListing &ir, const GlobalTable &gt,
-                                         LocalTable &lt, std::string jumpLabel)
-    -> void {
+                                         LocalTable &lt,
+                                         std::string falseLabel) -> void {
   auto ttype = bcall.type;
   emitComparison(p, bcall, ir, gt, lt);
-  generateFailJump(ir, ttype, jumpLabel);
+  generateFailJump(ir, ttype, falseLabel);
 };
 
 auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
                           IRListing &ir, const GlobalTable &gt, LocalTable &lt)
     -> void {
-  auto jumpLabel = lt.generateNewLabel();
+  auto falseLabel = lt.generateNewLabel();
   auto jumpPastEl = lt.generateNewLabel();
-  auto jumpIntoIf = lt.generateNewLabel();
+  auto trueLabel = lt.generateNewLabel();
   auto el = ifStm.elbody;
   std::visit(overloaded{
                  [&](const AST::BinaryOperator &bcall) {
                    // the top token defines our branch type
                    auto ttype = bcall.type;
                    if (isComparator(ttype)) {
-                     emitConditionalBranch(p, bcall, ir, gt, lt, jumpLabel);
+                     emitConditionalBranch(p, bcall, ir, gt, lt, falseLabel);
                    } else {
-                     handleLogicalCheck(p, bcall, ir, gt, lt, ttype, jumpLabel,
-                                        jumpIntoIf);
+                     handleLogicalCheck(p, bcall, ir, gt, lt, ttype, falseLabel,
+                                        trueLabel);
                    }
                  },
                  [&](const auto &other) {},
@@ -483,7 +465,7 @@ auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
 
   auto body = std::get<AST::FunctionBody>(p.getNodeAtIndex(ifStm.body).t);
 
-  ir.push_back(IRLabel{jumpIntoIf});
+  ir.push_back(IRLabel{trueLabel});
   for (const auto &idx : body.expressions) {
     emitStatement(p, p.getNodeAtIndex(idx), ir, gt, lt);
   }
@@ -498,7 +480,7 @@ auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
   }
 
   // emit body emit(p, body, ir, gt, lt);
-  ir.push_back(IRLabel{jumpLabel});
+  ir.push_back(IRLabel{falseLabel});
   if (el) {
     auto elBody = std::get<AST::FunctionBody>(p.getNodeAtIndex(*el).t);
     for (const auto &idx : elBody.expressions) {
