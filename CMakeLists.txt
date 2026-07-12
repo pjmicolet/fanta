@@ -8,6 +8,14 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Default to an optimized build unless the caller asks for something else
+# (e.g. -DCMAKE_BUILD_TYPE=Debug). The CPU is an interpreted dispatch loop,
+# and the test suite runs many full compile+execute cycles, so -O0 makes
+# the whole suite noticeably slower.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 # ---------------------------------------------------------
 # Libraries
 # ---------------------------------------------------------
@@ -20,11 +28,12 @@ target_include_directories(vm_lib PUBLIC
 )
 
 # Compiler core library
-add_library(compiler_lib STATIC 
-    compiler/codegen.cpp 
-    compiler/SimpleIRPass.cpp 
-    compiler/ir.cpp 
-    compiler/allocator.cpp 
+add_library(compiler_lib STATIC
+    compiler/codegen.cpp
+    compiler/parser.cpp
+    compiler/SimpleIRPass.cpp
+    compiler/ir.cpp
+    compiler/allocator.cpp
     compiler/instruction_emit.cpp
 )
 target_include_directories(compiler_lib PUBLIC 
