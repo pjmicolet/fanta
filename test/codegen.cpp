@@ -1,6 +1,6 @@
+#include "../tui/disasm.hpp"
 #include <codegen.hpp>
 #include <testframework/testing.hpp>
-#include "../tui/disasm.hpp"
 
 TEST_CASE("Global Namespace") {
   std::string code = "let a : int = 123;"
@@ -135,6 +135,32 @@ auto ifComparisonProgram(const std::string &op, int a, int b) -> std::string {
          "return 0;"
          "}";
 }
+
+// Builds: fn main() -> int { let a=A; let b=B; let c=C; let d=D;
+// if (COND) { return 1; } return 0; }
+auto ifLogicalProgram(const std::string &cond, int a, int b, int c, int d)
+    -> std::string {
+  return "fn main() -> int {"
+         "let a: int = " +
+         std::to_string(a) +
+         ";"
+         "let b: int = " +
+         std::to_string(b) +
+         ";"
+         "let c: int = " +
+         std::to_string(c) +
+         ";"
+         "let d: int = " +
+         std::to_string(d) +
+         ";"
+         "if (" +
+         cond +
+         ") {"
+         "return 1;"
+         "}"
+         "return 0;"
+         "}";
+}
 } // namespace
 
 TEST_CASE("If Statement - Greater Than") {
@@ -182,7 +208,7 @@ TEST_CASE("If/Else - Else Body Actually Executes When Condition Is False") {
 }
 
 TEST_CASE("If/Else - True Branch Falls Through Past Else When Body Doesn't "
-         "Return") {
+          "Return") {
   // Regression test: the if-body ("let x: int = 99;") doesn't return, so
   // execution must jump past the else body ("return 2;") to the trailing
   // "return 1;" rather than falling through into the else body.
@@ -221,4 +247,166 @@ TEST_CASE("If/Else - Nested If With Return Doesn't Confuse Outer Else") {
                      "return 1;"
                      "}";
   REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+// --- Logical && / || ---
+
+TEST_CASE("Logical And - Both Sides True") {
+  REQUIRE_SAME(1, compileAndRun(ifLogicalProgram("a > b && c > d", 5, 3, 10, 1))
+                      .registers[0]);
+}
+
+TEST_CASE("Logical And - Left True Right False") {
+  REQUIRE_SAME(0, compileAndRun(ifLogicalProgram("a > b && c > d", 5, 3, 1, 10))
+                      .registers[0]);
+}
+
+TEST_CASE("Logical And - Left False Right True (Short-Circuits)") {
+  // c > d is never actually true here relative to the left side failing
+  // first; this confirms the left side alone is enough to fail without the
+  // right side needing to be false too.
+  REQUIRE_SAME(0, compileAndRun(ifLogicalProgram("a > b && c > d", 3, 5, 10, 1))
+                      .registers[0]);
+}
+
+TEST_CASE("Logical And - Both Sides False") {
+  REQUIRE_SAME(0, compileAndRun(ifLogicalProgram("a > b && c > d", 3, 5, 1, 10))
+                      .registers[0]);
+}
+
+TEST_CASE("Logical And - Mixed Comparators True") {
+  REQUIRE_SAME(1,
+               compileAndRun(ifLogicalProgram("a == 5 && d <= c", 5, 3, 10, 1))
+                   .registers[0]);
+}
+
+TEST_CASE("Logical And - Mixed Comparators False") {
+  REQUIRE_SAME(0,
+               compileAndRun(ifLogicalProgram("a == 5 && d >= c", 5, 3, 10, 1))
+                   .registers[0]);
+}
+
+TEST_CASE("Logical And - Combined With Else, Condition False") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 5; let b: int = 3;"
+                     "let c: int = 1; let d: int = 10;"
+                     "if (a > b && c > d) {"
+                     "return 1;"
+                     "} else {"
+                     "return 2;"
+                     "}"
+                     "}";
+  REQUIRE_SAME(2, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical And - Combined With Else, Condition True") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 5; let b: int = 3;"
+                     "let c: int = 10; let d: int = 1;"
+                     "if (a > b && c > d) {"
+                     "return 1;"
+                     "} else {"
+                     "return 2;"
+                     "}"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical Or - Both Sides True") {
+  REQUIRE_SAME(1, compileAndRun(ifLogicalProgram("a > b || c > d", 5, 3, 10, 1))
+                      .registers[0]);
+}
+
+TEST_CASE("Logical Or - Left True Right False (Short-Circuits)") {
+  REQUIRE_SAME(1, compileAndRun(ifLogicalProgram("a > b || c > d", 5, 3, 1, 10))
+                      .registers[0]);
+}
+
+TEST_CASE("Logical Or - Left False Right True") {
+  REQUIRE_SAME(1, compileAndRun(ifLogicalProgram("a > b || c > d", 3, 5, 10, 1))
+                      .registers[0]);
+}
+
+TEST_CASE("Logical Or - Both Sides False") {
+  REQUIRE_SAME(0, compileAndRun(ifLogicalProgram("a > b || c > d", 3, 5, 1, 10))
+                      .registers[0]);
+}
+
+// --- Nested logical operators: Or nested inside And's left operand ---
+
+TEST_CASE("Logical Nested - Or-Inside-And, Or Settled True By Left Side") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 5; let b: int = 3;"
+                     "let c: int = 1; let d: int = 10;"
+                     "let e: int = 5; let f: int = 3;"
+                     "if ((a > b || c > d) && e > f) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical Nested - Or-Inside-And, Or False") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 3; let b: int = 5;"
+                     "let c: int = 1; let d: int = 10;"
+                     "let e: int = 5; let f: int = 3;"
+                     "if ((a > b || c > d) && e > f) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(0, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical Nested - Or-Inside-And, Or True But Right Side False") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 5; let b: int = 3;"
+                     "let c: int = 1; let d: int = 10;"
+                     "let e: int = 3; let f: int = 5;"
+                     "if ((a > b || c > d) && e > f) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(0, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical Nested - Or-Inside-And, Or Settled True By Right Side") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 3; let b: int = 5;"
+                     "let c: int = 10; let d: int = 1;"
+                     "let e: int = 5; let f: int = 3;"
+                     "if ((a > b || c > d) && e > f) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical Nested - And-Inside-Or, RHS OR is Right") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 5; let b: int = 3;"
+                     "let c: int = 1; let d: int = 10;"
+                     "let e: int = 5; let f: int = 3;"
+                     "if ((a > b && c > d) || e > f) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical Nested - And-Inside-Or, LHS OR is Right") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 15; let b: int = 3;"
+                     "let c: int = 11; let d: int = 10;"
+                     "let e: int = 1; let f: int = 3;"
+                     "if ((a > b && c > d) || e > f) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Logical Nested - And-Inside-Or, All Wrong") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 1; let b: int = 3;"
+                     "let c: int = 1; let d: int = 10;"
+                     "let e: int = 1; let f: int = 3;"
+                     "if ((a > b && c > d) || e > f) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(0, compileAndRun(code).registers[0]);
 }
