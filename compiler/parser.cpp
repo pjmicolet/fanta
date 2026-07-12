@@ -1,4 +1,5 @@
 #include "parser.hpp"
+#include "lexer.hpp"
 #include <charconv>
 #include <fanta_utils.hpp>
 #include <print>
@@ -137,16 +138,16 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                           }
                         },
                         [&](const Fanta::AST::FunctionDef &fc) {
-                          std::println("{}FunctionDef({} -> {})", pad,
-                                       fc.name, fc.retType);
+                          std::println("{}FunctionDef({} -> {})", pad, fc.name,
+                                       fc.retType);
                           for (auto &p : fc.params) {
                             printAST(p, indent + 1);
                           }
                           printAST(fc.body);
                         },
                         [&](const Fanta::AST::FunctionParamDef &p) {
-                          std::println("{}FunctionParamDef({}:{})", pad,
-                                       p.name, p.type);
+                          std::println("{}FunctionParamDef({}:{})", pad, p.name,
+                                       p.type);
                         },
                         [&](const Fanta::AST::FunctionBody &p) {
                           std::println("{}FunctionBody", pad);
@@ -167,6 +168,17 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                             printAST(*ifStm.elbody, indent + 1);
                           }
                         },
+                        [&](const Fanta::AST::For &forStm) {
+                          std::println("{}For", pad);
+                          std::println("{}init:", pad);
+                          printAST(forStm.init, indent + 1);
+                          std::println("{}comp:", pad);
+                          printAST(forStm.comp, indent + 1);
+                          std::println("{}incr:", pad);
+                          printAST(forStm.incr, indent + 1);
+                          std::println("{}body:", pad);
+                          printAST(forStm.body, indent + 2);
+                        },
                         [](const auto &id) {}},
              node.t);
 }
@@ -176,18 +188,18 @@ auto Parser::nextToken() -> void {
   peekToken = *lexer.getToken();
 }
 
-#define EXTRACT_TOKEN_TO_VAR(name, type)                                     \
-  auto name = expect(type);                                                  \
-  if (!name.has_value())                                                     \
+#define EXTRACT_TOKEN_TO_VAR(name, type)                                       \
+  auto name = expect(type);                                                    \
+  if (!name.has_value())                                                       \
     return;
 
-#define EXTRACT_TOKEN_TO_VAR_WRET(name, type, ret_val)                       \
-  auto name = expect(type);                                                  \
-  if (!name.has_value())                                                     \
+#define EXTRACT_TOKEN_TO_VAR_WRET(name, type, ret_val)                         \
+  auto name = expect(type);                                                    \
+  if (!name.has_value())                                                       \
     return ret_val;
 
-#define EXTRACT_TOKEN(type)                                                  \
-  if (!expect(type).has_value())                                            \
+#define EXTRACT_TOKEN(type)                                                    \
+  if (!expect(type).has_value())                                               \
     return -1;
 
 auto Parser::walkLet() -> Fanta::AST::NodeIndex {
@@ -244,12 +256,15 @@ auto Parser::walkFor() -> Fanta::AST::NodeIndex {
   Fanta::AST::For fr{};
 
   auto start = expect(Lexer::TokenType::OpenParam);
-  fr.init = walkExpression(Precedence::LOWEST);
+  if (accept(Lexer::TokenType::KeywordLet)) {
+    fr.init = walkLet();
+  }
+  auto n = expect(Lexer::TokenType::SemiColon);
   fr.comp = walkExpression(Precedence::LOWEST);
+  auto n2 = expect(Lexer::TokenType::SemiColon);
   fr.incr = walkExpression(Precedence::LOWEST);
-
+  accept(Lexer::TokenType::SemiColon); // Just swallow any trailing ;
   auto endOfCondition = expect(Lexer::TokenType::CloseParam);
-
   fr.body = walkBody();
 
   asts.push_back({fr, 0});
@@ -271,8 +286,7 @@ auto Parser::walkBody() -> Fanta::AST::NodeIndex {
       auto idx = walkIf();
       body.expressions.push_back(idx);
     } else if (accept(Lexer::TokenType::For)) {
-      auto idx = walkFor();
-      body.expressions.push_back(idx);
+      body.expressions.push_back(walkFor());
     } else {
       auto idx = walkExpression(Precedence::LOWEST);
       if (hasReturn) {
@@ -298,7 +312,6 @@ auto Parser::walkIf() -> Fanta::AST::NodeIndex {
   }
   auto condStatement = walkExpression(Precedence::LOWEST);
   auto closeParam = expect(Lexer::TokenType::CloseParam);
-  std::println("OK");
   auto body = walkBody();
   if (accept(Lexer::TokenType::Else)) {
     auto elseBody = walkBody();
@@ -344,8 +357,7 @@ auto Parser::walkInfix(Fanta::AST::NodeIndex idx, Lexer::Token t)
 auto Parser::walkPrefix() -> Fanta::AST::NodeIndex {
   switch (currentToken.t) {
   case Lexer::TokenType::Identifier: {
-    EXTRACT_TOKEN_TO_VAR_WRET(rhsIdentifier, Lexer::TokenType::Identifier,
-                              -1);
+    EXTRACT_TOKEN_TO_VAR_WRET(rhsIdentifier, Lexer::TokenType::Identifier, -1);
     Fanta::AST::Identifier id{rhsIdentifier->lexeme};
     asts.push_back({id, 0});
     return asts.size() - 1;
@@ -354,8 +366,7 @@ auto Parser::walkPrefix() -> Fanta::AST::NodeIndex {
     EXTRACT_TOKEN_TO_VAR_WRET(rhsLiteral, Lexer::TokenType::IntLiteral, -1);
     int val = 0;
     std::from_chars(rhsLiteral->lexeme.data(),
-                    rhsLiteral->lexeme.data() + rhsLiteral->lexeme.size(),
-                    val);
+                    rhsLiteral->lexeme.data() + rhsLiteral->lexeme.size(), val);
     Fanta::AST::IntLiteral id{val};
     asts.push_back({id, 0});
     return asts.size() - 1;
@@ -391,6 +402,8 @@ auto Parser::getPrecedence(Lexer::TokenType t) -> Precedence {
   case Lexer::TokenType::Plus:
     return Precedence::SUM;
   case Lexer::TokenType::SemiColon:
+    return Precedence::LOWEST;
+  case Lexer::TokenType::CloseParam:
     return Precedence::LOWEST;
   case Lexer::TokenType::Slash:
     return Precedence::DIVIDE;
