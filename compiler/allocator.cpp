@@ -1,11 +1,7 @@
 #include "allocator.hpp"
 #include "cpu_info.hpp"
 #include "ir.hpp"
-
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+#include <fanta_utils.hpp>
 
 namespace Fanta {
 auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {

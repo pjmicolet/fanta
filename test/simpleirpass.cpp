@@ -1,6 +1,7 @@
 #include <SimpleIRPass.hpp>
 #include <allocator.hpp>
 #include <testframework/testing.hpp>
+#include <fanta_utils.hpp>
 
 // Verify concept satisfaction
 

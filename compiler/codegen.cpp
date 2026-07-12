@@ -1,12 +1,8 @@
 #include "codegen.hpp"
+#include <fanta_utils.hpp>
 #include <variant>
 
 namespace Fanta {
-
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 auto Codegen::extractGlobalNames(const Parser &p) -> void {
   uint32_t globalOffsets = 0;

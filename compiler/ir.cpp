@@ -1,12 +1,8 @@
 #include "ir.hpp"
 #include <print>
+#include <fanta_utils.hpp>
 
 namespace Fanta {
-
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 auto getopName(const InstOp op) -> std::string {
   if (op == 0)

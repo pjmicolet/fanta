@@ -2,14 +2,10 @@
 #include "ast.hpp"
 #include "cpu_info.hpp"
 #include "ir.hpp"
+#include <fanta_utils.hpp>
 #include <variant>
 
 namespace Fanta {
-
-template <class... Ts> struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 auto SimpleIRPass::outputIR(Parser &p, GlobalTable &gt) -> IR {
   IR ir{};

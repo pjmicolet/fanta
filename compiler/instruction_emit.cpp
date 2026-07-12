@@ -5,9 +5,11 @@
 #include "ir.hpp"
 #include <ranges>
 #include <string>
+#include <fanta_utils.hpp>
 #include <variant>
 
 namespace Fanta {
+
 auto InstructionEmitter::outputInstructions(RegAllocIR &rir, GlobalTable &gt)
     -> InstructionList {
   InstructionList list{};
