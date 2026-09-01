@@ -15,7 +15,7 @@ TUI::TUI(CPU &cpu) : cpu(cpu), running(true) {
 
 void TUI::init_trie() {
   for (auto const &[mnem, meta] : Instructions::Registry::get()) {
-    trie.insert(mnem);
+    trie.insert(std::string(mnem));
   }
 }
 

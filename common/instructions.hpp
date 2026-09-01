@@ -1,7 +1,9 @@
 #pragma once
+#include <array>
 #include <cstdint>
+#include <stdexcept>
 #include <string>
-#include <unordered_map>
+#include <string_view>
 
 namespace Instructions {
 
@@ -13,10 +15,13 @@ struct InstMetadata {
   uint8_t imm;
 };
 
+struct InstEntry {
+  std::string_view mnemonic;
+  InstMetadata meta;
+};
+
 #define THREE_OP_INST(class_name, mnemonic, reg_op, imm_op)                    \
   template <typename Dest, typename Src1, typename Src2> struct class_name {}; \
-  static inline bool reg##class_name = Registry::register_inst(                \
-      mnemonic, {InstFormat::THREE_OP, reg_op, imm_op});                       \
                                                                                \
   template <uint8_t Dest, uint8_t Reg1, uint8_t Reg2>                          \
   struct class_name<Reg<Dest>, Reg<Reg1>, Reg<Reg2>> {                         \
@@ -34,8 +39,6 @@ struct InstMetadata {
 
 #define TWO_OP_INST(class_name, mnemonic, reg_op, imm_op)                      \
   template <typename Dest, typename Src1> struct class_name {};                \
-  static inline bool reg##class_name =                                         \
-      Registry::register_inst(mnemonic, {InstFormat::TWO_OP, reg_op, imm_op}); \
                                                                                \
   template <uint8_t Dest, uint8_t Reg1>                                        \
   struct class_name<Reg<Dest>, Reg<Reg1>> {                                    \
@@ -53,8 +56,6 @@ struct InstMetadata {
 
 #define JUMP_INST(class_name, mnemonic, op)                                    \
   template <typename Dest> struct class_name {};                               \
-  static inline bool reg##class_name =                                         \
-      Registry::register_inst(mnemonic, {InstFormat::JUMP, op, 0});            \
                                                                                \
   template <int32_t Dest> struct class_name<Target<Dest>> {                    \
     static constexpr auto emit() { return Emitter::single_inst(op, Dest); }    \
@@ -62,8 +63,6 @@ struct InstMetadata {
 
 #define BRANCH_INST(class_name, mnemonic, op)                                  \
   template <typename Dest> struct class_name {};                               \
-  static inline bool reg##class_name =                                         \
-      Registry::register_inst(mnemonic, {InstFormat::BRANCH, op, 0});          \
                                                                                \
   template <int32_t Dest> struct class_name<Target<Dest>> {                    \
     static constexpr auto emit() { return Emitter::single_inst(op, Dest); }    \
@@ -71,8 +70,6 @@ struct InstMetadata {
 
 #define STACK_INST(class_name, mnemonic, op)                                   \
   template <typename Dest> struct class_name {};                               \
-  static inline bool reg##class_name =                                         \
-      Registry::register_inst(mnemonic, {InstFormat::STACK_INST, op, 0});      \
                                                                                \
   template <int32_t Dest> struct class_name<Target<Dest>> {                    \
     static constexpr auto emit() { return Emitter::single_inst(op, Dest); }    \
@@ -81,8 +78,6 @@ struct InstMetadata {
 #define MEM_INST(class_name, mnemonic, op)                                     \
   template <typename SrcVal, typename DestMem, typename Offset>                \
   struct class_name {};                                                        \
-  static inline bool reg##class_name =                                         \
-      Registry::register_inst(mnemonic, {InstFormat::MEM, op, 0});             \
                                                                                \
   template <uint8_t Dest, uint8_t Reg1, uint16_t Imm>                          \
   struct class_name<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {                      \
@@ -91,28 +86,9 @@ struct InstMetadata {
     }                                                                          \
   };
 
-#define HALT_INST(class_name, mnemonic, op)                                    \
-  static inline bool reg##class_name =                                         \
-      Registry::register_inst(mnemonic, {InstFormat::HALT, op, 0});
+#define HALT_INST(class_name, mnemonic, op)
 
-#define RET_INST(class_name, mnemonic, op)                                     \
-  static inline bool reg##class_name =                                         \
-      Registry::register_inst(mnemonic, {InstFormat::RET, op, 0});
-
-struct Registry {
-  static inline auto &get() {
-    static std::unordered_map<std::string, InstMetadata> map;
-    return map;
-  }
-
-  static auto &fetch(const std::string &key) { return get().at(key); }
-
-  static inline auto register_inst(std::string mnem, InstMetadata fmt) {
-    get()[mnem] = fmt;
-
-    return true;
-  }
-};
+#define RET_INST(class_name, mnemonic, op)
 
 struct Decode {
   // Instruction format is as follows:
@@ -178,10 +154,6 @@ struct Emitter {
   }
 };
 
-static inline bool regHalt =
-    Registry::register_inst("HALT", {InstFormat::HALT, 0, 0});
-static inline bool nop =
-    Registry::register_inst("NOP", {InstFormat::HALT, 0x14, 0});
 THREE_OP_INST(Add, "ADD", 0x1, 0x2)
 TWO_OP_INST(Mov, "MOV", 0x3, 0x4)
 THREE_OP_INST(Sub, "SUB", 0x5, 0x6)
@@ -198,8 +170,6 @@ TWO_OP_INST(Cmp, "CMP", 0xE, 0xF)
 BRANCH_INST(Bmi, "BMI", 0x11)
 BRANCH_INST(Bpl, "BPL", 0x12)
 BRANCH_INST(Call, "CALL", 0x15)
-static inline bool ret =
-    Registry::register_inst("RET", {InstFormat::RET, 0x16, 0});
 THREE_OP_INST(And, "AND", 0x17, 0x18)
 THREE_OP_INST(Or, "OR", 0x19, 0x1A)
 THREE_OP_INST(Xor, "XOR", 0x1B, 0x1C)
@@ -211,6 +181,53 @@ struct Ret {
   static constexpr auto emit() {
     constexpr uint32_t opcode = (0x16 << 26);
     return opcode;
+  }
+};
+
+// Single source of truth for runtime instruction lookup. Every entry here
+// mirrors one macro invocation (or manual struct) above -- kept in sync by
+// hand since the macros above only need to emit compile-time assembler
+// types, not runtime metadata. No dynamic initialization, no heap
+// allocation, no unspecified init order: this table exists fully formed
+// before main() runs.
+inline constexpr std::array<InstEntry, 25> kInstructionTable{{
+    {"HALT", {InstFormat::HALT, 0, 0}},
+    {"NOP", {InstFormat::HALT, 0x14, 0}},
+    {"ADD", {InstFormat::THREE_OP, 0x1, 0x2}},
+    {"MOV", {InstFormat::TWO_OP, 0x3, 0x4}},
+    {"SUB", {InstFormat::THREE_OP, 0x5, 0x6}},
+    {"JMP", {InstFormat::JUMP, 0x7, 0}},
+    {"JREL", {InstFormat::JUMP, 0x13, 0}},
+    {"STORE", {InstFormat::MEM, 0x8, 0}},
+    {"LOAD", {InstFormat::MEM, 0x9, 0}},
+    {"BEQ", {InstFormat::BRANCH, 0xA, 0}},
+    {"BNE", {InstFormat::BRANCH, 0xB, 0}},
+    {"BEC", {InstFormat::BRANCH, 0x10, 0}},
+    {"BNC", {InstFormat::BRANCH, 0x20, 0}},
+    {"LSH", {InstFormat::THREE_OP, 0xC, 0xD}},
+    {"CMP", {InstFormat::TWO_OP, 0xE, 0xF}},
+    {"BMI", {InstFormat::BRANCH, 0x11, 0}},
+    {"BPL", {InstFormat::BRANCH, 0x12, 0}},
+    {"CALL", {InstFormat::JUMP, 0x15, 0}},
+    {"RET", {InstFormat::RET, 0x16, 0}},
+    {"AND", {InstFormat::THREE_OP, 0x17, 0x18}},
+    {"OR", {InstFormat::THREE_OP, 0x19, 0x1A}},
+    {"XOR", {InstFormat::THREE_OP, 0x1B, 0x1C}},
+    {"PUSH", {InstFormat::STACK_INST, 0x1D, 0}},
+    {"POP", {InstFormat::STACK_INST, 0x1E, 0}},
+    {"CIP", {InstFormat::JUMP, 0x1F, 0}},
+}};
+
+struct Registry {
+  static constexpr auto &get() { return kInstructionTable; }
+
+  static constexpr auto fetch(std::string_view key) -> const InstMetadata & {
+    for (auto &entry : kInstructionTable) {
+      if (entry.mnemonic == key)
+        return entry.meta;
+    }
+    throw std::out_of_range("Unknown instruction mnemonic: " +
+                            std::string(key));
   }
 };
 

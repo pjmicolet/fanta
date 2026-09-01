@@ -24,7 +24,7 @@ private:
 
   auto reset() -> void;
 
-  using index = size_t;
+  using index = uint32_t;
   using funcName = std::string_view;
   using globalName = std::string_view;
   std::vector<std::pair<index, globalName>> missingLinks;

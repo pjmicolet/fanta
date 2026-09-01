@@ -6,6 +6,7 @@
 #include <instructions.hpp>
 #include <ranges>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 struct Assembler {
@@ -43,7 +44,7 @@ struct Assembler {
       return Instructions::Nop::emit();
 
     try {
-      auto &mtdc = Instructions::Registry::fetch(std::string{tokens[0]});
+      auto &mtdc = Instructions::Registry::fetch(tokens[0]);
       switch (mtdc.fmt) {
       case Instructions::THREE_OP:
         return parse_three(tokens, mtdc, address);
@@ -204,7 +205,7 @@ private:
   }
 
   auto parse_one(const std::vector<std::string_view> &tokens,
-                 Instructions::InstMetadata &mtd, int address,
+                 const Instructions::InstMetadata &mtd, int address,
                  bool is_jump = false) -> uint32_t {
     if (tokens.size() < 2)
       return -1;
@@ -213,7 +214,7 @@ private:
   }
 
   auto parse_two(const std::vector<std::string_view> &tokens,
-                 Instructions::InstMetadata &mtd, int address) -> uint32_t {
+                 const Instructions::InstMetadata &mtd, int address) -> uint32_t {
     if (tokens.size() < 3)
       return -1;
     int r1_int = extract_val(tokens[1], address);
@@ -224,7 +225,7 @@ private:
   }
 
   auto parse_three(const std::vector<std::string_view> &tokens,
-                   Instructions::InstMetadata &mtd, int address) -> uint32_t {
+                   const Instructions::InstMetadata &mtd, int address) -> uint32_t {
     if (tokens.size() < 4)
       return -1;
     int r1_int = extract_val(tokens[1], address);
@@ -236,7 +237,7 @@ private:
   }
 
   auto parse_mem(const std::vector<std::string_view> &tokens,
-                 Instructions::InstMetadata &mtd, int address) -> uint32_t {
+                 const Instructions::InstMetadata &mtd, int address) -> uint32_t {
     if (tokens.size() < 4)
       return -1;
     int dest_reg = extract_val(tokens[1], address);

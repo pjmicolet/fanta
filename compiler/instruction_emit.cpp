@@ -72,7 +72,7 @@ auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                      il.push_back(Instructions::Emitter::single_inst(
                          Info::Instructions::CALL,
                          -1)); // We probably don't know the callsite yet.
-                     missingLinks.push_back({il.size() - 1, op.name});
+                     missingLinks.push_back({static_cast<uint32_t>(il.size() - 1), op.name});
                      if (op.dest) {
                        il.push_back(Instructions::Emitter::two_op(
                            Info::Instructions::MOV_REG, op.dest->val, 0));
@@ -82,7 +82,7 @@ auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                      auto movGlobal = Instructions::Emitter::two_op_imm(
                          Info::Instructions::MOV_IMM, lgb.dest.val, 0);
                      il.push_back(movGlobal);
-                     globalBaseMovs.push_back(il.size() - 1);
+                     globalBaseMovs.push_back(static_cast<uint32_t>(il.size() - 1));
                    },
                    [](const auto &other) {}},
         ir);
@@ -90,7 +90,7 @@ auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
 
   il.push_back(
       Instructions::Emitter::single_inst(Info::Instructions::CALL, -1));
-  missingLinks.push_back({il.size() - 1, "main"});
+  missingLinks.push_back({static_cast<uint32_t>(il.size() - 1), "main"});
   il.push_back(
       Instructions::Emitter::single_inst(Info::Instructions::HALT, -1));
 }
@@ -127,7 +127,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
                      il.push_back(Instructions::Emitter::single_inst(
                          Info::Instructions::CALL,
                          -1)); // We probably don't know the callsite yet.
-                     missingLinks.push_back({il.size() - 1, op.name});
+                     missingLinks.push_back({static_cast<uint32_t>(il.size() - 1), op.name});
                      if (op.dest) {
                        il.push_back(Instructions::Emitter::two_op(
                            Info::Instructions::MOV_REG, op.dest->val, 0));
@@ -136,14 +136,14 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
                    [&](const Branch &bop) {
                      il.push_back(
                          Instructions::Emitter::single_inst(bop.opcode, -1));
-                     missingLinks.push_back({il.size() - 1, bop.label});
+                     missingLinks.push_back({static_cast<uint32_t>(il.size() - 1), bop.label});
                    },
                    [&](const Return &ret) { emitEpilogue(fir, maxOffset, il); },
                    [&](const LocalGlobalBase &lgb) {
                      auto movGlobal = Instructions::Emitter::two_op_imm(
                          Info::Instructions::MOV_IMM, lgb.dest.val, 0);
                      il.push_back(movGlobal);
-                     globalBaseMovs.push_back(il.size() - 1);
+                     globalBaseMovs.push_back(static_cast<uint32_t>(il.size() - 1));
                    },
                    [&](const IRLabel &label) {
                      resolvedAddresses[label.name] = il.size();
