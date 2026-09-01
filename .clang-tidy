@@ -1,0 +1,29 @@
+# Project Fanta clang-tidy configuration.
+#
+# This is a v0 starting point, not a settled policy. The codebase is a
+# hand-tuned, low-level VM/compiler (raw pointer arithmetic on VRAM,
+# short ISA-standard names like PC/SP/s1/s2, deliberately public POD-style
+# structs, magic hex literals for opcodes/immediates per CLAUDE.md). Broad
+# style-rewrite groups like cppcoreguidelines-* are intentionally left out
+# for now because they fight those conventions wholesale rather than
+# surfacing real bugs. Checks get added/removed here as we triage findings
+# together -- see CLAUDE.md "Static Analysis & Warnings Workflow".
+Checks: >
+  clang-diagnostic-*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  modernize-*,
+  readability-*,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-uppercase-literal-suffix,
+  -readability-else-after-return,
+  -readability-braces-around-statements,
+  -readability-convert-member-functions-to-static
+
+WarningsAsErrors: ''
+
+HeaderFilterRegex: '.*/(compiler|vm|common|tui|test)/.*\.(hpp|h)$'
+
+FormatStyle: none

@@ -17,6 +17,38 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # ---------------------------------------------------------
+# Warnings & static analysis
+# ---------------------------------------------------------
+# -Wall -Wextra are always on so warnings stay visible during day-to-day
+# builds. -Werror is opt-in: as of 2026-09-01 the tree has ~58 warnings
+# (mostly in compiler/), so flipping it on by default would break every
+# build until that baseline is cleared. Once the baseline is clean, flip
+# the default below to ON. See CLAUDE.md "Static Analysis & Warnings
+# Workflow" -- findings from this get triaged conversationally, not
+# fixed blindly.
+option(FANTA_WARNINGS_AS_ERRORS "Treat compiler warnings as errors (-Werror)" OFF)
+
+add_compile_options(-Wall -Wextra)
+if(FANTA_WARNINGS_AS_ERRORS)
+  add_compile_options(-Werror)
+endif()
+
+# `cmake --build build --target tidy` runs clang-tidy over the project via
+# tools/run-clang-tidy.sh (thin wrapper around LLVM's run-clang-tidy using
+# compile_commands.json). Not wired into the default build -- it's a
+# separate, deliberately-run step, not a gate.
+find_program(FANTA_CLANG_TIDY_SCRIPT run-clang-tidy.sh PATHS ${CMAKE_CURRENT_SOURCE_DIR}/tools NO_DEFAULT_PATH)
+if(FANTA_CLANG_TIDY_SCRIPT)
+  add_custom_target(tidy
+    COMMAND ${CMAKE_COMMAND} -E env FANTA_BUILD_DIR=${CMAKE_BINARY_DIR} ${FANTA_CLANG_TIDY_SCRIPT}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Running clang-tidy over the project"
+    VERBATIM
+    USES_TERMINAL
+  )
+endif()
+
+# ---------------------------------------------------------
 # Libraries
 # ---------------------------------------------------------
 
