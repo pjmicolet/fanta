@@ -1,148 +1,72 @@
 #include "ir.hpp"
+#include <array>
 #include <print>
 #include <fanta_utils.hpp>
 
 namespace Fanta {
 
-auto getopName(const InstOp op) -> std::string {
-  if (op == 0)
-    return "Halt";
-  if (op == 0x1)
-    return "Add";
-  if (op == 0x2)
-    return "Add";
-  if (op == 0x3)
-    return "Mov";
-  if (op == 0x4)
-    return "Mov";
-  if (op == 0x5)
-    return "Sub";
-  if (op == 0x6)
-    return "Sub";
-  if (op == 0x7)
-    return "Jmp";
-  if (op == 0x8)
-    return "Store";
-  if (op == 0x9)
-    return "Load";
-  if (op == 0xa)
-    return "Beq";
-  if (op == 0xb)
-    return "Bne";
-  if (op == 0xc)
-    return "Lsh";
-  if (op == 0xd)
-    return "Lsh";
-  if (op == 0xe)
-    return "Cmp";
-  if (op == 0xf)
-    return "Cmp";
-  if (op == 0x10)
-    return "Bec";
-  if (op == 0x11)
-    return "Bmi";
-  if (op == 0x12)
-    return "Bpl";
-  if (op == 0x13)
-    return "Jrel";
-  if (op == 0x14)
-    return "Nop";
-  if (op == 0x15)
-    return "Call";
-  if (op == 0x16)
-    return "Ret";
-  if (op == 0x17)
-    return "And";
-  if (op == 0x18)
-    return "And";
-  if (op == 0x19)
-    return "Or";
-  if (op == 0x1A)
-    return "Or";
-  if (op == 0x1B)
-    return "Xor";
-  if (op == 0x1C)
-    return "Xor";
-  if (op == 0x1D)
-    return "Push";
-  if (op == 0x1E)
-    return "Pop";
-  if (op == 0x1F)
-    return "Cip";
-  if (op == 0x20)
-    return "Bnc";
-  return "Nop";
+namespace {
+
+struct OpInfo {
+  std::string_view name;
+  uint8_t numSources;
+};
+
+// Indexed directly by opcode (6-bit encoding space). Unlisted opcodes default
+// to {"Nop", 0} as an explicit "unrecognized opcode" sentinel. numSources is
+// an IR pretty-printing concept, not a hardware encoding one -- it's the
+// count of populated *source* operands, distinct from Instructions::InstFormat
+// (e.g. Cmp is TWO_OP format like Mov, but numSources=2 because its
+// "destination" field is reused to hold the first comparison operand).
+constexpr auto buildOpTable() {
+  std::array<OpInfo, 64> t{};
+  for (auto &e : t)
+    e = {"Nop", 0};
+  t[0x0] = {"Halt", 0};
+  t[0x1] = {"Add", 2};
+  t[0x2] = {"Add", 2};
+  t[0x3] = {"Mov", 1};
+  t[0x4] = {"Mov", 1};
+  t[0x5] = {"Sub", 2};
+  t[0x6] = {"Sub", 2};
+  t[0x7] = {"Jmp", 1};
+  t[0x8] = {"Store", 2};
+  t[0x9] = {"Load", 2};
+  t[0xA] = {"Beq", 1};
+  t[0xB] = {"Bne", 1};
+  t[0xC] = {"Lsh", 2};
+  t[0xD] = {"Lsh", 2};
+  t[0xE] = {"Cmp", 2};
+  t[0xF] = {"Cmp", 2};
+  t[0x10] = {"Bec", 1};
+  t[0x11] = {"Bmi", 1};
+  t[0x12] = {"Bpl", 1};
+  t[0x13] = {"Jrel", 1};
+  t[0x14] = {"Nop", 0};
+  t[0x15] = {"Call", 1};
+  t[0x16] = {"Ret", 0};
+  t[0x17] = {"And", 2};
+  t[0x18] = {"And", 2};
+  t[0x19] = {"Or", 2};
+  t[0x1A] = {"Or", 2};
+  t[0x1B] = {"Xor", 2};
+  t[0x1C] = {"Xor", 2};
+  t[0x1D] = {"Push", 1};
+  t[0x1E] = {"Pop", 1};
+  t[0x1F] = {"Cip", 1};
+  t[0x20] = {"Bnc", 1};
+  return t;
 }
 
-auto numberOfSources(const InstOp op) -> int {
-  if (op == 0)
-    return 0;
-  if (op == 0x1)
-    return 2;
-  if (op == 0x2)
-    return 2;
-  if (op == 0x3)
-    return 1;
-  if (op == 0x4)
-    return 1;
-  if (op == 0x5)
-    return 2;
-  if (op == 0x6)
-    return 2;
-  if (op == 0x7)
-    return 1;
-  if (op == 0x8)
-    return 2;
-  if (op == 0x9)
-    return 2;
-  if (op == 0xa)
-    return 1;
-  if (op == 0xb)
-    return 1;
-  if (op == 0xc)
-    return 2;
-  if (op == 0xd)
-    return 2;
-  if (op == 0xe)
-    return 2;
-  if (op == 0xf)
-    return 2;
-  if (op == 0x10)
-    return 1;
-  if (op == 0x11)
-    return 1;
-  if (op == 0x12)
-    return 1;
-  if (op == 0x13)
-    return 1;
-  if (op == 0x14)
-    return 0;
-  if (op == 0x15)
-    return 1;
-  if (op == 0x16)
-    return 0;
-  if (op == 0x17)
-    return 2;
-  if (op == 0x18)
-    return 2;
-  if (op == 0x19)
-    return 2;
-  if (op == 0x1A)
-    return 2;
-  if (op == 0x1B)
-    return 2;
-  if (op == 0x1C)
-    return 2;
-  if (op == 0x1D)
-    return 1;
-  if (op == 0x1E)
-    return 1;
-  if (op == 0x1F)
-    return 1;
-  if (op == 0x20)
-    return 0;
-  return 0;
+inline constexpr auto kOpTable = buildOpTable();
+
+} // namespace
+
+auto getopName(const InstOp op) -> std::string {
+  return std::string{kOpTable[op].name};
 }
+
+auto numberOfSources(const InstOp op) -> int { return kOpTable[op].numSources; }
 
 auto printIR(const IR &irlisting) -> void {
 
