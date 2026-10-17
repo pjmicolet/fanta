@@ -488,3 +488,75 @@ TEST_CASE("For Loop - Nested If Inside Body") {
                      "}";
   REQUIRE_SAME(5, compileAndRun(code).registers[0]);
 }
+
+TEST_CASE("Call - Two Args Returned Through R0") {
+  std::string code = "fn add(a: int, b: int) -> int { return a - b; }"
+                     "fn main() -> int { return add(9, 4); }";
+  REQUIRE_SAME(5, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Call - Recursion Preserves Callee-Saved Registers") {
+  std::string code = "fn f(n: int) -> int {"
+                     "if (n == 0) { return 0; }"
+                     "return f(n - 1) + 2;"
+                     "}"
+                     "fn main() -> int { return f(5); }";
+  REQUIRE_SAME(10, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Call - Stack Pointer Balanced After Program") {
+  std::string code =
+      "fn id(a: int) -> int { return a; }"
+      "fn main() -> int { let x: int = id(3); return id(x) + id(4); }";
+  auto cpu = compileAndRun(code);
+  REQUIRE_SAME(7, cpu.registers[0]);
+  REQUIRE_SAME(CPU{}.get_sp(), cpu.get_sp());
+}
+
+TEST_CASE("Spills - 17 Live Locals Survive Register Pressure") {
+  std::string code = "fn main() -> int {";
+  for (int i = 1; i <= 17; i++)
+    code += "let a" + std::to_string(i) + ": int = " + std::to_string(i) + ";";
+  code += "let s: int = 0;";
+  for (int i = 1; i <= 17; i++)
+    code += "s = s + a" + std::to_string(i) + ";";
+  code += "return s; }";
+  REQUIRE_SAME(153, compileAndRun(code).registers[0]); // 1+..+17
+}
+
+TEST_CASE("Negative Values Compare Signed") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 0 - 5;"
+                     "let b: int = 3;"
+                     "if (a < b) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Two Globals Have Independent Slots") {
+  std::string code = "let g: int = 3;"
+                     "let h: int = 40;"
+                     "fn main() -> int { g = g + 1; return g + h; }";
+  REQUIRE_SAME(44, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Unknown Function Fails At Link Time") {
+  bool threw = false;
+  try {
+    compileAndRun("fn main() -> int { return nope(1); }");
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+  REQUIRE_TRUE(threw);
+}
+
+TEST_CASE("Missing main Fails At Link Time") {
+  bool threw = false;
+  try {
+    compileAndRun("fn helper() -> int { return 1; }");
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+  REQUIRE_TRUE(threw);
+}

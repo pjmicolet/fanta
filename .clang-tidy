@@ -20,7 +20,16 @@ Checks: >
   -readability-uppercase-literal-suffix,
   -readability-else-after-return,
   -readability-braces-around-statements,
-  -readability-convert-member-functions-to-static
+  -readability-convert-member-functions-to-static,
+  -modernize-use-trailing-return-type,
+  -modernize-use-designated-initializers
+
+# Disabled after the 2026-10-17 review (262 of 682 findings, all style noise):
+# - modernize-use-trailing-return-type fires on every non-trailing
+#   signature, even though the codebase already mixes both styles.
+# - modernize-use-designated-initializers fires on short positional
+#   aggregate inits ({fmt, reg, imm}, Token{...}) used throughout the ISA
+#   tables and lexer.
 
 WarningsAsErrors: ''
 

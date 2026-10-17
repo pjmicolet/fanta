@@ -1,4 +1,5 @@
 #include <testframework/testing.hpp>
+#include "../common/cpu_info.hpp"
 #include "assembler.hpp"
 #include "cpu.hpp"
 
@@ -62,4 +63,56 @@ TEST_CASE("Load into cpu") {
   REQUIRE_SAME(0x2, Decode{data}.getOpcode());
 
   cpu.run_cycle();
+}
+
+TEST_CASE("Registry Round Trip - Every Opcode Encodes At Bit 26") {
+  using namespace Instructions;
+  for (const auto &entry : Registry::get()) {
+    const auto &meta = Registry::fetch(entry.mnemonic);
+    REQUIRE_SAME(meta.reg, entry.meta.reg);
+    const auto raw = parse_three(meta.reg, 3, 4, 5, false);
+    REQUIRE_SAME(meta.reg, Decode{raw}.getOpcode());
+    REQUIRE_SAME(3, Decode{raw}.getDestSrc());
+    REQUIRE_SAME(4, Decode{raw}.getS1());
+    REQUIRE_SAME(5, Decode{raw}.getS2());
+    REQUIRE_SAME(static_cast<uint32_t>(meta.reg) << 26, raw & 0xFC000000u);
+    if (entry.meta.fmt == THREE_OP || entry.meta.fmt == TWO_OP) {
+      const auto imm = parse_three(meta.imm, 1, 2, 0xFFFF, true);
+      REQUIRE_SAME(meta.imm, Decode{imm}.getOpcode());
+      REQUIRE_SAME(0xFFFF, Decode{imm}.getImm());
+    }
+  }
+}
+
+TEST_CASE("Registry Matches cpu_info Opcode Constants") {
+  using namespace Instructions;
+  namespace I = Fanta::Info::Instructions;
+  REQUIRE_SAME(I::BNC, Registry::fetch("BNC").reg);
+  REQUIRE_SAME(I::CIP, Registry::fetch("CIP").reg);
+  REQUIRE_SAME(I::RET, Registry::fetch("RET").reg);
+  REQUIRE_SAME(I::NOP, Registry::fetch("NOP").reg);
+  REQUIRE_SAME(I::XOR_IMM, Registry::fetch("XOR").imm);
+  REQUIRE_SAME(I::CMP_IMM, Registry::fetch("CMP").imm);
+  REQUIRE_SAME(Nop::emit(), parse_one(Registry::fetch("NOP").reg, 0));
+  REQUIRE_SAME(Ret::emit(), parse_one(Registry::fetch("RET").reg, 0));
+  constexpr Decode bnc{Bnc<Target<-4>>::emit()};
+  static_assert(bnc.getOpcode() == 0x20);
+}
+
+TEST_CASE("Unknown Mnemonic Throws From Registry") {
+  bool threw = false;
+  try {
+    Instructions::Registry::fetch("FOO");
+  } catch (const std::out_of_range &) {
+    threw = true;
+  }
+  REQUIRE_TRUE(threw);
+}
+
+TEST_CASE("PC-Relative Instructions Are Registered As BRANCH") {
+  // The VM executes CALL/JREL relative to the previous PC, so the string
+  // assembler must encode label offsets for them, not absolute addresses.
+  using namespace Instructions;
+  REQUIRE_SAME(InstFormat::BRANCH, Registry::fetch("CALL").fmt);
+  REQUIRE_SAME(InstFormat::BRANCH, Registry::fetch("JREL").fmt);
 }

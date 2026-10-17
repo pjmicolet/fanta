@@ -25,11 +25,12 @@ private:
     IFELSE = 1,
     ASSIGN_OR_RET = 2,
     LOGIC = 3,
-    COMP = 4,
-    SUM = 5,
-    MINUS = 5, // Same precedence as SUM (left-associative +/-)
-    MULT = 6,  // Should collapse mult-divide to one
-    DIVIDE = 6,
+    BITWISE = 4, // & and |: between && / || and comparisons, as in C
+    COMP = 5,
+    SUM = 6,
+    MINUS = 6, // Same precedence as SUM (left-associative +/-)
+    MULT = 7,  // Should collapse mult-divide to one
+    DIVIDE = 7,
     CALL = 8,
   };
 

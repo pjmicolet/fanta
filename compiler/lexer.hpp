@@ -50,6 +50,8 @@ struct Lexer {
     Or,
     And,
     Not,
+    BitOr,
+    BitAnd,
   };
 
   struct Token {
@@ -83,8 +85,10 @@ struct Lexer {
   }
 
 private:
+  auto allowedCharsInAlpha(char c) -> bool { return ::isalnum(c) || c == '_'; }
+
   auto parseAlpha(std::size_t start) -> std::expected<Token, LexError> {
-    while (cursor_ < end_ && ::isalnum(body_[cursor_]) &&
+    while (cursor_ < end_ && allowedCharsInAlpha(body_[cursor_]) &&
            (body_[cursor_] != ' ' || body_[cursor_] != '\0')) {
       cursor_++;
     }
@@ -203,6 +207,8 @@ private:
         return Token{TokenType::And, body_.substr(start, 2), 0, start,
                      cursor_++};
       }
+      return Token{TokenType::BitAnd, body_.substr(cursor_, 1), 0, cursor_,
+                   cursor_++};
     }
     case '|': {
       auto next = peek();
@@ -212,6 +218,8 @@ private:
         return Token{TokenType::Or, body_.substr(start, 2), 0, start,
                      cursor_++};
       }
+      return Token{TokenType::BitOr, body_.substr(cursor_, 1), 0, cursor_,
+                   cursor_++};
     }
     case '*':
       return Token{TokenType::Mult, body_.substr(cursor_, 1), 0, cursor_,
@@ -253,7 +261,7 @@ private:
   };
 
   auto getType(char c) const -> CharType {
-    if (::isalpha(c))
+    if (::isalpha(c) || c == '_')
       return CharType::Alpha;
     if (::isdigit(c))
       return CharType::Num;

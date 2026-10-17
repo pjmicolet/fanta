@@ -154,3 +154,142 @@ TEST_CASE("Cooperative Interrupt CIP") {
     REQUIRE_SAME(11, cpu.registers[0]);
   }
 }
+
+TEST_CASE("Flags - ADD Boundary Values") {
+  using namespace Instructions;
+  constexpr auto code = Program<Add<Reg<0>, Reg<1>, Reg<2>>, Halt>::load();
+  {
+    CPU cpu{};
+    cpu.load_rom(code);
+    cpu.registers[1] = 0xFFFFFFFF;
+    cpu.registers[2] = 1;
+    cpu.run_cycle();
+    REQUIRE_SAME(0u, cpu.registers[0]);
+    REQUIRE_TRUE(cpu.is_zero_set());
+    REQUIRE_TRUE(cpu.is_carry_set());
+    REQUIRE_TRUE(!cpu.is_overflow_set());
+    REQUIRE_TRUE(!cpu.is_neg_set());
+  }
+  {
+    CPU cpu{};
+    cpu.load_rom(code);
+    cpu.registers[1] = 0x7FFFFFFF; // INT32_MAX + 1 -> INT32_MIN
+    cpu.registers[2] = 1;
+    cpu.run_cycle();
+    REQUIRE_SAME(0x80000000u, cpu.registers[0]);
+    REQUIRE_TRUE(!cpu.is_zero_set());
+    REQUIRE_TRUE(!cpu.is_carry_set());
+    REQUIRE_TRUE(cpu.is_overflow_set());
+    REQUIRE_TRUE(cpu.is_neg_set());
+  }
+}
+
+TEST_CASE("Flags - SUB Boundary Values") {
+  using namespace Instructions;
+  constexpr auto code = Program<Sub<Reg<0>, Reg<1>, Reg<2>>, Halt>::load();
+  {
+    CPU cpu{};
+    cpu.load_rom(code);
+    cpu.registers[1] = 0;
+    cpu.registers[2] = 1; // 0 - 1 borrows
+    cpu.run_cycle();
+    REQUIRE_SAME(0xFFFFFFFFu, cpu.registers[0]);
+    REQUIRE_TRUE(cpu.is_neg_set());
+    REQUIRE_TRUE(!cpu.is_carry_set()); // ARM-style: C = no borrow
+    REQUIRE_TRUE(!cpu.is_overflow_set());
+  }
+  {
+    CPU cpu{};
+    cpu.load_rom(code);
+    cpu.registers[1] = 0x80000000; // INT32_MIN - 1 -> INT32_MAX
+    cpu.registers[2] = 1;
+    cpu.run_cycle();
+    REQUIRE_SAME(0x7FFFFFFFu, cpu.registers[0]);
+    REQUIRE_TRUE(!cpu.is_neg_set());
+    REQUIRE_TRUE(cpu.is_overflow_set());
+    REQUIRE_TRUE(cpu.is_carry_set());
+  }
+  {
+    CPU cpu{};
+    cpu.load_rom(code);
+    cpu.registers[1] = 5;
+    cpu.registers[2] = 5;
+    cpu.run_cycle();
+    REQUIRE_TRUE(cpu.is_zero_set());
+    REQUIRE_TRUE(cpu.is_carry_set());
+  }
+}
+
+TEST_CASE("Immediates - 16-bit Payload Is Zero-Extended") {
+  // Literal<> is int16_t, so 0x8000-0xFFFF payloads can't be spelled with the
+  // constexpr assembler; use the runtime encoders instead.
+  const std::array<uint32_t, 3> code{
+      Instructions::parse_two(0x4, 0, 0xFFFF, true),      // MOV R0, #FFFF
+      Instructions::parse_three(0x2, 1, 1, 0xFFFF, true), // ADD R1, R1, #FFFF
+      0};
+  CPU cpu{};
+  cpu.load_rom(code);
+  cpu.run_cycle();
+  REQUIRE_SAME(0xFFFFu, cpu.registers[0]);
+  REQUIRE_TRUE(!cpu.is_neg_set());
+  cpu.run_cycle();
+  REQUIRE_SAME(0xFFFFu, cpu.registers[1]);
+}
+
+TEST_CASE("Signed Branches - BMI/BPL After CMP") {
+  using namespace Instructions;
+  constexpr auto code =
+      Program<Mov<Reg<0>, Literal<3>>, Cmp<Reg<0>, Literal<5>>,
+              Bmi<Target<8>>, Mov<Reg<1>, Literal<1>>, Cmp<Reg<0>, Literal<1>>,
+              Bpl<Target<8>>, Mov<Reg<2>, Literal<1>>, Halt>::load();
+  CPU cpu{};
+  cpu.load_rom(code);
+  cpu.run_until_halt();
+  REQUIRE_SAME(0, cpu.registers[1]); // BMI skipped it
+  REQUIRE_SAME(0, cpu.registers[2]); // BPL skipped it
+}
+
+TEST_CASE("PC-Relative CALL/RET") {
+  using namespace Instructions;
+  constexpr auto code =
+      Program<Call<Target<12>>,                // 0x00 -> 0x0C
+              Add<Reg<2>, Reg<2>, Literal<1>>, // 0x04 return lands here
+              Halt,                            // 0x08
+              Mov<Reg<1>, Literal<7>>,         // 0x0C
+              Ret>::load();                    // 0x10
+  CPU cpu{};
+  cpu.load_rom(code);
+  const auto sp = cpu.get_sp();
+  cpu.run_until_halt();
+  REQUIRE_SAME(7, cpu.registers[1]);
+  REQUIRE_SAME(1, cpu.registers[2]);
+  REQUIRE_SAME(sp, cpu.get_sp());
+  REQUIRE_SAME(0xC, cpu.get_pc());
+}
+
+TEST_CASE("PUSH/POP Round Trip Restores SP") {
+  using namespace Instructions;
+  constexpr auto code = Program<Mov<Reg<1>, Literal<42>>, Push<Target<1>>,
+                                Mov<Reg<1>, Literal<0>>, Pop<Target<2>>,
+                                Halt>::load();
+  CPU cpu{};
+  cpu.load_rom(code);
+  const auto sp = cpu.get_sp();
+  cpu.run_until_halt();
+  REQUIRE_SAME(42, cpu.registers[2]);
+  REQUIRE_SAME(sp, cpu.get_sp());
+}
+
+TEST_CASE("Load/Store With Max 16-bit Offset") {
+  using namespace Instructions;
+  const std::array<uint32_t, 5> code{
+      Mov<Reg<0>, Literal<0x1000>>::emit(), Mov<Reg<1>, Literal<0x55>>::emit(),
+      parse_three(0x8, 1, 0, 0xFFFC, true), // STORE R1, FFFC(R0)
+      parse_three(0x9, 2, 0, 0xFFFC, true), // LOAD  R2, FFFC(R0)
+      0};
+  CPU cpu{};
+  cpu.load_rom(code);
+  cpu.run_until_halt();
+  REQUIRE_SAME(0x55u, cpu.load(0x1000 + 0xFFFC)); // offset is unsigned
+  REQUIRE_SAME(0x55u, cpu.registers[2]);
+}
