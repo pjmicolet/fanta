@@ -6,7 +6,7 @@ uint32_t inst_count = 0;
 
 #define EXEC_INST(OpCode, Name)                                                \
   case OpCode: {                                                               \
-    Name::exec(*this, instr);                                                  \
+    Exec::Name::exec(*this, instr);                                            \
     break;                                                                     \
   }
 
