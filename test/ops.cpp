@@ -108,3 +108,11 @@ TEST_CASE("Unknown Mnemonic Throws From Registry") {
   }
   REQUIRE_TRUE(threw);
 }
+
+TEST_CASE("PC-Relative Instructions Are Registered As BRANCH") {
+  // The VM executes CALL/JREL relative to the previous PC, so the string
+  // assembler must encode label offsets for them, not absolute addresses.
+  using namespace Instructions;
+  REQUIRE_SAME(InstFormat::BRANCH, Registry::fetch("CALL").fmt);
+  REQUIRE_SAME(InstFormat::BRANCH, Registry::fetch("JREL").fmt);
+}

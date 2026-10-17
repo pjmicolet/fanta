@@ -2,8 +2,8 @@
 #include <testframework/testing.hpp>
 
 // Helper macro to assert token type on std::expected<Token, LexError>
-#define REQUIRE_TOKEN_TYPE(expected_type, expected_res) \
-  REQUIRE_SAME(1, expected_res.has_value() ? 1 : 0); \
+#define REQUIRE_TOKEN_TYPE(expected_type, expected_res)                        \
+  REQUIRE_SAME(1, expected_res.has_value() ? 1 : 0);                           \
   REQUIRE_SAME(expected_type, expected_res->t)
 
 TEST_CASE("Basic Lexing of Alpha") {
@@ -26,22 +26,22 @@ TEST_CASE("Basic Lexing of Alpha") {
 TEST_CASE("Multi Alpha Lexing") {
   std::string case1 = "hello let if else qwer1";
   Lexer simple{case1};
-  
+
   auto res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::KeywordLet, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::If, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Else, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Eof, res);
 }
@@ -49,13 +49,13 @@ TEST_CASE("Multi Alpha Lexing") {
 TEST_CASE("Type Alpha Lexing") {
   std::string case1 = "int float ten";
   Lexer simple{case1};
-  
+
   auto res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Type, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Type, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, res);
 }
@@ -75,25 +75,25 @@ TEST_CASE("Basic Symbol Lexing") {
 TEST_CASE("Arrow and Minus Symbol Lexing") {
   std::string case1 = "- -> - - ->-->";
   Lexer simple{case1};
-  
+
   auto res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Minus, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Arrow, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Minus, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Minus, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Arrow, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Minus, res);
-  
+
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Arrow, res);
 }
@@ -154,4 +154,67 @@ TEST_CASE("Digits Followed By Letters Is MalformedToken") {
   auto res = lx.getToken();
   REQUIRE_TRUE(!res.has_value());
   REQUIRE_SAME(LexErrorType::MalformedToken, res.error().t);
+}
+
+TEST_CASE("Var with underscore") {
+  std::string case1 = "hello_world";
+  Lexer simple{case1};
+  auto res = simple.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, res);
+
+  std::string case2 = "_helloworld";
+  Lexer simple2{case2};
+  auto res2 = simple2.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, res2);
+}
+
+TEST_CASE("Single & And | Lex As BitAnd / BitOr") {
+  std::string src = "a & b | c";
+  Lexer lx{src};
+  auto t1 = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, t1);
+  auto amp = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::BitAnd, amp);
+  REQUIRE_SAME("&", amp->lexeme);
+  auto t2 = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, t2);
+  auto bar = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::BitOr, bar);
+  REQUIRE_SAME("|", bar->lexeme);
+  auto t3 = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, t3);
+  auto t4 = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Eof, t4);
+}
+
+TEST_CASE("Single And Double & / | Are Distinguished Without Spaces") {
+  // "&&&" must lex as "&&" then "&"; "|||" as "||" then "|".
+  std::string src = "a&&&b|||c&d";
+  Lexer lx{src};
+  const Lexer::TokenType expected[] = {
+      Lexer::TokenType::Identifier, Lexer::TokenType::And,
+      Lexer::TokenType::BitAnd,     Lexer::TokenType::Identifier,
+      Lexer::TokenType::Or,         Lexer::TokenType::BitOr,
+      Lexer::TokenType::Identifier, Lexer::TokenType::BitAnd,
+      Lexer::TokenType::Identifier, Lexer::TokenType::Eof};
+  for (auto t : expected) {
+    auto res = lx.getToken();
+    REQUIRE_TOKEN_TYPE(t, res);
+  }
+}
+
+TEST_CASE("Trailing & / | At End Of Input") {
+  std::string src = "&";
+  Lexer lx{src};
+  auto t5 = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::BitAnd, t5);
+  auto t6 = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Eof, t6);
+
+  std::string src2 = "|";
+  Lexer lx2{src2};
+  auto t7 = lx2.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::BitOr, t7);
+  auto t8 = lx2.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Eof, t8);
 }

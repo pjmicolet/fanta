@@ -141,3 +141,38 @@ TEST_CASE("For Loop AST Shape") {
                std::get<Fanta::AST::BinaryOperator>(p.getNodeAtIndex(fr.incr).t)
                    .type);
 }
+
+// Fails the test (instead of aborting the binary with bad_variant_access)
+// when the node isn't a BinaryOperator, e.g. because precedence put a
+// different operator at this position.
+static auto binOpAt(Parser &p, Fanta::AST::NodeIndex idx)
+    -> Fanta::AST::BinaryOperator {
+  auto node = p.getNodeAtIndex(idx);
+  REQUIRE_TRUE(std::holds_alternative<Fanta::AST::BinaryOperator>(node.t));
+  return std::get<Fanta::AST::BinaryOperator>(node.t);
+}
+
+TEST_CASE("Precedence - Bitwise & Binds Looser Than Assignment RHS") {
+  // x = a & b  must parse as  x = (a & b), not (x = a) & b.
+  Parser p{"x = a & b;"};
+  p.walk();
+  auto assign = std::get<Fanta::AST::BinaryOperator>(p.getCurrentRoot().t);
+  REQUIRE_SAME(Lexer::TokenType::Equal, assign.type);
+  REQUIRE_SAME(Lexer::TokenType::BitAnd, binOpAt(p, assign.rhsOp).type);
+}
+
+TEST_CASE("Precedence - Bitwise Sits Between Comparison And && / ||") {
+  // C-style ordering: ==  >  &  |  >  &&  ||
+  //   x = a == b & c && d | e;
+  //   => x = (((a == b) & c) && (d | e))
+  Parser p{"x = a == b & c && d | e;"};
+  p.walk();
+  auto assign = std::get<Fanta::AST::BinaryOperator>(p.getCurrentRoot().t);
+  REQUIRE_SAME(Lexer::TokenType::Equal, assign.type);
+  auto andOp = binOpAt(p, assign.rhsOp);
+  REQUIRE_SAME(Lexer::TokenType::And, andOp.type);
+  auto bitAnd = binOpAt(p, andOp.lhsOp);
+  REQUIRE_SAME(Lexer::TokenType::BitAnd, bitAnd.type);
+  REQUIRE_SAME(Lexer::TokenType::EqualComp, binOpAt(p, bitAnd.lhsOp).type);
+  REQUIRE_SAME(Lexer::TokenType::BitOr, binOpAt(p, andOp.rhsOp).type);
+}

@@ -99,6 +99,10 @@ auto Parser::tokenTypeToString(Lexer::TokenType t) -> std::string_view {
     return "&&";
   case Lexer::TokenType::Or:
     return "||";
+  case Lexer::TokenType::BitAnd:
+    return "&";
+  case Lexer::TokenType::BitOr:
+    return "|";
   default:
     return "Unknown";
   }
@@ -417,6 +421,9 @@ auto Parser::getPrecedence(Lexer::TokenType t) -> Precedence {
   case Lexer::TokenType::If:
   case Lexer::TokenType::Else:
     return Precedence::IFELSE;
+  case Lexer::TokenType::BitAnd:
+  case Lexer::TokenType::BitOr:
+    return Precedence::BITWISE;
   case Lexer::TokenType::And:
   case Lexer::TokenType::Or:
     return Precedence::LOGIC;
