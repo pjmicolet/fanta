@@ -130,6 +130,10 @@ auto getOpcodeFromString(Lexer::TokenType t, bool isReg) -> uint32_t {
     return isReg ? 0x3 : 0x4;
   case Lexer::TokenType::Minus:
     return isReg ? 0x5 : 0x6;
+  case Lexer::TokenType::BitAnd:
+    return isReg ? 0x17 : 0x18;
+  case Lexer::TokenType::BitOr:
+    return isReg ? 0x19 : 0x1A;
   default:
     return 0;
   }

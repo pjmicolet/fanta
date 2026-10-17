@@ -25,7 +25,7 @@ struct CPU {
 
   CPU() : ram(32 * 1024 * 1024) {
     registers.fill(0);
-    registers[16] = 0x7FFFFF;
+    registers[16] = 0x7FFFFC; // word aligned
   }
   constexpr auto fetch() {
     auto data = ram.read32(PC);

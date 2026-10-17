@@ -560,3 +560,43 @@ TEST_CASE("Missing main Fails At Link Time") {
   }
   REQUIRE_TRUE(threw);
 }
+
+TEST_CASE("Bitwise - & Of Two Variables") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 12;" // 0b1100
+                     "let b: int = 10;" // 0b1010
+                     "return a & b;"    // 0b1000
+                     "}";
+  REQUIRE_SAME(8, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Bitwise - | Of Two Variables Is OR, Not XOR") {
+  // 12 | 10 = 14, whereas 12 ^ 10 = 6: catches | lowered to the XOR opcode.
+  std::string code = "fn main() -> int {"
+                     "let a: int = 12;"
+                     "let b: int = 10;"
+                     "return a | b;"
+                     "}";
+  REQUIRE_SAME(14, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Bitwise - Immediate Right-Hand Side") {
+  std::string code = "fn main() -> int {"
+                     "let a: int = 13;"            // 0b1101
+                     "let m: int = a & 6;"         // 0b0100
+                     "let o: int = a | 5;"         // 0b1101 (XOR would give 0b1000)
+                     "return m + o;"               // 4 + 13
+                     "}";
+  REQUIRE_SAME(17, compileAndRun(code).registers[0]);
+}
+
+TEST_CASE("Bitwise - Mixed With Arithmetic And Comparison") {
+  // & binds looser than + and ==, so this is (a + 1) & 7, then compared.
+  std::string code = "fn main() -> int {"
+                     "let a: int = 14;"
+                     "let r: int = a + 1 & 7;" // 15 & 7 = 7
+                     "if (r == 7) { return 1; }"
+                     "return 0;"
+                     "}";
+  REQUIRE_SAME(1, compileAndRun(code).registers[0]);
+}

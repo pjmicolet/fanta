@@ -293,3 +293,37 @@ TEST_CASE("Load/Store With Max 16-bit Offset") {
   REQUIRE_SAME(0x55u, cpu.load(0x1000 + 0xFFFC)); // offset is unsigned
   REQUIRE_SAME(0x55u, cpu.registers[2]);
 }
+
+TEST_CASE("Stack Push Must Not Touch VRAM") {
+  CPU cpu{};
+  cpu.push_stack(0xAABBCCDD);
+  auto *vram = cpu.get_vram();
+  for (int i = 0; i < 4; i++)
+    REQUIRE_SAME(0, vram[i]);
+}
+
+TEST_CASE("Initial SP Is Word-Aligned") {
+  CPU cpu{};
+  REQUIRE_SAME(0u, cpu.get_sp() % 4);
+}
+
+TEST_CASE("Initial SP Is The Top Word Below VRAM") {
+  // The first push should land in the last word before VRAM (0x800000).
+  CPU cpu{};
+  const auto vramBase = static_cast<uint32_t>(cpu.get_vram() - cpu.ram.from(0));
+  REQUIRE_SAME(vramBase - 4, cpu.get_sp());
+}
+
+TEST_CASE("Deep Stack Usage Stays Below VRAM") {
+  // 64 nested pushes then pops: every write stays under VRAM and SP is restored.
+  CPU cpu{};
+  const auto sp = cpu.get_sp();
+  for (uint32_t i = 0; i < 64; i++)
+    cpu.push_stack(0xFFFFFFFF);
+  auto *vram = cpu.get_vram();
+  for (int i = 0; i < 4; i++)
+    REQUIRE_SAME(0, vram[i]);
+  for (int i = 0; i < 64; i++)
+    REQUIRE_SAME(0xFFFFFFFFu, cpu.pop_stack());
+  REQUIRE_SAME(sp, cpu.get_sp());
+}
