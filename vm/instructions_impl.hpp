@@ -109,7 +109,7 @@ struct Jmp {
   static auto exec(CPU &cpu, uint32_t inst) { cpu.set_pc(inst & 0x3FFFFFF); }
 };
 
-auto parse_as_signed(uint32_t data) -> std::int32_t {
+inline auto parse_as_signed(uint32_t data) -> std::int32_t {
   std::int32_t temp = data;
   temp = temp << 6;
   return temp >> 6;
