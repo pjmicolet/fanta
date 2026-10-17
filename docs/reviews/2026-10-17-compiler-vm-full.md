@@ -582,3 +582,9 @@ None: this is the first review.
 - Suggested `.clang-tidy` tuning to discuss: `modernize-use-trailing-return-type` (79) and
   `modernize-use-designated-initializers` (183) are mostly noise for this codebase. Consider
   enabling `-Wimplicit-fallthrough`, which would have caught B5.
+
+## Follow-up: file moves (2026-10-17)
+
+`common/instructions_impl.hpp` (D5) is now `vm/execute.hpp`, and its types live in `namespace Exec`.
+`parse_as_signed` is now `inline`. Paths in this report still use the old name; line numbers
+match apart from a 5-line shift from the namespace header.

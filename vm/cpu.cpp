@@ -1,5 +1,5 @@
 #include "cpu.hpp"
-#include "instructions_impl.hpp"
+#include "execute.hpp"
 
 static constexpr uint32_t CYCLES_PER_FRAME = 50000;
 uint32_t inst_count = 0;
