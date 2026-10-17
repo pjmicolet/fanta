@@ -80,3 +80,44 @@ TEST_CASE("Label corner cases") {
   REQUIRE_TRUE(!assem.does_label_exist("JUSTCOMMENT"));
   REQUIRE_TRUE(!assem.does_label_exist("FAKELABEL"));
 }
+
+TEST_CASE("Lowercase Mnemonics And Registers Are Normalised") {
+  Assembler a{};
+  REQUIRE_SAME(a.assemble("ADD R1, R2, R3", 0), a.assemble("add r1, r2, r3", 0));
+  REQUIRE_SAME(a.assemble("LOAD R1, 10(R2)", 0), a.assemble("load r1, 10(r2)", 0));
+  REQUIRE_SAME(a.assemble("MOV R1, #ff", 0), a.assemble("MOV R1, #FF", 0));
+}
+
+TEST_CASE("Literals Are Hex By Default") {
+  Assembler a{};
+  const auto expected = Instructions::parse_three(0x2, 1, 2, 0x10, true);
+  REQUIRE_SAME(expected, a.assemble("ADD R1, R2, 10", 0));
+  REQUIRE_SAME(expected, a.assemble("ADD R1, R2, #10", 0));
+  REQUIRE_SAME(expected, a.assemble("ADD R1, R2, $10", 0));
+  REQUIRE_SAME(expected, a.assemble("ADD R1, R2, 0x10", 0));
+}
+
+TEST_CASE("Immediate Bounds - 0x0000 and 0xFFFF Accepted") {
+  Assembler a{};
+  REQUIRE_SAME(Instructions::parse_two(0x4, 1, 0x0, true), a.assemble("MOV R1, #0", 0));
+  REQUIRE_SAME(Instructions::parse_two(0x4, 1, 0xFFFF, true),
+               a.assemble("MOV R1, #FFFF", 0));
+}
+
+TEST_CASE("Unknown Mnemonic And Missing Operands Fail Cleanly") {
+  Assembler a{};
+  REQUIRE_SAME(0xFFFFFFFFu, a.assemble("FROB R1, R2", 0));
+  REQUIRE_SAME(0xFFFFFFFFu, a.assemble("ADD R1, R2", 0));
+  REQUIRE_SAME(0xFFFFFFFFu, a.assemble("MOV R1", 0));
+  REQUIRE_SAME(0xFFFFFFFFu, a.assemble("BNE", 0));
+  REQUIRE_SAME(Instructions::Nop::emit(), a.assemble("; just a comment", 0));
+}
+
+TEST_CASE("Negative Branch Offset Round Trips Through Decode") {
+  Assembler a{};
+  a.scan_for_labels("LOOP:\nSUB R1, R1, #1\nBNE LOOP");
+  const auto raw = a.assemble("BNE LOOP", 8);
+  REQUIRE_SAME(0xB, Instructions::Decode{raw}.getOpcode());
+  const auto off = static_cast<int32_t>((raw & 0x3FFFFFF) << 6) >> 6;
+  REQUIRE_SAME(-8, off);
+}

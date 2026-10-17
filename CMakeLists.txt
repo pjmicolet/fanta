@@ -28,7 +28,10 @@ endif()
 # fixed blindly.
 option(FANTA_WARNINGS_AS_ERRORS "Treat compiler warnings as errors (-Werror)" OFF)
 
-add_compile_options(-Wall -Wextra)
+# -Wimplicit-fallthrough isn't part of -Wall/-Wextra on clang; it catches
+# switch cases that silently run into the next one (see the lexer's '&'/'|'
+# cases in docs/reviews/2026-10-17-compiler-vm-full.md, B5).
+add_compile_options(-Wall -Wextra -Wimplicit-fallthrough)
 if(FANTA_WARNINGS_AS_ERRORS)
   add_compile_options(-Werror)
 endif()
@@ -111,6 +114,11 @@ add_test(NAME lexer_test COMMAND lexer_test)
 add_test(NAME parser_test COMMAND parser_test)
 add_test(NAME codegen_test COMMAND codegen_test)
 add_test(NAME simpleirpass_test COMMAND simpleirpass_test)
+
+# The parser can loop forever on malformed input; a timeout turns a hung
+# ctest run into a reported failure so hang regression tests can live in
+# parser_test.
+set_tests_properties(parser_test PROPERTIES TIMEOUT 10)
 
 # ---------------------------------------------------------
 # Main Executables

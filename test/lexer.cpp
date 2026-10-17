@@ -121,3 +121,37 @@ TEST_CASE("Tokenize Assignment") {
   res = simple.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::IntLiteral, res);
 }
+
+TEST_CASE("Comparison And Logical Operator Lexing") {
+  std::string src = "== != <= >= < > && || ! =";
+  Lexer lx{src};
+  const Lexer::TokenType expected[] = {
+      Lexer::TokenType::EqualComp, Lexer::TokenType::NotEq,
+      Lexer::TokenType::LesserEq,  Lexer::TokenType::GreaterEq,
+      Lexer::TokenType::Lesser,    Lexer::TokenType::Greater,
+      Lexer::TokenType::And,       Lexer::TokenType::Or,
+      Lexer::TokenType::Not,       Lexer::TokenType::Equal,
+      Lexer::TokenType::Eof};
+  for (auto t : expected) {
+    auto res = lx.getToken();
+    REQUIRE_TOKEN_TYPE(t, res);
+  }
+}
+
+TEST_CASE("Unknown Symbol Reports UnknownToken And Advances") {
+  std::string src = "@ x";
+  Lexer lx{src};
+  auto res = lx.getToken();
+  REQUIRE_TRUE(!res.has_value());
+  REQUIRE_SAME(LexErrorType::UnknownToken, res.error().t);
+  auto next = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, next);
+}
+
+TEST_CASE("Digits Followed By Letters Is MalformedToken") {
+  std::string src = "12ab";
+  Lexer lx{src};
+  auto res = lx.getToken();
+  REQUIRE_TRUE(!res.has_value());
+  REQUIRE_SAME(LexErrorType::MalformedToken, res.error().t);
+}
