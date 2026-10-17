@@ -3,6 +3,11 @@
 #include "../common/cpu_info.hpp"
 #include "cpu.hpp"
 
+// Execute semantics for each opcode, dispatched from CPU::run_cycle. Kept in
+// their own namespace so Halt/Nop/Ret/Call don't sit beside the encoder
+// types of the same name in Instructions::.
+namespace Exec {
+
 struct DecodeDest {
   static auto store(CPU &cpu, std::uint32_t inst, uint32_t result) -> void {
     auto reg = (inst >> 21) & 0x1F;
@@ -104,7 +109,7 @@ struct Jmp {
   static auto exec(CPU &cpu, uint32_t inst) { cpu.set_pc(inst & 0x3FFFFFF); }
 };
 
-auto parse_as_signed(uint32_t data) -> std::int32_t {
+inline auto parse_as_signed(uint32_t data) -> std::int32_t {
   std::int32_t temp = data;
   temp = temp << 6;
   return temp >> 6;
@@ -240,3 +245,5 @@ using Bec = Branch<CPU::FLAG::CARRY, false>;
 using Bnc = Branch<CPU::FLAG::CARRY, true>;
 using Bmi = Branch<CPU::FLAG::NEGATIVE, false>;
 using Bpl = Branch<CPU::FLAG::NEGATIVE, true>;
+
+} // namespace Exec

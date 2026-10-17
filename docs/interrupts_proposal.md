@@ -140,8 +140,7 @@ lands first, steps 1–3 collapse to one row per instruction.
 1. **ISA tables** (user): `*_INST` macros and `kInstructionTable` rows in
    `common/instructions.hpp`, with the hard-coded table size bumped; constants in
    `common/cpu_info.hpp`.
-2. **Semantics** (user): `Ei`/`Di`/`Reti` exec structs in `common/instructions_impl.hpp`
-   (design finding D5 suggests moving this file to `vm/`); dispatch cases in `vm/cpu.cpp`; the
+2. **Semantics** (user): `Ei`/`Di`/`Reti` exec structs in `vm/execute.hpp`; dispatch cases in `vm/cpu.cpp`; the
    boundary check in the run loop.
 3. **Assembler** (user): `vm/string_assembler.hpp` RET-format path for the three mnemonics.
 4. **Compiler** (user): `compiler/instruction_emit.cpp` cases, if the language exposes them.

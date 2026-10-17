@@ -1,12 +1,12 @@
 #include "cpu.hpp"
-#include "instructions_impl.hpp"
+#include "execute.hpp"
 
 static constexpr uint32_t CYCLES_PER_FRAME = 50000;
 uint32_t inst_count = 0;
 
 #define EXEC_INST(OpCode, Name)                                                \
   case OpCode: {                                                               \
-    Name::exec(*this, instr);                                                  \
+    Exec::Name::exec(*this, instr);                                            \
     break;                                                                     \
   }
 
