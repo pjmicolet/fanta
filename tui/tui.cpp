@@ -1,14 +1,46 @@
 #include "tui.hpp"
+#include "disasm.hpp"
 #include "instructions.hpp"
-#include "string_assembler.hpp"
+#include "terminal.hpp"
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <thread>
 
-TUI::TUI(CPU &cpu) : cpu(cpu), running(true) {
-  editor_buffer.push_back("");
+using Fanta::Program::kStackTop;
+
+namespace {
+
+// Cycles per 60 Hz UI frame in continuous mode.
+constexpr int kBatchCycles = 150000;
+
+auto mode_name(Mode m) -> const char * {
+  switch (m) {
+  case Mode::NORMAL:
+    return "NORMAL";
+  case Mode::INSERT:
+    return "INSERT";
+  case Mode::ZOOM:
+    return "ZOOM";
+  case Mode::COMMAND:
+    return "COMMAND";
+  }
+  return "?";
+}
+
+/// Start of the first word on a line (skips indentation).
+auto first_word(const std::string &line) -> std::string {
+  auto start = line.find_first_not_of(" \t");
+  if (start == std::string::npos)
+    return "";
+  return line.substr(start);
+}
+
+} // namespace
+
+TUI::TUI(CPU &cpu) : cpu(cpu) {
   init_trie();
   last_ips_time = std::chrono::steady_clock::now();
 }
@@ -19,21 +51,26 @@ void TUI::init_trie() {
   }
 }
 
-TUI::~TUI() { endwin(); }
+TUI::~TUI() {
+  if (ncurses_active)
+    endwin();
+}
 
 void TUI::init_ncurses() {
   initscr();
+  ncurses_active = true;
   raw();
   keypad(stdscr, TRUE);
   noecho();
-  curs_set(1); // Show cursor for editor
-  timeout(50); // 50ms delay for continuous mode feel
+  set_escdelay(25); // Default is 1s, which makes ESC feel stuck
+  curs_set(1);      // Show cursor for editor
+  timeout(50);      // 50ms delay for continuous mode feel
   if (has_colors()) {
     start_color();
     init_pair(1, COLOR_CYAN, COLOR_BLACK);    // Registers
     init_pair(2, COLOR_GREEN, COLOR_BLACK);   // Disassembly / Normal Mode
     init_pair(3, COLOR_YELLOW, COLOR_BLACK);  // Status / Insert Mode
-    init_pair(4, COLOR_RED, COLOR_BLACK);     // Halted
+    init_pair(4, COLOR_RED, COLOR_BLACK);     // Halted / errors
     init_pair(5, COLOR_MAGENTA, COLOR_BLACK); // Memory
     init_pair(6, COLOR_WHITE, COLOR_BLACK);   // VRAM preview (default)
 
@@ -61,19 +98,8 @@ void TUI::run() {
   while (running) {
     auto now = std::chrono::steady_clock::now();
 
-    if (is_running_continuously) {
-      // Increased batch size for smoother feel
-      for (int i = 0; i < 150000; ++i) {
-        if (!cpu.halted) {
-          prev_registers = cpu.registers;
-          cpu.run_cycle();
-          total_cycles++;
-        } else {
-          is_running_continuously = false;
-          break;
-        }
-      }
-    }
+    if (is_running_continuously)
+      run_batch();
 
     // IPS calculation
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -100,48 +126,145 @@ void TUI::run() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Execution
+// ---------------------------------------------------------------------------
+
+void TUI::track_changed_registers(
+    const std::array<std::uint32_t, 17> &before) {
+  last_changed_reg = -1;
+  for (int i = 0; i < 17; ++i) {
+    if (cpu.registers[i] != before[i]) {
+      last_changed_reg = i;
+      break;
+    }
+  }
+}
+
+void TUI::step() {
+  if (cpu.halted)
+    return;
+  auto before = cpu.registers;
+  cpu.run_cycle();
+  total_cycles++;
+  track_changed_registers(before);
+}
+
+void TUI::run_batch() {
+  // Snapshot once per batch rather than per cycle: the highlight only needs
+  // to reflect what changed since the last frame.
+  auto before = cpu.registers;
+  for (int i = 0; i < kBatchCycles; ++i) {
+    if (cpu.halted) {
+      is_running_continuously = false;
+      break;
+    }
+    cpu.run_cycle();
+    total_cycles++;
+  }
+  track_changed_registers(before);
+}
+
+void TUI::assemble_editor() {
+  editor.trim_trailing();
+  asm_errors = Fanta::Program::assembleInto(cpu, assem, editor.lines());
+  if (asm_errors.empty()) {
+    message = std::format("Assembled {} lines", editor.lines().size());
+  } else {
+    const auto &first = asm_errors.front();
+    message = std::format("{} line(s) failed to assemble (became NOP). "
+                          "First, line {}: {}",
+                          asm_errors.size(), first.line, first.text);
+  }
+}
+
+void TUI::reset() {
+  // A fresh CPU resets registers, SP, flags, pending interrupts, VBLANK
+  // timing and all of RAM/VRAM in one go.
+  cpu = CPU{};
+  last_changed_reg = -1;
+  is_running_continuously = false;
+  if (source == Source::BINARY) {
+    Fanta::Program::storeImage(cpu, binary_image);
+    message = "Reset";
+  } else {
+    assemble_editor();
+  }
+}
+
+void TUI::reset_zoom() {
+  mode = Mode::NORMAL;
+  zoom_scale = 1.0;
+  zoom_cx = 160.0;
+  zoom_cy = 120.0;
+}
+
+// ---------------------------------------------------------------------------
+// Headless dump
+// ---------------------------------------------------------------------------
+
 void TUI::dump_state(const std::string &filename) {
   std::ofstream out(filename);
   if (!out)
     return;
 
-  // Simulate an update to fill the virtual backbuffer
-  update();
-
-  out << "--- TUI DUMP ---" << std::endl;
-  out << "Term Size: " << term_w << "x" << term_h << std::endl;
+  out << "--- TUI DUMP ---" << "\n";
   out << "PC: 0x" << std::hex << cpu.get_pc() << " SP: 0x" << cpu.get_sp()
-      << std::endl;
-  out << "----------------" << std::endl;
+      << std::dec << " FLAGS: Z:" << (int)cpu.status_reg[0]
+      << " N:" << (int)cpu.status_reg[1] << " V:" << (int)cpu.status_reg[2]
+      << " C:" << (int)cpu.status_reg[3] << "\n";
+  out << "SOURCE: " << (source == Source::ASM ? "ASM" : "BINARY (read-only)")
+      << "\n";
+  if (!message.empty())
+    out << "MESSAGE: " << message << "\n";
+  out << "----------------" << "\n";
 
-  // Use ncurses winnstr or similar if we wanted real characters,
-  // but update() already wrote to stdscr.
-  // For a headless dump, we'll just reconstruct the key regions.
-
-  out << "[REGISTERS]" << std::endl;
-  for (int i = 0; i < 16; ++i) {
-    out << "R" << std::dec << std::setw(2) << i << ": 0x" << std::hex
-        << std::setw(8) << std::setfill('0') << cpu.registers[i] << "  ";
-    if (i % 4 == 3)
-      out << std::endl;
+  out << "[REGISTERS]" << "\n";
+  for (int i = 0; i < 17; ++i) {
+    std::string label = Fanta::getRegisterName(static_cast<uint8_t>(i));
+    out << std::left << std::setw(3) << std::setfill(' ') << label << ": 0x"
+        << std::right << std::hex << std::uppercase << std::setw(8)
+        << std::setfill('0') << cpu.registers[i] << std::dec
+        << std::nouppercase << "  ";
+    if (i % 4 == 3 || i == 16)
+      out << "\n";
   }
 
-  out << std::endl << "[DISASSEMBLY]" << std::endl;
-  uint32_t pc = cpu.get_pc();
+  out << "\n" << "[DISASSEMBLY]" << "\n";
+  int64_t pc = cpu.get_pc();
   for (int i = -5; i <= 5; ++i) {
-    uint32_t addr = pc + (i * 4);
-    out << (i == 0 ? "> " : "  ") << "0x" << std::hex << addr << ": "
-        << disassemble(addr) << std::endl;
+    int64_t addr = pc + (i * 4);
+    if (addr < 0 || addr > static_cast<int64_t>(cpu.ram.getSize()) - 4)
+      continue; // PC underflow / past end of RAM
+    out << (i == 0 ? "> " : "  ") << "0x" << std::hex << addr << std::dec
+        << ": " << disassemble(static_cast<uint32_t>(addr)) << "\n";
   }
 
-  out << std::endl << "[EDITOR]" << std::endl;
-  for (size_t i = 0; i < editor_buffer.size(); ++i) {
-    out << std::setw(2) << std::setfill(' ') << i << "| " << editor_buffer[i]
-        << (i == (size_t)cursor_y ? " <--" : "") << std::endl;
+  out << "\n" << "[EDITOR]" << "\n";
+  const auto &lines = editor.lines();
+  for (size_t i = 0; i < lines.size(); ++i) {
+    bool bad = std::ranges::any_of(
+        asm_errors, [i](const auto &e) { return e.line == i; });
+    out << std::setw(2) << std::setfill(' ') << i << (bad ? "!" : "|") << " "
+        << lines[i] << (i == (size_t)editor.y() ? " <--" : "") << "\n";
   }
 
-  out << "--- END DUMP ---" << std::endl;
+  out << "\n" << "[SERIAL]" << "\n";
+  for (const auto &line : Fanta::Terminal::layout(serial_output(), 80))
+    out << line << "\n";
+
+  if (!asm_errors.empty()) {
+    out << "\n" << "[ASM ERRORS]" << "\n";
+    for (const auto &e : asm_errors)
+      out << "line " << e.line << ": " << e.text << "\n";
+  }
+
+  out << "--- END DUMP ---" << "\n";
 }
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
 
 void TUI::update() {
   getmaxyx(stdscr, term_h, term_w);
@@ -159,11 +282,14 @@ void TUI::update() {
   draw_memory();
   draw_stack();
   draw_editor();
-  draw_vram_preview();
+  if (show_serial)
+    draw_serial();
+  else
+    draw_vram_preview();
 
-  // Position cursor in the editor window relative to its starting Y
+  // Leave the terminal cursor on the editor cursor.
   int editor_y = term_h * 0.6;
-  move(editor_y + (cursor_y - editor_scroll), 6 + cursor_x);
+  move(editor_y + (editor.y() - editor_scroll), 6 + editor.x());
 
   refresh();
 }
@@ -187,21 +313,15 @@ void TUI::draw_registers() {
       row = 10;
     }
 
-    if (row < term_h) {
-      std::string label = (i == 16) ? "SP " : "R" + std::to_string(i);
-      if (i < 10 && i != 16)
-        label = "R " + std::to_string(i); // alignment
+    if (row >= term_h)
+      continue;
 
-      if (i == last_changed_reg) {
-        attron(COLOR_PAIR(3) | A_BOLD);
-        mvprintw(row, col, "%s: 0x%08X", label.c_str(), cpu.registers[i]);
-        attroff(COLOR_PAIR(3) | A_BOLD);
-      } else {
-        attron(COLOR_PAIR(1));
-        mvprintw(row, col, "%s: 0x%08X", label.c_str(), cpu.registers[i]);
-        attroff(COLOR_PAIR(1));
-      }
-    }
+    std::string label = Fanta::getRegisterName(static_cast<uint8_t>(i));
+    int attrs =
+        (i == last_changed_reg) ? (COLOR_PAIR(3) | A_BOLD) : COLOR_PAIR(1);
+    attron(attrs);
+    mvprintw(row, col, "%-3s: 0x%08X", label.c_str(), cpu.registers[i]);
+    attroff(attrs);
   }
 }
 
@@ -215,22 +335,25 @@ void TUI::draw_status() {
   mvprintw(3, col, "FLAGS: Z:%d N:%d V:%d C:%d", cpu.status_reg[0],
            cpu.status_reg[1], (cpu.status_reg[2] ? 1 : 0),
            (cpu.status_reg[3] ? 1 : 0));
-  mvprintw(4, col, "IPS: %.0f", current_ips);
-  mvprintw(5, col, "MODE: %s %s",
-           (mode == Mode::NORMAL
-                ? "NORMAL"
-                : (mode == Mode::INSERT
-                       ? "INSERT"
-                       : (mode == Mode::ZOOM ? "ZOOM" : "COMMAND"))),
+  mvprintw(4, col, "IPS: %.0f | SERIAL: %zu bytes (o)", current_ips,
+           serial_output().size());
+  mvprintw(5, col, "MODE: %s %s", mode_name(mode),
            (is_running_continuously ? "(CONT)" : ""));
   mvprintw(6, col, "KEYS: %s",
            (mode == Mode::NORMAL ? "s:step c:cont r:reset i:edit q:quit"
                                  : "ESC:exit"));
+  attroff(COLOR_PAIR(3));
 
-  if (!command_buffer.empty()) {
-    attron(A_REVERSE);
-    mvprintw(term_h - 1, 0, "%s", command_buffer.c_str());
-    attroff(A_REVERSE);
+  // Bottom line: the command being typed, else the last message.
+  const std::string &bottom =
+      (mode == Mode::COMMAND) ? command_buffer : message;
+  if (!bottom.empty()) {
+    int attrs = (mode != Mode::COMMAND && !asm_errors.empty())
+                    ? (COLOR_PAIR(4) | A_REVERSE)
+                    : A_REVERSE;
+    attron(attrs);
+    mvprintw(term_h - 1, 0, "%s", bottom.c_str());
+    attroff(attrs);
   }
 
   if (cpu.halted) {
@@ -238,7 +361,6 @@ void TUI::draw_status() {
     mvprintw(7, col, "!!! HALTED !!!");
     attroff(COLOR_PAIR(4) | A_BOLD);
   }
-  attroff(COLOR_PAIR(3));
 }
 
 void TUI::draw_disassembly() {
@@ -256,8 +378,8 @@ void TUI::draw_disassembly() {
     max_lines = 5;
 
   for (int i = 0; i < max_lines; ++i) {
-    int32_t addr = (int32_t)current_pc - (max_lines / 2 * 4) + (i * 4);
-    if (addr < 0 || addr >= 16 * 1024 * 1024 - 4)
+    int64_t addr = int64_t{current_pc} - (max_lines / 2 * 4) + (i * 4);
+    if (addr < 0 || addr > static_cast<int64_t>(cpu.ram.getSize()) - 4)
       continue;
     if (2 + i >= term_h * 0.6)
       break;
@@ -283,7 +405,7 @@ void TUI::draw_memory() {
   mvprintw(start_y, 2, "--- MEM (0x%04X) ---", mem_offset);
   for (int i = 0; i < 4; ++i) {
     uint32_t row_addr = mem_offset + (i * 8);
-    if (row_addr >= 16 * 1024 * 1024 || start_y + 1 + i >= term_h * 0.6)
+    if (row_addr + 8 > cpu.ram.getSize() || start_y + 1 + i >= term_h * 0.6)
       break;
     std::stringstream ss;
     ss << "0x" << std::hex << std::setw(4) << std::setfill('0') << row_addr
@@ -306,26 +428,27 @@ void TUI::draw_stack() {
   int col = 34;
   mvprintw(start_y, col, "--- STACK ---");
 
+  // PUSH writes at SP then decrements, so SP is the next free slot and the
+  // top value lives at SP + 4.
   uint32_t sp = cpu.registers[16];
   uint32_t fp = cpu.registers[15];
-  int row_offset = 0;
+  if (sp >= kStackTop) {
+    mvprintw(start_y + 1, col, "(empty)");
+    attroff(COLOR_PAIR(3));
+    return;
+  }
 
-  for (uint32_t addr = sp; addr <= 0x7FFFFF && row_offset < 4; addr += 4) {
-    if (addr >= 16 * 1024 * 1024 - 4)
-      break;
+  int row_offset = 0;
+  for (uint32_t addr = sp + 4; addr <= kStackTop && row_offset < 4;
+       addr += 4) {
     if (start_y + 1 + row_offset >= term_h * 0.6)
       break;
 
     uint32_t val = cpu.ram.read32(addr);
-    std::string fp_marker = (addr == fp) ? " <- FP" : "";
-
-    if (addr == sp) {
-      mvprintw(start_y + 1 + row_offset, col, "SP -> 0x%06X: 0x%08X%s", addr,
-               val, fp_marker.c_str());
-    } else {
-      mvprintw(start_y + 1 + row_offset, col, "      0x%06X: 0x%08X%s", addr,
-               val, fp_marker.c_str());
-    }
+    const char *fp_marker = (addr == fp) ? " <- FP" : "";
+    const char *tag = (row_offset == 0) ? "TOP ->" : "      ";
+    mvprintw(start_y + 1 + row_offset, col, "%s 0x%06X: 0x%08X%s", tag, addr,
+             val, fp_marker);
     row_offset++;
   }
   attroff(COLOR_PAIR(3));
@@ -338,42 +461,48 @@ void TUI::draw_editor() {
     win_h = 3;
 
   attron(A_BOLD);
-  mvprintw(win_y - 1, 2, "--- EDITOR (Mnemonic Entry) ---");
+  mvprintw(win_y - 1, 2, "%s",
+           source == Source::ASM ? "--- EDITOR (Mnemonic Entry) ---"
+                                 : "--- EDITOR (binary, read-only) ---");
   attroff(A_BOLD);
 
   // Calculate scrolling to keep cursor in view
   int visible_lines = win_h - 1;
-  if (cursor_y < editor_scroll) {
-    editor_scroll = cursor_y;
-  } else if (cursor_y >= editor_scroll + visible_lines) {
-    editor_scroll = cursor_y - visible_lines + 1;
+  if (editor.y() < editor_scroll) {
+    editor_scroll = editor.y();
+  } else if (editor.y() >= editor_scroll + visible_lines) {
+    editor_scroll = editor.y() - visible_lines + 1;
   }
 
+  const auto &lines = editor.lines();
   for (int i = 0; i < visible_lines; ++i) {
     int line_idx = editor_scroll + i;
-    if (line_idx >= (int)editor_buffer.size())
+    if (line_idx >= (int)lines.size())
       break;
 
-    std::string line = editor_buffer[line_idx];
-    if (line_idx == cursor_y) {
-      attron(COLOR_PAIR(2));
-      mvprintw(win_y + i, 2, "%2d| %s", line_idx, line.c_str());
-      attroff(COLOR_PAIR(2));
+    const std::string &line = lines[line_idx];
+    bool bad = std::ranges::any_of(asm_errors, [line_idx](const auto &e) {
+      return e.line == (size_t)line_idx;
+    });
+    int attrs = bad ? COLOR_PAIR(4)
+                    : (line_idx == editor.y() ? COLOR_PAIR(2) : A_NORMAL);
+    attron(attrs);
+    mvprintw(win_y + i, 2, "%2d%c %s", line_idx, bad ? '!' : '|',
+             line.c_str());
+    attroff(attrs);
 
-      if (mode == Mode::INSERT && !line.empty() &&
-          line.find(' ') == std::string::npos) {
-        std::string suggestion = trie.getSuggestion(line);
-        if (!suggestion.empty() && suggestion.size() > line.size()) {
+    // Ghost-text mnemonic suggestion while typing the first word.
+    if (line_idx == editor.y() && mode == Mode::INSERT) {
+      std::string word = first_word(line);
+      if (!word.empty() && word.find_first_of(" \t") == std::string::npos) {
+        std::string suggestion = trie.getSuggestion(word);
+        if (suggestion.size() > word.size()) {
           attron(A_DIM);
           mvprintw(win_y + i, 6 + line.size(), "%s",
-                   suggestion.substr(line.size()).c_str());
+                   suggestion.substr(word.size()).c_str());
           attroff(A_DIM);
         }
       }
-      if (mode == Mode::INSERT)
-        move(win_y + i, 6 + cursor_x);
-    } else {
-      mvprintw(win_y + i, 2, "%2d| %s", line_idx, line.c_str());
     }
   }
 }
@@ -468,85 +597,97 @@ void TUI::draw_vram_preview() {
   }
 }
 
+auto TUI::serial_output() -> const std::string & {
+  return cpu.bus.get<BasicSerial<>>().output;
+}
+
+void TUI::draw_serial() {
+  int start_col = term_w * 0.60;
+  int start_y = term_h * 0.6;
+  int pane_w = term_w - start_col - 4;
+  int pane_h = term_h - start_y - 1;
+  mvprintw(start_y - 1, start_col, "--- SERIAL (%zu bytes) ---",
+           serial_output().size());
+  if (pane_w <= 0 || pane_h <= 0)
+    return;
+
+  // Like a terminal: show the most recent lines, oldest at the top.
+  auto lines = Fanta::Terminal::layout(serial_output(), pane_w);
+  size_t first = lines.size() > (size_t)pane_h ? lines.size() - pane_h : 0;
+  for (size_t i = first; i < lines.size(); ++i)
+    mvprintw(start_y + (int)(i - first), start_col, "%s", lines[i].c_str());
+}
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+
 void TUI::handle_input() {
   int ch = getch();
   if (ch == ERR)
     return;
 
-  if (ch == 27) { // ESC
+  if (ch == 27) { // ESC always stops a continuous run
     is_running_continuously = false;
-    if (mode == Mode::ZOOM) {
-      mode = Mode::NORMAL;
-      zoom_scale = 1.0;
-      zoom_cx = 160.0;
-      zoom_cy = 120.0;
-      return;
-    }
   }
 
-  if (mode == Mode::NORMAL) {
+  switch (mode) {
+  case Mode::NORMAL:
     handle_normal_mode(ch);
-  } else if (mode == Mode::INSERT) {
+    break;
+  case Mode::INSERT:
     handle_insert_mode(ch);
-  } else if (mode == Mode::ZOOM) {
-    // In ZOOM mode, we still want to step, reset, and continue
-    switch (ch) {
-    case 's':
-      if (!cpu.halted)
-        cpu.run_cycle();
-      break;
-    case 'c':
-      if (!cpu.halted)
-        is_running_continuously = !is_running_continuously;
-      break;
-    case 'r':
-      handle_normal_mode('r');
-      break; // Reuse reset logic
-    case 'z':
-      mode = Mode::NORMAL;
-      zoom_scale = 1.0;
-      zoom_cx = 160.0;
-      zoom_cy = 120.0;
-      break;
-    case '+':
-    case '=':
-      zoom_scale += 0.25;
-      if (zoom_scale > 10.0)
-        zoom_scale = 10.0;
-      break;
-    case '-':
-      zoom_scale -= 0.25;
-      if (zoom_scale < 1.0)
-        zoom_scale = 1.0;
-      break;
-    case 'h':
-    case KEY_LEFT:
-      zoom_cx -= 4.0;
-      if (zoom_cx < 0.0)
-        zoom_cx = 0.0;
-      break;
-    case 'l':
-    case KEY_RIGHT:
-      zoom_cx += 4.0;
-      if (zoom_cx > 320.0)
-        zoom_cx = 320.0;
-      break;
-    case 'i':
-    case 'k':
-    case KEY_UP:
-      zoom_cy -= 4.0;
-      if (zoom_cy < 0.0)
-        zoom_cy = 0.0;
-      break;
-    case 'j':
-    case KEY_DOWN:
-      zoom_cy += 4.0;
-      if (zoom_cy > 240.0)
-        zoom_cy = 240.0;
-      break;
-    }
-  } else if (mode == Mode::COMMAND) {
+    break;
+  case Mode::ZOOM:
+    handle_zoom_mode(ch);
+    break;
+  case Mode::COMMAND:
     handle_command_mode(ch);
+    break;
+  }
+}
+
+void TUI::handle_zoom_mode(int ch) {
+  // In ZOOM mode, we still want to step, reset, and continue
+  switch (ch) {
+  case 27: // ESC
+  case 'z':
+    reset_zoom();
+    break;
+  case 's':
+    step();
+    break;
+  case 'c':
+    if (!cpu.halted)
+      is_running_continuously = !is_running_continuously;
+    break;
+  case 'r':
+    reset();
+    break;
+  case '+':
+  case '=':
+    zoom_scale = std::min(zoom_scale + 0.25, 10.0);
+    break;
+  case '-':
+    zoom_scale = std::max(zoom_scale - 0.25, 1.0);
+    break;
+  case 'h':
+  case KEY_LEFT:
+    zoom_cx = std::max(zoom_cx - 4.0, 0.0);
+    break;
+  case 'l':
+  case KEY_RIGHT:
+    zoom_cx = std::min(zoom_cx + 4.0, 320.0);
+    break;
+  case 'i':
+  case 'k':
+  case KEY_UP:
+    zoom_cy = std::max(zoom_cy - 4.0, 0.0);
+    break;
+  case 'j':
+  case KEY_DOWN:
+    zoom_cy = std::min(zoom_cy + 4.0, 240.0);
+    break;
   }
 }
 
@@ -564,179 +705,93 @@ void TUI::handle_normal_mode(int ch) {
     mode = Mode::ZOOM;
     is_running_continuously = false;
     break;
+  case 'o':
+    show_serial = !show_serial;
+    break;
   case '[':
     if (mem_offset >= 16)
       mem_offset -= 16;
     break;
   case ']':
-    if (mem_offset < 16 * 1024 * 1024 - 16)
+    if (mem_offset + 16 + 32 <= cpu.ram.getSize()) // keep the 32-byte pane in RAM
       mem_offset += 16;
     break;
-  case 'r': // Full CPU Reset
-    cpu.set_pc(0);
-    cpu.halted = false;
-    cpu.registers.fill(0);
-    cpu.registers[16] = 0x7FFFFF; // Restore Sacred SP
-    prev_registers.fill(0);
-    last_changed_reg = -1;
-    is_running_continuously = false;
-    // Optionally clear first 1MB of RAM if you want a "clean" run
-    for (uint32_t i = 0; i < 1024 * 1024; i += 4) {
-      cpu.store(i, 0);
-    }
-    // Clear VRAM (320x240 * 4 bytes = 307,200 bytes)
-    for (uint32_t i = 0x800000; i < 0x800000 + (320 * 240 * 4); i += 4) {
-      cpu.store(i, 0);
-    }
-    // Re-assemble current buffer back into the clean memory
-    try {
-      for (size_t i = 0; i < editor_buffer.size(); ++i) {
-        // Trim trailing spaces
-        editor_buffer[i].erase(editor_buffer[i].find_last_not_of(" \n\r\t") + 1,
-                               std::string::npos);
-        uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
-        if (instr != (uint32_t)-1) {
-          cpu.store(i * 4, instr);
-        } else {
-          cpu.store(i * 4, 0x14 << 26); // Official NOP
-        }
-      }
-    } catch (...) {
-    }
+  case 'r':
+    reset();
     break;
   case 'i':
+    if (editor.read_only()) {
+      message = "Editor is read-only for binaries; :e a .asm file to edit";
+      break;
+    }
     mode = Mode::INSERT;
     curs_set(1);
     is_running_continuously = false;
     break;
   case 's':
-    if (!cpu.halted) {
-      prev_registers = cpu.registers;
-      cpu.run_cycle();
-      last_changed_reg = -1;
-      for (int i = 0; i < 17; ++i) {
-        if (cpu.registers[i] != prev_registers[i]) {
-          last_changed_reg = i;
-          break;
-        }
-      }
-    }
+    step();
     break;
   case 'c':
     if (!cpu.halted)
       is_running_continuously = !is_running_continuously;
     break;
   case KEY_UP:
-    if (cursor_y > 0)
-      cursor_y--;
+    editor.up();
     break;
   case KEY_DOWN:
-    if (cursor_y < (int)editor_buffer.size() - 1)
-      cursor_y++;
+    editor.down();
     break;
   case KEY_LEFT:
-    if (cursor_x > 0)
-      cursor_x--;
+    editor.left();
     break;
   case KEY_RIGHT:
-    if (cursor_x < (int)editor_buffer[cursor_y].size())
-      cursor_x++;
+    editor.right();
     break;
   case 'x': // Delete character
-    if (cursor_x < (int)editor_buffer[cursor_y].size()) {
-      editor_buffer[cursor_y].erase(cursor_x, 1);
-    }
+    editor.erase_at_cursor();
     break;
   }
 }
 
 void TUI::handle_insert_mode(int ch) {
-  if (ch == 27) { // ESC
+  switch (ch) {
+  case 27: // ESC: leave insert mode and live-patch memory with the buffer
     mode = Mode::NORMAL;
     curs_set(0);
-
-    // Apply changes to the whole buffer when exiting insert mode
-    try {
-      std::string full_code;
-      for (auto &line : editor_buffer) {
-        // Trim trailing spaces
-        line.erase(line.find_last_not_of(" \n\r\t") + 1, std::string::npos);
-        full_code += line + "\n";
-      }
-      assem.scan_for_labels(full_code);
-
-      for (size_t i = 0; i < editor_buffer.size(); ++i) {
-        uint32_t instr = assem.assemble(editor_buffer[i], i * 4);
-        if (instr != (uint32_t)-1) {
-          cpu.store(i * 4, instr);
-        } else {
-          // Use official NOP opcode (0x14) shifted left by 26
-          cpu.store(i * 4, 0x14 << 26);
-        }
-      }
-    } catch (...) {
-    }
-    return;
-  }
-
-  switch (ch) {
+    assemble_editor();
+    break;
   case KEY_LEFT:
-    if (cursor_x > 0)
-      cursor_x--;
+    editor.left();
     break;
   case KEY_RIGHT:
-    if (cursor_x < (int)editor_buffer[cursor_y].size())
-      cursor_x++;
+    editor.right();
     break;
   case KEY_UP:
-    if (cursor_y > 0) {
-      cursor_y--;
-      cursor_x = std::min(cursor_x, (int)editor_buffer[cursor_y].size());
-    }
+    editor.up();
     break;
   case KEY_DOWN:
-    if (cursor_y < (int)editor_buffer.size() - 1) {
-      cursor_y++;
-      cursor_x = std::min(cursor_x, (int)editor_buffer[cursor_y].size());
-    }
+    editor.down();
     break;
-  case '\t': { // TAB completion
-    std::string line = editor_buffer[cursor_y];
-    if (line.find(' ') == std::string::npos && !line.empty()) {
-      std::string suggestion = trie.getSuggestion(line);
-      if (!suggestion.empty()) {
-        editor_buffer[cursor_y] = suggestion + " ";
-        cursor_x = editor_buffer[cursor_y].size();
-      }
+  case '\t': { // TAB completion of the mnemonic
+    std::string word = first_word(editor.line());
+    if (!word.empty() && word.find_first_of(" \t") == std::string::npos) {
+      std::string suggestion = trie.getSuggestion(word);
+      if (!suggestion.empty())
+        editor.replace_first_word(suggestion);
     }
     break;
   }
   case KEY_BACKSPACE:
   case 127:
-    if (cursor_x > 0) {
-      editor_buffer[cursor_y].erase(cursor_x - 1, 1);
-      cursor_x--;
-    } else if (cursor_y > 0) {
-      cursor_x = editor_buffer[cursor_y - 1].size();
-      editor_buffer[cursor_y - 1] += editor_buffer[cursor_y];
-      editor_buffer.erase(editor_buffer.begin() + cursor_y);
-      cursor_y--;
-    }
+    editor.backspace();
     break;
   case KEY_ENTER:
-  case '\n': {
-    std::string remaining = editor_buffer[cursor_y].substr(cursor_x);
-    editor_buffer[cursor_y] = editor_buffer[cursor_y].substr(0, cursor_x);
-    editor_buffer.insert(editor_buffer.begin() + cursor_y + 1, remaining);
-    cursor_y++;
-    cursor_x = 0;
+  case '\n':
+    editor.newline();
     break;
-  }
   default:
-    if (isprint(ch)) {
-      editor_buffer[cursor_y].insert(cursor_x, 1, ch);
-      cursor_x++;
-    }
+    if (isprint(ch))
+      editor.insert(static_cast<char>(ch));
     break;
   }
 }
@@ -757,170 +812,89 @@ void TUI::handle_command_mode(int ch) {
     }
   } else if (ch == '\n' || ch == KEY_ENTER) {
     std::string cmd = command_buffer.substr(1); // skip ':'
+    command_buffer = "";
+    mode = Mode::NORMAL;
 
     if (cmd.starts_with("w ")) {
       std::string filename = cmd.substr(2);
       std::ofstream out(filename);
-      for (const auto &line : editor_buffer) {
+      if (!out) {
+        message = "Error writing " + filename;
+        return;
+      }
+      for (const auto &line : editor.lines()) {
         out << line << "\n";
       }
-      command_buffer = "Written to " + filename;
+      message = "Written to " + filename;
     } else if (cmd.starts_with("e ")) {
       std::string filename = cmd.substr(2);
-      if (load_file(filename)) {
-        command_buffer = "Loaded " + filename;
-      } else {
-        command_buffer = "Error loading " + filename;
-      }
+      if (!load_file(filename))
+        message = "Error loading " + filename;
     } else if (cmd == "q") {
       running = false;
     } else {
-      command_buffer = "Unknown command: " + cmd;
+      message = "Unknown command: " + cmd;
     }
-    mode = Mode::NORMAL; // Switch back but draw_status will show the message
-                         // briefly
   } else if (isprint(ch)) {
     command_buffer += (char)ch;
   }
 }
 
+// ---------------------------------------------------------------------------
+// Program loading / disassembly
+// ---------------------------------------------------------------------------
+
 std::string TUI::disassemble(uint32_t addr) {
-  if (addr >= 16 * 1024 * 1024 - 4)
+  if (addr > cpu.ram.getSize() - 4)
     return "OUT OF BOUNDS";
-  uint32_t raw = cpu.ram.read32(addr);
-  Instructions::Decode d(raw);
-  uint8_t opcode = d.getOpcode();
-
-  std::string label = assem.get_label_for((int)addr);
-  std::string label_tag = label.empty() ? "" : "[" + label + "] ";
-
-  // Mapping of opcode to name for display
-  static std::unordered_map<uint8_t, std::string> names;
-  if (names.empty()) {
-    for (auto &[mnem, meta] : Instructions::Registry::get()) {
-      names[meta.reg] = mnem;
-      if (meta.imm != 0)
-        names[meta.imm] = mnem;
-    }
-    names[0] = "HALT";
-    names[0x15] = "CALL";
-    names[0x16] = "RET";
-  }
-
-  if (names.find(opcode) == names.end())
-    return "UNKNOWN";
-
-  std::string name = names[opcode];
-  auto &mtd = Instructions::Registry::fetch(name);
-
-  std::stringstream ss;
-  ss << name << " ";
-  switch (mtd.fmt) {
-  case Instructions::THREE_OP:
-    ss << "R" << (int)d.getDestSrc() << ", R" << (int)d.getS1() << ", ";
-    if (opcode == mtd.imm) {
-      ss << "#" << std::hex << (int)d.getImm();
-    } else {
-      ss << "R" << (int)d.getS2();
-    }
-    break;
-  case Instructions::TWO_OP:
-    ss << "R" << (int)d.getDestSrc() << ", ";
-    if (opcode == mtd.imm) {
-      ss << "#" << std::hex << (int)d.getImm();
-    } else {
-      ss << "R" << (int)d.getS1();
-    }
-    break;
-  case Instructions::MEM:
-    ss << "R" << (int)d.getDestSrc() << ", " << std::hex << (int)d.getImm()
-       << "(R" << std::dec << (int)d.getS1() << ")";
-    break;
-  case Instructions::STACK_INST:
-    ss << "R" << (int)(raw & 0x3FFFFFF);
-    break;
-  case Instructions::JUMP:
-  case Instructions::BRANCH: {
-    if (name == "CIP") {
-      ss << "#" << (raw & 0x3FFFFFF);
-      break;
-    }
-    int32_t offset = (int32_t)(raw & 0x3FFFFFF);
-    // Sign extend 26-bit to 32-bit
-    if (offset & 0x2000000)
-      offset |= 0xFC000000;
-
-    // For JMP (absolute) vs Branch (relative)
-    uint32_t target = (opcode == Instructions::Registry::fetch("JMP").reg)
-                          ? (raw & 0x3FFFFFF)
-                          : (addr + offset);
-
-    std::string target_label = assem.get_label_for((int)target);
-    if (!target_label.empty()) {
-      ss << target_label << " <0x" << std::hex << target << ">";
-    } else {
-      ss << "0x" << std::hex << target;
-    }
-
-    if (opcode != Instructions::Registry::fetch("JMP").reg) {
-      ss << " (offset: " << std::dec << offset << ")";
-    }
-    break;
-  }
-  case Instructions::HALT:
-    return label_tag + "HALT";
-  case Instructions::RET:
-    return label_tag + "RET";
-  }
-  return label_tag + ss.str();
+  auto labels = [this](uint32_t a) -> std::optional<std::string> {
+    auto label = assem.get_label_for(static_cast<int>(a));
+    if (label.empty())
+      return std::nullopt;
+    return label;
+  };
+  std::string text = Fanta::disassemble(cpu.ram.read32(addr), addr, labels);
+  if (auto here = labels(addr))
+    return "[" + *here + "] " + text;
+  return text;
 }
 
 bool TUI::load_file(const std::string &filename) {
+  editor_scroll = 0;
   if (filename.ends_with(".bin")) {
-    std::ifstream in(filename, std::ios::binary);
-    if (!in)
+    auto image = Fanta::Program::readBinary(filename);
+    if (!image)
       return false;
 
-    cpu.registers.fill(0);
-    cpu.registers[16] = 0x7FFFFF; // Reset SP
-    cpu.halted = false;
+    binary_image = std::move(*image);
+    source = Source::BINARY;
+    assem = Assembler(); // Binaries carry no labels
+    asm_errors.clear();
+    reset();
 
-    editor_buffer.clear();
-
-    uint32_t instr;
-    uint32_t addr = 0;
-    while (in.read(reinterpret_cast<char *>(&instr), sizeof(uint32_t))) {
-      cpu.store(addr, instr);
-      addr += 4;
+    // The editor shows a disassembly view. It is read-only: the text can't
+    // be assembled back into the same program (branch offsets, labels), so
+    // the image stays the source of truth.
+    std::vector<std::string> view;
+    for (size_t i = 0; i < binary_image.size(); ++i) {
+      view.push_back(Fanta::disassemble(binary_image[i],
+                                        static_cast<uint32_t>(i * 4)));
     }
-
-    assem = Assembler(); // Reset labels
-    for (uint32_t a = 0; a < addr; a += 4) {
-      std::string line = disassemble(a);
-      editor_buffer.push_back(line);
-    }
-
-    if (editor_buffer.empty())
-      editor_buffer.push_back("");
-    cursor_y = 0;
-    cursor_x = 0;
-    return true;
-  } else {
-    std::ifstream in(filename);
-    if (!in)
-      return false;
-
-    editor_buffer.clear();
-    std::string line;
-    while (std::getline(in, line)) {
-      editor_buffer.push_back(line);
-    }
-    if (editor_buffer.empty())
-      editor_buffer.push_back("");
-    cursor_y = 0;
-    cursor_x = 0;
-
-    handle_insert_mode(27); // Re-assemble immediately
+    editor.set_lines(std::move(view), /*read_only=*/true);
+    message = std::format("Loaded {} ({} words, read-only)", filename,
+                          binary_image.size());
     return true;
   }
+
+  auto lines = Fanta::Program::readLines(filename);
+  if (!lines)
+    return false;
+
+  source = Source::ASM;
+  binary_image.clear();
+  editor.set_lines(std::move(*lines));
+  reset(); // fresh CPU, then assemble the new buffer
+  if (asm_errors.empty())
+    message = "Loaded " + filename;
+  return true;
 }
