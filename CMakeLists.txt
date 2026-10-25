@@ -144,10 +144,11 @@ add_executable(fanta-tui tui/main.cpp tui/tui.cpp)
 target_include_directories(fanta-tui PRIVATE tui vm compiler common)
 target_link_libraries(fanta-tui PRIVATE vm_lib compiler_lib ${CURSES_LIBRARIES})
 
-# TUI Tests
-add_executable(tui-tests tui/tests.cpp tui/tui.cpp)
-target_include_directories(tui-tests PRIVATE tui vm compiler common)
-target_link_libraries(tui-tests PRIVATE vm_lib compiler_lib ${CURSES_LIBRARIES})
+# TUI Tests (disassembler, program loading, editor, headless TUI session)
+add_executable(tui_test test/tui.cpp tui/tui.cpp)
+target_include_directories(tui_test PRIVATE tui vm compiler common)
+target_link_libraries(tui_test PRIVATE vm_lib compiler_lib test_framework ${CURSES_LIBRARIES})
+add_test(NAME tui_test COMMAND tui_test)
 
 # Trace Utility
 add_executable(fanta-trace tui/trace.cpp)

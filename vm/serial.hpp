@@ -13,10 +13,18 @@ concept SerialDevice = requires(D device, uint32_t offset, uint32_t val) {
 
 template <uint32_t s = 8> struct BasicSerial {
   auto write(uint32_t offset, uint32_t val) -> void {
-    output.push_back(static_cast<char>(val & 0xFF));
+    if (offset == 0) {
+      output.push_back(static_cast<char>(val & 0xFF));
+      return;
+    }
   }
-  auto read(uint32_t offset) -> uint32_t { /**TODO: Add state**/ return 0; }
+  auto read(uint32_t offset) -> uint32_t {
+    if (offset == 0)
+      return 0;
+    return status;
+  }
 
   std::string output;
+  uint32_t status = 0x2;
   static constexpr uint32_t size = s;
 };

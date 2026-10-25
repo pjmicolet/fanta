@@ -2,6 +2,7 @@
 #include "../common/cpu_info.hpp"
 #include "assembler.hpp"
 #include "instructions.hpp"
+#include "string_assembler.hpp"
 #include <testframework/testing.hpp>
 
 TEST_CASE("Basic Adds") {
@@ -326,4 +327,78 @@ TEST_CASE("Deep Stack Usage Stays Below VRAM") {
   for (int i = 0; i < 64; i++)
     REQUIRE_SAME(0xFFFFFFFFu, cpu.pop_stack());
   REQUIRE_SAME(sp, cpu.get_sp());
+}
+
+// --- Serial port (DATA at +0, STATUS at +4 of the device base) -------------
+
+namespace {
+constexpr uint32_t kSerialData = 0x0200'0000;
+constexpr uint32_t kSerialStatus = kSerialData + 4;
+
+auto serialOut(CPU &cpu) -> const std::string & {
+  return cpu.bus.get<BasicSerial<>>().output;
+}
+} // namespace
+
+TEST_CASE("Fresh CPU Has Empty Serial Output") {
+  CPU cpu{};
+  REQUIRE_TRUE(serialOut(cpu).empty());
+}
+
+TEST_CASE("Serial Store Sends Only The Low Byte") {
+  CPU cpu{};
+  cpu.store(kSerialData, 0x12345648); // 'H' in the low byte
+  REQUIRE_SAME(std::string{"H"}, serialOut(cpu));
+}
+
+TEST_CASE("Serial Program Output Keeps Byte Order") {
+  // The hello-world from the serial spec, run through the real dispatch path.
+  CPU cpu{};
+  Assembler assem{};
+  uint32_t addr = 0;
+  for (const auto *line :
+       {"MOV R1, #200", "LSH R1, R1, #10", "MOV R2, #48", "STORE R2, 0(R1)",
+        "MOV R2, #69", "STORE R2, 0(R1)", "MOV R2, #A", "STORE R2, 0(R1)",
+        "HALT"}) {
+    cpu.store(addr, assem.assemble(line, static_cast<int>(addr)));
+    addr += 4;
+  }
+  cpu.run_until_halt();
+  REQUIRE_SAME(std::string{"Hi\n"}, serialOut(cpu));
+}
+
+TEST_CASE("Serial Store Does Not Touch RAM") {
+  // RAM ends exactly where the device area starts.
+  CPU cpu{};
+  const auto lastWord = static_cast<uint32_t>(cpu.ram.getSize() - 4);
+  REQUIRE_SAME(kSerialData, lastWord + 4);
+  cpu.store(lastWord, 0xCAFEF00D);
+  cpu.store(kSerialData, 'x');
+  REQUIRE_SAME(0xCAFEF00Du, cpu.load(lastWord));
+  REQUIRE_SAME(std::string{"x"}, serialOut(cpu));
+}
+
+TEST_CASE("Serial Status Reads Ready To Send, Nothing Received") {
+  // bit 1 = ready to send (always, the wire is instant)
+  // bit 0 = received byte waiting (never, until input exists)
+  CPU cpu{};
+  REQUIRE_SAME(0x2u, cpu.load(kSerialStatus));
+  cpu.store(kSerialData, 'x');
+  REQUIRE_SAME(0x2u, cpu.load(kSerialStatus));
+}
+
+TEST_CASE("Serial Data Read Is The Receive Side, Not Sent Output") {
+  // Reading DATA returns the next received byte. Nothing is ever received
+  // yet, so it reads 0 even after the program has sent something.
+  CPU cpu{};
+  cpu.store(kSerialData, 'H');
+  REQUIRE_SAME(0u, cpu.load(kSerialData));
+}
+
+TEST_CASE("Unmapped Device Space Reads Zero And Drops Writes") {
+  CPU cpu{};
+  constexpr uint32_t unmapped = 0x0200'1000;
+  cpu.store(unmapped, 'x');
+  REQUIRE_SAME(0u, cpu.load(unmapped));
+  REQUIRE_TRUE(serialOut(cpu).empty());
 }

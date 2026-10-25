@@ -1,6 +1,6 @@
 # Fanta ISA: Cooperative Interrupt Design & Compiler Spec
 
-This document details the cooperative interrupt model for the Fanta 32-bit RISC console: the instruction encoding, how programs register handlers, where the compiler injects checks, and the language constructs planned on top.
+This document details the cooperative interrupt model for the Fanta 32-bit RISC machine: the instruction encoding, how programs register handlers, where the compiler injects checks, and the language constructs planned on top.
 
 `CIP` is a **user-level event mechanism**. It is not the CPU's hardware interrupt path. A program states which events it handles and with which functions, and those handlers run only at safe points the program (or compiler) chooses. Kernel-level traps (syscalls, faults, preemptive interrupts) are a separate layer, covered in `docs/interrupts_proposal.md`. The two layers share only the *pending* bits (§6).
 
