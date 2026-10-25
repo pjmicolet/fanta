@@ -105,7 +105,15 @@ private:
     return is_label(pureLabel);
   }
 
-  auto is_pure_comment(std::string_view line) -> bool { return line[0] == ';'; }
+  auto is_pure_comment(std::string_view line) -> bool {
+    for (const auto &c : line) {
+      if (c == ' ' || c == '\t')
+        continue;
+      return c == ';';
+    }
+    return true; // This is a bit of an odd situation where all you have is
+                 // empty string
+  }
 
   auto is_label(std::string_view token) -> bool {
     if (!::isalpha(token[0]))
@@ -214,7 +222,8 @@ private:
   }
 
   auto parse_two(const std::vector<std::string_view> &tokens,
-                 const Instructions::InstMetadata &mtd, int address) -> uint32_t {
+                 const Instructions::InstMetadata &mtd, int address)
+      -> uint32_t {
     if (tokens.size() < 3)
       return -1;
     int r1_int = extract_val(tokens[1], address);
@@ -225,7 +234,8 @@ private:
   }
 
   auto parse_three(const std::vector<std::string_view> &tokens,
-                   const Instructions::InstMetadata &mtd, int address) -> uint32_t {
+                   const Instructions::InstMetadata &mtd, int address)
+      -> uint32_t {
     if (tokens.size() < 4)
       return -1;
     int r1_int = extract_val(tokens[1], address);
@@ -237,7 +247,8 @@ private:
   }
 
   auto parse_mem(const std::vector<std::string_view> &tokens,
-                 const Instructions::InstMetadata &mtd, int address) -> uint32_t {
+                 const Instructions::InstMetadata &mtd, int address)
+      -> uint32_t {
     if (tokens.size() < 4)
       return -1;
     int dest_reg = extract_val(tokens[1], address);

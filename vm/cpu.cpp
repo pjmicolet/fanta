@@ -2,7 +2,6 @@
 #include "execute.hpp"
 
 static constexpr uint32_t CYCLES_PER_FRAME = 50000;
-uint32_t inst_count = 0;
 
 #define EXEC_INST(OpCode, Name)                                                \
   case OpCode: {                                                               \
@@ -12,7 +11,7 @@ uint32_t inst_count = 0;
 
 auto decodeOpt(uint32_t inst) { return (inst >> 26) & 0x3F; }
 
-auto CPU::run_cycle() -> void {
+template <typename BType> auto BaseCPU<BType>::run_cycle() -> void {
   auto instr = fetch();
   auto byte = decodeOpt(instr);
   if (inst_count >= CYCLES_PER_FRAME) {
@@ -57,8 +56,12 @@ auto CPU::run_cycle() -> void {
   inst_count++;
 }
 
-auto CPU::run_until_halt() -> void {
+template <typename BType> auto BaseCPU<BType>::run_until_halt() -> void {
   while (!halted) {
     run_cycle();
   }
 }
+
+// Member definitions live here rather than in cpu.hpp, because they need
+// execute.hpp, which itself includes cpu.hpp. Instantiate each board once.
+template struct BaseCPU<BasicBus>;
