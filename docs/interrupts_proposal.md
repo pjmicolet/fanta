@@ -1,10 +1,12 @@
 # Fanta ISA: Preemptive Interrupts Proposal
 
-**Status:** proposal (rewritten 2026-10-17). The cooperative model (`CIP`) is already implemented.
-This document proposes *preemptive* interrupts on top of it, fixes the opcode collision in the
-earlier draft (EI/DI were assigned `0x1F`/`0x20`, which are already `CIP`/`BNC`), and states the
-open design questions. See `docs/cooperative_interrupts.md` for the cooperative model and
-`docs/reviews/2026-10-17-compiler-vm-full.md` for the review findings referenced here.
+**Status:** proposal (rewritten 2026-10-17). This is the **kernel layer**: hardware interrupts
+taken preemptively by the CPU, and later the same entry path for syscalls (`SYS`) and faults.
+The cooperative model (`CIP`) is a separate **user layer**, specified in
+`docs/cooperative_interrupts.md`. The two layers share only the pending bits (§2). This document
+also fixes the opcode collision in the earlier draft (EI/DI were assigned `0x1F`/`0x20`, which
+are already `CIP`/`BNC`). See `docs/reviews/2026-10-17-compiler-vm-full.md` for the review
+findings referenced here.
 
 ---
 
@@ -14,26 +16,17 @@ open design questions. See `docs/cooperative_interrupts.md` for the cooperative 
 | :--- | :--- | :--- |
 | Interrupt source | `vm/cpu.cpp` (`CYCLES_PER_FRAME = 50000`) | Every 50,000 executed instructions the VM sets `cip_interrupts[0] = 1` (the VBLANK line). |
 | Pending lines | `CPU::cip_interrupts` | One pending flag per interrupt line. |
-| `CIP #n` | opcode `0x1F`, `JUMP` format (26-bit field = line number) | If line `n` is pending: clear it, push PC, jump to `INTERRUPT_BASE + 4*n`. |
-| Vector table | `Fanta::Info::Cpu::INTERRUPT_BASE = 0x100` | One 4-byte slot per line. |
-| Handler return | `RET` | Pops the PC pushed by `CIP`. |
+| `CIP` | opcode `0x1F` | User-layer event delivery. Specified (with a new line + handler-offset encoding, still to be implemented) in `docs/cooperative_interrupts.md`. |
 
-This is fully cooperative. A handler only runs when the program reaches a `CIP`, so a loop
-without one locks out VBLANK. `cooperative_interrupts.md` covers compiler back-edge injection as
-the mitigation.
+There is no kernel layer yet: nothing is ever taken preemptively, and a VBLANK only has an
+effect when the program reaches a `CIP`.
 
-**Known issues to resolve first.** Both are review findings:
-- **B2:** SP starts at `0x7FFFFF`, so the first push overwrites VRAM pixel 0. Preemptive entry
-  pushes two words with no warning to the program, so this must be fixed before any of the
-  rest. Recommended: `STACK_TOP = VRAM_BASE - 4`.
+**Known issues to resolve first:**
+- **B2 (fixed):** SP now starts at `0x7FFFFC`, the top word below VRAM, so stack pushes no longer
+  overwrite pixel 0.
 - **B14:** the instruction counter that drives VBLANK is a file-scope global, so it is shared
   between CPU instances. It should be a per-CPU countdown (perf finding P1). That is also where
   the preemption check below belongs.
-
-**Vector slot spacing.** Slots are 4 bytes, so the handler for line 0 at `0x100` already
-overlaps line 1's slot at `0x104`. The demos (e.g. `test/vblank_bounce.asm`) put the whole ISR
-body at `0x100`. Once there is more than one line, each slot has to hold a single `JMP` to the
-real handler.
 
 ---
 
@@ -45,9 +38,17 @@ real handler.
 | **Cooperative (today)** | `CIP` at chosen points | Low (`CIP` + `JMP` loop) | Until the next `CIP` | Done |
 | **Preemptive (this proposal)** | VM checks pending lines at instruction boundaries when `IE = 1` | Low | Next instruction boundary | New flag, 3 instructions, entry/exit logic |
 
-The two models can coexist. Preemption handles programs that run with `IE = 1`, and `CIP` keeps
-working for code that runs with interrupts disabled. That includes everything written today,
-because `IE` defaults to 0.
+These are layers, not competing models:
+
+- **Kernel layer (this proposal):** a device raises a line; if `IE = 1` the CPU enters the
+  kernel's trap handler at the next boundary. Later, `SYS` and faults use the same entry.
+- **User layer (`CIP`):** a program's registered handlers run at safe points it chooses, as
+  ordinary function calls that return with `RET`.
+- **Where they meet:** `cip_interrupts[]`, the pending bits. Today the VM sets them directly,
+  acting as a null kernel. With an OS, the kernel takes the hardware interrupt and then marks
+  the event pending for the process, as with a Unix signal.
+
+`IE` defaults to 0, so everything written today keeps working unchanged.
 
 ---
 
@@ -67,9 +68,9 @@ sequenceDiagram
         CPU->>Stack: PUSH flags (Z, N, V, C, IE)
         CPU->>Stack: PUSH PC (next instruction)
         CPU->>CPU: IE = 0 (no nesting)
-        CPU->>CPU: PC = INTERRUPT_BASE + 4*n
+        CPU->>CPU: PC = TRAP_VECTOR, CAUSE = line n
     else no
-        Note over CPU: Line stays pending (CIP or a later EI picks it up)
+        Note over CPU: Line stays pending (a later EI picks it up)
     end
 ```
 
@@ -78,6 +79,13 @@ sequenceDiagram
   preemption latency is bounded by the batch size, so the batch should stop at the next
   scheduled interrupt, as the P1 VBLANK countdown already does.
 - **Priority:** the lowest pending line number wins.
+- **One vector plus a cause:** entry jumps to a single kernel `TRAP_VECTOR` and records the reason
+  (here, the line number) in a cause register, so syscalls and faults can reuse the same entry.
+  This is separate from `CIP`, which has no vector table at all (its handler is encoded in the
+  instruction). `INTERRUPT_BASE` (`0x100`) goes away once `CIP` is migrated.
+- **Clearing the line:** when the kernel takes a hardware interrupt it clears the hardware
+  pending state. Whether, and when, it then raises the user-layer event is the kernel's
+  decision. Pre-OS, the two are the same bit.
 - **Push order:** PC is pushed last, so it sits on top of the stack. `RETI` pops PC and then the
   flags.
 
@@ -113,22 +121,21 @@ rejected the earlier draft's `0x1F`/`0x20`.
 
 ## 6. Open questions
 
-1. **Shared vector table, different return instructions.** A handler entered through `CIP`
-   must end in `RET` (one word on the stack). A handler entered preemptively must end in `RETI`
-   (two words). If both models can reach the same slot, one of them corrupts the stack.
-   Options:
-   - (a) A line is either cooperative or preemptive per program, by convention. This is the
-     simplest option and needs no hardware support.
-   - (b) A second vector base for preemptive entry (e.g. `INTERRUPT_BASE + 0x80`).
-   - (c) Make `CIP` push flags too and return with `RETI`. This is uniform, but it changes
-     existing demos.
-
-   Recommendation: (a) for now, documented in the demos; revisit when a second line exists.
-2. **Should `CIP` be a no-op while `IE = 1`?** Preemption would already have serviced the line,
-   so `CIP` would only ever see lines raised since the last boundary. Leaving it as-is is
-   harmless.
-3. **Compiler back-edge injection** (`cooperative_interrupts.md`) only matters for `IE = 0` code.
-   Is it still wanted once preemption exists, or only behind a flag?
+1. **Resolved: shared vector table, different return instructions.** The earlier draft had
+   `CIP` and preemptive entry sharing the `0x100` slots, which would have mixed `RET` handlers
+   (one word on the stack) with `RETI` handlers (two words). With the two-layer model they never
+   share an entry point: `CIP` handlers are user functions returning with `RET`, and the
+   preemptive path enters the kernel's `TRAP_VECTOR` and returns with `RETI`.
+2. **`RETI` or a general `ERET`?** Once `SYS` and faults share the entry, "return from
+   interrupt" becomes "return from exception". Name and semantics are the same; renaming before
+   implementation is free.
+3. **Pre-OS, does preemption deliver to user code?** Until a kernel exists, the program running
+   with `IE = 1` *is* the kernel, so its trap handler is the program's own code. That's fine, but
+   it means the first programs to enable `IE` must be written as trap handlers (save and restore
+   everything, end in `RETI`), not as `CIP` handlers.
+4. **Mode bit and kernel stack:** an OS will need a user/kernel mode bit and a separate kernel SP
+   on entry. Decide whether to reserve the status bit now even while everything runs in kernel
+   mode.
 
 ---
 
@@ -149,7 +156,7 @@ lands first, steps 1–3 collapse to one row per instruction.
    flag mutations.
 6. **Tests** (`test/cpu.cpp`):
    - `EI` with a line already pending enters the handler on the next instruction.
-   - With `IE = 0`, a pending line stays pending and `CIP` still services it.
+   - With `IE = 0`, a pending line stays pending and `CIP` still services it (user layer).
    - Entry pushes two words, and `RETI` restores PC, flags and `IE`, with SP balanced.
    - No nesting: a second pending line during the handler waits until `RETI`.
-   - The stack never touches VRAM (the B2 test).
+   - The stack never touches VRAM (already covered by the B2 tests).
