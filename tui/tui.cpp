@@ -32,8 +32,6 @@ auto mode_name(Mode m) -> const char * {
     return "NORMAL";
   case Mode::INSERT:
     return "INSERT";
-  case Mode::ZOOM:
-    return "ZOOM";
   case Mode::COMMAND:
     return "COMMAND";
   }
@@ -52,7 +50,6 @@ auto first_word(const std::string &line) -> std::string {
 
 TUI::TUI(CPU &cpu) : cpu(cpu) {
   init_trie();
-  last_ips_time = std::chrono::steady_clock::now();
 }
 
 void TUI::init_trie() {
@@ -110,20 +107,8 @@ void TUI::run() {
   const std::chrono::microseconds frame_duration(16666); // ~60 FPS
 
   while (running) {
-    auto now = std::chrono::steady_clock::now();
-
     if (is_running_continuously)
       run_batch();
-
-    // IPS calculation
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                       now - last_ips_time)
-                       .count();
-    if (elapsed >= 1000) {
-      current_ips = (total_cycles * 1000.0) / elapsed;
-      total_cycles = 0;
-      last_ips_time = now;
-    }
 
     update();
     handle_input();
@@ -152,7 +137,7 @@ void TUI::track_changed_registers(
 }
 
 void TUI::follow_pc() {
-  if (source != Source::ASM || mode == Mode::INSERT)
+  if (source != Source::ASM || mode == Mode::INSERT || code_moved)
     return;
   auto line = static_cast<int>(display_pc() / 4);
   if (line < static_cast<int>(editor.lines().size()))
@@ -164,9 +149,9 @@ void TUI::step() {
     return;
   auto before = cpu.registers;
   cpu.run_cycle();
-  total_cycles++;
   track_changed_registers(before);
   follow_pc();
+  follow_output();
 }
 
 void TUI::run_batch() {
@@ -179,7 +164,6 @@ void TUI::run_batch() {
       break;
     }
     cpu.run_cycle();
-    total_cycles++;
     // Step over (F8): stop once the CALL has returned to the next
     // instruction with the stack as it was.
     if (run_target && cpu.get_pc() == *run_target &&
@@ -191,6 +175,7 @@ void TUI::run_batch() {
   }
   track_changed_registers(before);
   follow_pc();
+  follow_output();
 }
 
 void TUI::run_pause() {
@@ -228,6 +213,7 @@ void TUI::cycle_output() {
     return;
   }
   output_tab = static_cast<OutputTab>((static_cast<int>(output_tab) + 1) % 4);
+  tab_pinned = true;
 }
 
 bool TUI::handle_fkey(int ch) {
@@ -267,6 +253,7 @@ void TUI::assemble_editor() {
   for (size_t i = 0; i < editor.lines().size(); ++i)
     binary_image.push_back(cpu.ram.read32(static_cast<uint32_t>(i * 4)));
   mark_built();
+  message_sticky = !asm_errors.empty();
   if (asm_errors.empty()) {
     message = std::format("Assembled {} lines", editor.lines().size());
   } else {
@@ -284,9 +271,11 @@ bool TUI::compile_editor() {
   if (!result) {
     build_failed = true;
     message = "Compile error: " + result.error();
+    message_sticky = true;
     return false;
   }
   build_failed = false;
+  message_sticky = false;
   binary_image = std::move(*result);
   mark_built();
   message = std::format("Compiled {} instructions", binary_image.size());
@@ -300,6 +289,33 @@ void TUI::fresh_cpu() {
   changed_regs.reset();
   is_running_continuously = false;
   run_target.reset();
+  // The output panel follows devices again from a clean slate.
+  tab_pinned = false;
+  seen_serial = 0;
+  seen_vram = vram_hash();
+}
+
+auto TUI::vram_hash() -> std::size_t {
+  const auto *v = reinterpret_cast<const char *>(cpu.get_vram());
+  return std::hash<std::string_view>{}(std::string_view{v, 320 * 240 * 4});
+}
+
+void TUI::follow_output() {
+  // The output panel shows whichever device the program last wrote to
+  // (review #1, Q5), unless the user picked a tab (F10, :out, z). Within one
+  // batch we can't tell which came last, so serial wins: text is rarer.
+  std::size_t serial = serial_output().size();
+  std::size_t vram = vram_hash();
+  bool serial_changed = serial != seen_serial;
+  bool vram_changed = vram != seen_vram;
+  seen_serial = serial;
+  seen_vram = vram;
+  if (tab_pinned)
+    return;
+  if (serial_changed)
+    output_tab = OutputTab::SERIAL;
+  else if (vram_changed)
+    output_tab = OutputTab::VRAM;
 }
 
 void TUI::reset() {
@@ -323,15 +339,13 @@ bool TUI::build() {
     assemble_editor();
     return asm_errors.empty();
   case Source::BINARY:
-    reset();
-    message = "A binary has no source to build: restarted its image";
-    return true;
+    message = "A binary has no source to build (F6 restarts it)";
+    return false;
   }
   return false;
 }
 
 void TUI::reset_zoom() {
-  mode = Mode::NORMAL;
   zoom_scale = 1.0;
   zoom_cx = 160.0;
   zoom_cy = 120.0;
@@ -461,6 +475,13 @@ auto tab_title(OutputTab current) -> std::string {
 
 } // namespace
 
+void TUI::log_message() {
+  if (!message.empty() && message != last_logged) {
+    build_log.push_back(message);
+    last_logged = message;
+  }
+}
+
 auto TUI::layout_kind() const -> Fanta::Layout::Kind {
   switch (source) {
   case Source::FANTA:
@@ -484,17 +505,7 @@ void TUI::update() {
   erase();
   cursor_at.reset();
 
-  if (!message.empty() && message != last_logged) {
-    build_log.push_back(message);
-    last_logged = message;
-  }
-
-  if (mode == Mode::ZOOM) {
-    draw_vram(Fanta::Canvas{{0, 0, term_w, term_h}}, /*zoomed=*/true);
-    curs_set(0);
-    refresh();
-    return;
-  }
+  log_message();
 
   auto l = Fanta::Layout::compute(term_w, term_h, layout_kind());
   draw_status_line(Fanta::Canvas{l.status});
@@ -504,21 +515,36 @@ void TUI::update() {
   if (help_open) {
     draw_help(Fanta::Canvas{body});
   } else if (output_overlay) {
-    // Small terminal: the output panel takes over the work area until ESC.
-    draw_output(Fanta::Canvas{body}, output_tab);
+    // The output panel over the work area: 'z' (VRAM), or any tab on
+    // terminals too short for the panel. ESC closes it.
+    draw_output(Fanta::Canvas{body}, output_tab, /*overlay=*/true);
   } else {
     switch (source) {
     case Source::FANTA:
       draw_source(Fanta::Canvas{l.code});
-      if (l.derived)
-        draw_disasm_view(
-            Fanta::Canvas{*l.derived},
-            stale() && build_count > 0
-                ? std::format("ASM  build #{}  STALE: source changed, F9",
-                              build_count)
-                : std::format("ASM  build #{}  (derived, read-only, :eject)",
-                              build_count),
-            stale());
+      if (l.derived) {
+        Fanta::Canvas pane{*l.derived};
+        bool narrow = pane.width() < 50;
+        if (image_build == 0) {
+          // Nothing built yet: don't show empty memory as a program.
+          auto in = pane.frame("COMPILED  (not built yet)", A_DIM);
+          in.put(0, 1, "F9 builds the source", A_DIM);
+        } else if (stale()) {
+          draw_disasm_view(
+              pane,
+              narrow ? std::format("COMPILED #{}  STALE", image_build)
+                     : std::format("COMPILED  build #{}  STALE: source "
+                                   "changed, F9",
+                                   image_build),
+              /*dimmed=*/true);
+        } else {
+          draw_disasm_view(
+              pane, narrow ? std::format("COMPILED #{}  (derived)", image_build)
+                           : std::format("COMPILED  build #{}  (derived, "
+                                         "read-only, :eject)",
+                                         image_build));
+        }
+      }
       break;
     case Source::ASM:
       draw_asm_editor(Fanta::Canvas{l.code});
@@ -556,42 +582,72 @@ void TUI::update() {
 }
 
 void TUI::draw_status_line(const Fanta::Canvas &c) {
+  // One build format for every kind: "build #n OK 36w", "#n FAILED", ...
   std::string kind;
   std::string build;
+  std::string build_short;
   switch (source) {
   case Source::FANTA:
-    kind = "SOURCE";
+  case Source::ASM: {
+    kind = source == Source::FANTA ? "SOURCE" : "ASM";
+    bool failed = source == Source::FANTA ? build_failed : !asm_errors.empty();
+    std::string result =
+        failed ? (source == Source::FANTA
+                      ? std::string{"FAILED"}
+                      : std::format("{} error(s)", asm_errors.size()))
+               : std::format("OK {}w", binary_image.size());
     build = build_count == 0 ? "not built"
-            : build_failed   ? std::format("build #{} FAILED", build_count)
-                             : std::format("build #{} OK {}w", build_count,
-                                           binary_image.size());
+                             : std::format("build #{} {}", build_count, result);
+    build_short = build_count == 0 ? "-"
+                                   : std::format("#{} {}", build_count,
+                                                 failed ? "FAILED" : "OK");
+    if (stale() && build_count > 0) {
+      build += " STALE";
+      build_short += " STALE";
+    }
     break;
-  case Source::ASM:
-    kind = "ASM";
-    build = asm_errors.empty()
-                ? std::format("asm OK {} lines", editor.lines().size())
-                : std::format("asm {} error(s)", asm_errors.size());
-    break;
+  }
   case Source::BINARY:
     kind = "BINARY";
     build = std::format("image {}w", binary_image.size());
+    build_short = build;
     break;
   }
 
-  std::string state =
-      cpu.halted ? "HALTED at " + addr(display_pc())
-                 : std::format("{} pc {}",
-                               is_running_continuously ? "RUNNING" : "PAUSED",
-                               addr(display_pc()));
-  if (stale() && (source == Source::ASM || build_count > 0))
-    build += " STALE";
-  auto line_for = [&](const std::string &file) {
-    return std::format(" {} | {} {}{} | {} | {} ", mode_name(mode), kind, file,
-                       dirty() ? " [+]" : "", build, state);
-  };
-  std::string left = line_for(path.empty() ? "(no file)" : path);
-  if (static_cast<int>(left.size()) > c.width() - 20)
-    left = line_for(base_name(path));
+  std::string pc = addr(display_pc());
+  std::string state = cpu.halted ? "HALTED at " + pc
+                      : std::format("{} pc {}",
+                                    is_running_continuously ? "RUNNING"
+                                                            : "PAUSED",
+                                    pc);
+  std::string state_short = cpu.halted ? "HALT " + pc
+                            : std::format("{} {}",
+                                          is_running_continuously ? "RUN"
+                                                                  : "PAUSED",
+                                          pc);
+  std::string flag = dirty() ? " [+]" : "";
+  std::string full = path.empty() ? "(no file)" : path;
+  std::string brief = base_name(path);
+
+  // Longest form that still leaves room for the message (spec §3.2, §6.2).
+  int room_for_message =
+      message.empty() ? 0
+                      : std::min(static_cast<int>(message.size()) + 1, 34);
+  std::string left;
+  for (const auto &candidate :
+       {std::format(" {} | {} {}{} | {} | {} ", mode_name(mode), kind, full,
+                    flag, build, state),
+        std::format(" {} | {} {}{} | {} | {} ", mode_name(mode), kind, brief,
+                    flag, build, state),
+        std::format(" {} | {} {}{} | {} | {} ", mode_name(mode), kind, brief,
+                    flag, build_short, state_short),
+        // Last resort: the file name is in the pane title anyway.
+        std::format(" {} | {}{} | {} | {} ", mode_name(mode), kind, flag,
+                    build_short, state_short)}) {
+    left = candidate;
+    if (static_cast<int>(left.size()) + room_for_message <= c.width())
+      break;
+  }
   if (term_w < Fanta::Layout::kMinCols || term_h < Fanta::Layout::kMinRows)
     left += std::format("| terminal {}x{} < 80x24 ", term_w, term_h);
 
@@ -599,7 +655,7 @@ void TUI::draw_status_line(const Fanta::Canvas &c) {
   if (!message.empty()) {
     int col = static_cast<int>(left.size()) + 1;
     attr_t a = A_REVERSE;
-    if (build_failed || !asm_errors.empty())
+    if (message_sticky)
       a |= COLOR_PAIR(kPairError) | A_BOLD;
     c.put(0, col, message, a);
   }
@@ -610,58 +666,64 @@ void TUI::draw_hint_bar(const Fanta::Canvas &c) {
     c.put_line(0, command_buffer);
     return;
   }
-  std::string_view hint;
   int w = c.width();
+  // Context-aware (spec §3.2): F5 says what it will do, and BINARY doesn't
+  // offer keys that do nothing there.
+  std::string_view run = is_running_continuously ? "F5 pause" : "F5 run";
+  bool binary = source == Source::BINARY;
+  std::string hint;
   switch (mode) {
   case Mode::INSERT:
     hint = source == Source::ASM
                ? " ESC/^C normal (re-assembles)  TAB complete | F-keys work here too "
                : " ESC/^C normal  TAB indent | F-keys work here too ";
     break;
-  case Mode::ZOOM:
-    hint = " +/- zoom  hjkl pan  ESC back | F5 run  F6 reset  F7 step ";
-    break;
   default:
-    if (help_open)
+    if (help_open) {
       hint = " any key closes help ";
-    else if (output_overlay)
-      hint = " F10 next tab  ESC close | F5 run  F6 reset  F7 step  F8 over  F9 build ";
-    else
-      hint = fit(" F5 run  F6 reset  F7 step  F8 over  F9 build  F10 output | "
-                 "i edit  z zoom VRAM  : cmd  ? help  q quit ",
-                 " F5 run F6 reset F7 step F8 over F9 build F10 out | "
-                 "i edit ? help q quit ",
-                 w);
+    } else if (output_overlay) {
+      hint = output_tab == OutputTab::VRAM
+                 ? std::format(" +/- zoom  hjkl pan  F10 tab  z/ESC close | {}  "
+                               "F6 reset  F7 step ",
+                               run)
+                 : std::format(" F10 next tab  ESC close | {}  F6 reset  F7 "
+                               "step  F8 over ",
+                               run);
+    } else {
+      std::string full = std::format(
+          " {}  F6 reset  F7 step  F8 over{}  F10 output | {}z VRAM  : cmd  "
+          "? help  q quit ",
+          run, binary ? "" : "  F9 build", binary ? "" : "i edit  ");
+      std::string brief =
+          std::format(" {} F6 reset F7 step F8 over{} F10 out | {}? help q quit ",
+                      run, binary ? "" : " F9 build", binary ? "" : "i edit ");
+      hint = std::string{fit(full, brief, w)};
+    }
     break;
   }
   c.put_line(0, hint, A_DIM);
 }
 
 void TUI::draw_help(const Fanta::Canvas &c) {
+  // At most 20 lines: the help must fit inside 80x24.
   static constexpr std::string_view lines[] = {
       "Execution: F-keys, in any mode (also as : commands)",
-      "  F5   run / pause                       :run  :pause",
-      "  F6   restart the loaded image          :reset",
-      "  F7   step one instruction              :step",
-      "  F8   step over a CALL                  :over",
-      "  F9   build (compile .fn / assemble .asm), then restart   :build  :c",
-      "  F10  next output tab                   :out serial|vram|memory|log",
-      "",
-      "Editing: vim keys",
-      "  i            insert            ESC / Ctrl+C   back to normal",
-      "  h j k l      move (or arrows)  x              delete character",
-      "  TAB          complete a mnemonic (.asm) / indent (.fn)",
-      "",
-      "Switching between code and assembly: open a different file",
-      "  :e prog.fn   write Fanta code: source left, compiled assembly right",
-      "  :e prog.asm  write assembly: one editable pane",
-      "  :e prog.bin  inspect a binary: read-only",
-      "",
-      "Other",
-      "  :w FILE  save    z  zoom VRAM    [ ]  scroll the Memory tab",
-      "  ?  this help     q  quit         ESC  close the output overlay",
-      "",
-      "F-keys not reaching the TUI (macOS Terminal)? Hold fn, or use the : commands.",
+      "  F5  run / pause  :run :pause     F8  step over a CALL  :over",
+      "  F6  restart      :reset          F9  build, restart    :build :c",
+      "  F7  step         :step           F10 next output tab   :out <tab>",
+      "Editing: vim keys (editing pauses a running program)",
+      "  i  insert   ESC/Ctrl+C  normal   hjkl/arrows move   x  delete char",
+      "  TAB  complete a mnemonic (.asm) / indent (.fn)",
+      "Code or assembly: open a different file",
+      "  :e prog.fn   Fanta code: source left, compiled assembly right",
+      "  :e prog.asm  assembly: one editable pane",
+      "  :e prog.bin  a binary: read-only",
+      "Files: :w [FILE]  :q  :q! (discard)  :wq  :e! FILE  :eject (.fn->.asm)",
+      "Output: the panel follows the device last written (Serial/VRAM);",
+      "  F10 or :out serial|vram|memory|log pins a tab until F6/F9",
+      "  z  VRAM over the work area: +/- zoom, hjkl pan, z/ESC close",
+      "  :mem ADDR  Memory tab from ADDR (hex)     ?  this help     q  quit",
+      "F-keys not reaching the TUI (macOS Terminal)? Hold fn, or use :commands.",
   };
   c.clear();
   auto inner = c.frame("HELP  (any key closes)", A_BOLD);
@@ -687,7 +749,10 @@ void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
     auto uidx = static_cast<size_t>(idx);
     bool bad = std::ranges::any_of(
         asm_errors, [uidx](const auto &e) { return e.line == uidx; });
-    bool at_pc = show_addresses && static_cast<uint32_t>(idx * 4) == pc;
+    // After lines moved, the text's addresses no longer match memory:
+    // dim the gutter and hide the PC marker until F9 (review #1, Q3).
+    bool at_pc = show_addresses && !code_moved &&
+                 static_cast<uint32_t>(idx * 4) == pc;
 
     std::string gutter =
         show_addresses ? std::format("{}{} ", at_pc ? '>' : ' ',
@@ -698,7 +763,12 @@ void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
     attr_t a = bad ? COLOR_PAIR(kPairError)
                : at_pc ? (A_REVERSE | A_BOLD)
                        : A_NORMAL;
-    c.put_line(row, gutter + lines[uidx], a);
+    if (code_moved && !bad && !at_pc) {
+      c.put_line(row, gutter + lines[uidx]);
+      c.put(row, 0, gutter, A_DIM);
+    } else {
+      c.put_line(row, gutter + lines[uidx], a);
+    }
 
     if (idx == editor.y()) {
       int col = static_cast<int>(gutter.size()) + editor.x();
@@ -720,15 +790,19 @@ void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
 
 void TUI::draw_source(const Fanta::Canvas &c) {
   auto inner = c.frame(
-      std::format("SOURCE  {}  (source of truth)", base_name(path)));
+      c.width() < 50
+          ? std::format("SOURCE {} (truth)", base_name(path))
+          : std::format("SOURCE  {}  (source of truth)", base_name(path)));
   draw_code_lines(inner, /*show_addresses=*/false, /*editable=*/true);
 }
 
 void TUI::draw_asm_editor(const Fanta::Canvas &c) {
   auto inner = c.frame(
-      stale() ? std::format("ASM  {}  STALE: memory differs, F9 rebuilds",
-                            base_name(path))
-              : std::format("ASM  {}  (source of truth)", base_name(path)));
+      code_moved ? std::format("ASM  {}  STALE: code moved, F9 rebuilds",
+                               base_name(path))
+      : stale()  ? std::format("ASM  {}  STALE: memory differs, F9 rebuilds",
+                               base_name(path))
+                 : std::format("ASM  {}  (source of truth)", base_name(path)));
   draw_code_lines(inner, /*show_addresses=*/true, /*editable=*/true);
 }
 
@@ -809,18 +883,26 @@ void TUI::draw_registers(const Fanta::Canvas &c,
     in.put(9, 0, flags(), COLOR_PAIR(kPairRegs));
     break;
   }
-  case RegisterForm::COMPACT:
+  case RegisterForm::COMPACT: {
+    // PC is already in the status line, so row 2 has room for the flags.
+    auto f = [&](int i, char ch) {
+      return cpu.status_reg[i] ? ch : static_cast<char>(ch - 'A' + 'a');
+    };
     row_of(c, 0, {0, 1, 2, 3, 4, 5}, "", 13);
-    row_of(c, 1, {6, 7, 8, 9, 10, 11}, flags(), 13);
-    row_of(c, 2, {12, 13, 14, 15, 16}, pc_cell, 13);
+    row_of(c, 1, {6, 7, 8, 9, 10, 11}, "", 13);
+    row_of(c, 2, {12, 13, 14, 15, 16},
+           std::format("F {}{}{}{}", f(0, 'Z'), f(1, 'N'), f(2, 'V'),
+                       f(3, 'C')),
+           13);
     break;
+  }
   }
 }
 
 void TUI::draw_stack(const Fanta::Canvas &c) {
   uint32_t sp = cpu.registers[16];
   uint32_t fp = cpu.registers[15];
-  auto inner = c.frame(std::format("STACK  SP {}", addr(sp)),
+  auto inner = c.frame(std::format("STACK  SP {}  FP {}", addr(sp), addr(fp)),
                        COLOR_PAIR(kPairStatus));
   // PUSH writes at SP then decrements, so the top value lives at SP + 4.
   if (sp >= kStackTop) {
@@ -838,14 +920,17 @@ void TUI::draw_stack(const Fanta::Canvas &c) {
   }
 }
 
-void TUI::draw_output(const Fanta::Canvas &c, OutputTab tab) {
-  auto inner = c.frame(tab_title(tab));
+void TUI::draw_output(const Fanta::Canvas &c, OutputTab tab, bool overlay) {
+  auto inner = c.frame(tab_title(tab) + (overlay && tab == OutputTab::VRAM
+                                              ? std::format("   zoom {:.2f}x",
+                                                            zoom_scale)
+                                              : ""));
   switch (tab) {
   case OutputTab::SERIAL:
     draw_serial(inner);
     break;
   case OutputTab::VRAM:
-    draw_vram(inner, /*zoomed=*/false);
+    draw_vram(inner, /*zoomed=*/overlay);
     break;
   case OutputTab::MEMORY:
     draw_memory(inner);
@@ -994,6 +1079,13 @@ void TUI::handle_key(int ch) {
     return;
   }
 
+  // Messages expire on the next key (spec §6.2); build errors stay until
+  // the next build. The full history is in the Build log tab.
+  if (mode != Mode::COMMAND && !message_sticky) {
+    log_message(); // keep it in the Build log before it disappears
+    message.clear();
+  }
+
   if (ch == 27) { // ESC always stops a continuous run
     is_running_continuously = false;
     run_target.reset();
@@ -1009,22 +1101,16 @@ void TUI::handle_key(int ch) {
   case Mode::INSERT:
     handle_insert_mode(ch);
     break;
-  case Mode::ZOOM:
-    handle_zoom_mode(ch);
-    break;
   case Mode::COMMAND:
     handle_command_mode(ch);
     break;
   }
 }
 
-void TUI::handle_zoom_mode(int ch) {
-  // In ZOOM mode, we still want to step, reset, and continue
+void TUI::handle_overlay_key(int ch) {
+  // Keys while the output overlay shows VRAM: zoom and pan (this replaced
+  // the old ZOOM mode; review #1, Q2).
   switch (ch) {
-  case 27: // ESC
-  case 'z':
-    reset_zoom();
-    break;
   case '+':
   case '=':
     zoom_scale = std::min(zoom_scale + 0.25, 10.0);
@@ -1040,7 +1126,6 @@ void TUI::handle_zoom_mode(int ch) {
   case KEY_RIGHT:
     zoom_cx = std::min(zoom_cx + 4.0, 320.0);
     break;
-  case 'i':
   case 'k':
   case KEY_UP:
     zoom_cy = std::max(zoom_cy - 4.0, 0.0);
@@ -1053,6 +1138,17 @@ void TUI::handle_zoom_mode(int ch) {
 }
 
 void TUI::handle_normal_mode(int ch) {
+  if (output_overlay && output_tab == OutputTab::VRAM &&
+      std::string_view{"+=-hjkl"}.find(static_cast<char>(ch)) !=
+          std::string_view::npos) {
+    handle_overlay_key(ch);
+    return;
+  }
+  if (output_overlay && output_tab == OutputTab::VRAM &&
+      (ch == KEY_LEFT || ch == KEY_RIGHT || ch == KEY_UP || ch == KEY_DOWN)) {
+    handle_overlay_key(ch);
+    return;
+  }
   switch (ch) {
   case 'q':
     run_command("q");
@@ -1062,23 +1158,23 @@ void TUI::handle_normal_mode(int ch) {
     command_buffer = ":";
     is_running_continuously = false;
     break;
-  case 'z':
-    mode = Mode::ZOOM;
-    is_running_continuously = false;
+  case 'z': // VRAM over the work area; z or ESC again closes it
+    if (output_overlay && output_tab == OutputTab::VRAM) {
+      output_overlay = false;
+      reset_zoom();
+    } else {
+      output_tab = OutputTab::VRAM;
+      tab_pinned = true;
+      output_overlay = true;
+    }
     break;
   case '?':
     help_open = true;
     break;
   case 27: // ESC
+    if (output_overlay)
+      reset_zoom();
     output_overlay = false;
-    break;
-  case '[': // memory tab: back one 16-byte row
-    if (mem_offset >= 16)
-      mem_offset -= 16;
-    break;
-  case ']':
-    if (mem_offset + 16 + 32 <= cpu.ram.getSize()) // keep the 32-byte pane in RAM
-      mem_offset += 16;
     break;
   case 'i':
     if (editor.read_only()) {
@@ -1117,9 +1213,8 @@ void TUI::handle_insert_mode(int ch) {
     mode = Mode::NORMAL;
     curs_set(0);
     if (source == Source::FANTA) {
-      // Recompiling moves every address, so no live patch: rebuild on demand.
-      if (stale())
-        message = "Edited: STALE until F9 (or :build) rebuilds";
+      // Recompiling moves every address, so no live patch: the STALE badge
+      // and the dimmed COMPILED pane say a rebuild is needed.
     } else if (source == Source::ASM && stale()) {
       // Live-patch only edits that leave every instruction at its address.
       // Adding or removing lines before existing code shifts it under a
@@ -1131,12 +1226,14 @@ void TUI::handle_insert_mode(int ch) {
         ++prefix;
       bool moved = editor.structure_version() != built_structure &&
                    prefix < std::min(now.size(), built_lines.size());
-      if (moved)
-        message = std::format("Line {} added/removed: code below it moved, "
-                              "memory not patched. STALE until F9",
-                              prefix);
-      else
+      if (moved) {
+        code_moved = true;
+        message = std::format("Line at {} added/removed: code below it moved, "
+                              "memory not patched. F9 rebuilds",
+                              addr(static_cast<uint32_t>(prefix * 4)));
+      } else {
         assemble_editor(); // live-patch memory with the buffer
+      }
     }
     break;
   case KEY_LEFT:
@@ -1266,6 +1363,24 @@ void TUI::run_command(const std::string &cmd) {
       message = "Usage: :out serial|vram|memory|log";
     } else {
       output_tab = it->second;
+      tab_pinned = true;
+      if (!Fanta::Layout::compute(term_w, term_h, layout_kind()).output)
+        output_overlay = true;
+    }
+  } else if (cmd == "mem" || cmd.starts_with("mem ")) {
+    // :mem ADDR shows memory from ADDR (hex, like assembler literals).
+    std::string a = arg_of(3);
+    if (a.starts_with("0x") || a.starts_with("0X"))
+      a = a.substr(2);
+    uint32_t at = 0;
+    auto [p, ec] = std::from_chars(a.data(), a.data() + a.size(), at, 16);
+    if (!a.empty() && (ec != std::errc{} || at >= cpu.ram.getSize())) {
+      message = "Usage: :mem ADDR (hex, inside RAM)";
+    } else {
+      if (!a.empty())
+        mem_offset = at & ~0xFu; // rows are 16-byte aligned
+      output_tab = OutputTab::MEMORY;
+      tab_pinned = true;
       if (!Fanta::Layout::compute(term_w, term_h, layout_kind()).output)
         output_overlay = true;
     }
@@ -1289,6 +1404,8 @@ auto TUI::stale() const -> bool {
 }
 
 void TUI::mark_built() {
+  code_moved = false;
+  image_build = build_count;
   built_version = editor.version();
   built_structure = editor.structure_version();
   built_lines = editor.lines();
@@ -1423,15 +1540,9 @@ bool TUI::load_file(const std::string &filename) {
     asm_errors.clear();
     reset();
 
-    // The editor shows a disassembly view. It is read-only: the text can't
-    // be assembled back into the same program (branch offsets, labels), so
-    // the image stays the source of truth.
-    std::vector<std::string> view;
-    for (size_t i = 0; i < binary_image.size(); ++i) {
-      view.push_back(Fanta::disassemble(binary_image[i],
-                                        static_cast<uint32_t>(i * 4)));
-    }
-    editor.set_lines(std::move(view), /*read_only=*/true);
+    // No editable text: the pane disassembles memory directly, and the
+    // image is the source of truth.
+    editor.set_lines({}, /*read_only=*/true);
     message = std::format("Loaded {} ({} words, read-only)", filename,
                           binary_image.size());
     return true;
@@ -1554,6 +1665,8 @@ bool TUI::screenshot(const std::string &filename, int cols, int rows,
   set_term(screen);
   configure_ncurses();
   resizeterm(rows, cols);
+  term_w = cols; // keys run before the first update() sets these
+  term_h = rows;
   ascii_vram = true; // colour blocks would read back as blank cells
 
   for (int key : parse_keys(keys)) {

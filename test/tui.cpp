@@ -16,6 +16,37 @@ auto tempPath(const std::string &name) -> std::string {
   return (std::filesystem::temp_directory_path() / name).string();
 }
 
+/// Small programs written by the tests themselves. The demos in test/*.asm
+/// are gitignored, so tests must not depend on them (and under ctest a
+/// missing path would silently open as a new, empty buffer).
+auto fixture(const std::string &name, const std::string &text) -> std::string {
+  auto path = tempPath(name);
+  std::ofstream out(path);
+  out << text;
+  return path;
+}
+
+// Sends "Hi" over the serial port, then halts.
+auto serialFixture() -> std::string {
+  return fixture("fanta_serial_hi.asm", "MOV R1, #200\n"
+                                        "LSH R1, R1, #10\n" // 0x0200_0000
+                                        "MOV R2, #48\n"
+                                        "STORE R2, 0(R1)\n"
+                                        "MOV R2, #69\n"
+                                        "STORE R2, 0(R1)\n"
+                                        "HALT\n");
+}
+
+// Keeps changing pixel 0 of VRAM forever.
+auto vramFixture() -> std::string {
+  return fixture("fanta_vram_loop.asm", "MOV R1, #80\n"
+                                        "LSH R1, R1, #10\n" // 0x800000
+                                        "LOOP:\n"
+                                        "ADD R2, R2, #1\n"
+                                        "STORE R2, 0(R1)\n"
+                                        "JMP LOOP\n");
+}
+
 auto writeBinary(const std::string &path, const std::vector<uint32_t> &words)
     -> void {
   std::ofstream out(path, std::ios::binary);
@@ -375,7 +406,7 @@ TEST_CASE("Loading A .fn File Compiles It Into Memory") {
   std::filesystem::remove(path);
 }
 
-TEST_CASE("Reset Recompiles And Restarts A .fn Program") {
+TEST_CASE("Reset Restarts A .fn Program Without Rebuilding") {
   auto path = tempPath("fanta_tui_reset.fn");
   writeText(path, kAddProgram);
 
@@ -721,9 +752,9 @@ TEST_CASE(":e Refuses To Drop Unsaved Changes, :e! Discards Them") {
   TUI tui(cpu);
   auto path = loadAdd(tui);
   editLine2(tui);
-  typeCmd(tui, "e test/serial_hello.asm");
+  typeCmd(tui, "e " + serialFixture());
   REQUIRE_TRUE(statusLine(tui).contains("SOURCE"));
-  typeCmd(tui, "e! test/serial_hello.asm");
+  typeCmd(tui, "e! " + serialFixture());
   REQUIRE_TRUE(statusLine(tui).contains("ASM"));
   std::filesystem::remove(path);
 }
@@ -825,7 +856,7 @@ TEST_CASE("ASM Line Appended At The End Is Live-Patched") {
 TEST_CASE(":eject Only Works On A Built .fn") {
   CPU cpu{};
   TUI tui(cpu);
-  REQUIRE_TRUE(tui.load_file("test/serial_hello.asm"));
+  REQUIRE_TRUE(tui.load_file(serialFixture()));
   typeCmd(tui, "eject");
   REQUIRE_TRUE(screenAfter(tui, ":out log<CR>").contains("open a .fn first"));
 }
@@ -854,4 +885,166 @@ TEST_CASE(":eject Refuses What Wouldn't Assemble Back, Writing Nothing") {
     REQUIRE_TRUE(statusLine(tui).contains("SOURCE"));
   }
   std::filesystem::remove(path);
+}
+
+// --- Review #1 decisions and fixes (docs/reviews/2026-10-31-tui.md) --------
+
+namespace {
+auto screenAt(TUI &tui, int cols, int rows, std::string_view keys)
+    -> std::string {
+  auto path = tempPath("fanta_tui_review1.txt");
+  REQUIRE_TRUE(tui.screenshot(path, cols, rows, keys));
+  std::string screen = readFile(path);
+  std::filesystem::remove(path);
+  return screen;
+}
+} // namespace
+
+TEST_CASE("z Shows VRAM Over The Work Area Without Pausing (Q2)") {
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(vramFixture()));
+  auto screen = screenAt(tui, 120, 40, "<F5><FRAME>z+<FRAME>");
+  REQUIRE_TRUE(screen.contains("[VRAM]"));
+  REQUIRE_TRUE(screen.contains("zoom 1.25x"));
+  REQUIRE_TRUE(screen.contains("RUNNING"));       // z doesn't pause
+  REQUIRE_TRUE(!screen.contains("ASM  fanta_vram")); // the code pane is covered
+  // z again closes it and resets the zoom.
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "z").contains("ASM  fanta_vram_loop.asm"));
+}
+
+TEST_CASE("Moved ASM Code Dims The Gutter And Hides The PC Marker (Q3)") {
+  auto path = tempPath("fanta_tui_q3.asm");
+  writeText(path, "MOV R1, #1\nMOV R2, #2\nHALT\n");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "").contains(">0x000000"));
+  auto screen = screenAt(tui, 120, 40, "i<CR><ESC>");
+  REQUIRE_TRUE(screen.contains("STALE: code moved"));
+  REQUIRE_TRUE(!screen.contains(">0x0000"));
+  REQUIRE_TRUE(screen.contains("Line at 0x000000 added/removed"));
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "<F9>").contains(">0x000000"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("The Derived Pane Is Called COMPILED (Q4)") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "").contains("COMPILED  build #1"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("Output Follows The Device Last Written Until A Tab Is Picked (Q5)") {
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(vramFixture()));
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "<F5><FRAME><FRAME>").contains("[VRAM]"));
+  REQUIRE_TRUE(tui.load_file(serialFixture()));
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "<F5><FRAME>").contains("[Serial]"));
+  // Picking a tab pins it; a restart follows devices again.
+  REQUIRE_TRUE(tui.load_file(vramFixture()));
+  REQUIRE_TRUE(
+      screenAt(tui, 120, 40, ":out memory<CR><F5><FRAME><FRAME>").contains(
+          "[Memory]"));
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "<F6><F5><FRAME><FRAME>").contains(
+      "[VRAM]"));
+}
+
+TEST_CASE("80x24 Status Line Keeps Room For The Message") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  // Break the source and rebuild: the error must be on screen at 80x24.
+  for (int ch : {KEY_DOWN, int{'i'}, int{'@'}, 27})
+    tui.handle_key(ch);
+  auto screen = screenAt(tui, 80, 24, "<F9>");
+  auto status = screen.substr(screen.find('\n') + 1, 82);
+  REQUIRE_TRUE(status.contains("#2 FAILED"));
+  REQUIRE_TRUE(status.contains("Compile error: "));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("80x24 Compact Registers Show The Flags") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  REQUIRE_TRUE(screenAt(tui, 80, 24, "").contains("F znvc"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("Help Fits In 80x24") {
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(screenAt(tui, 80, 24, "?").contains("Hold fn"));
+}
+
+TEST_CASE("Hint Bar Follows The Run State And Session Kind") {
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(vramFixture()));
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "<F5><FRAME>").contains("F5 pause"));
+  auto bin = tempPath("fanta_tui_hint.bin");
+  writeBinary(bin, {0x10200080, 0});
+  REQUIRE_TRUE(tui.load_file(bin));
+  auto screen = screenAt(tui, 120, 40, "");
+  REQUIRE_TRUE(!screen.contains("F9 build"));
+  REQUIRE_TRUE(!screen.contains("i edit"));
+  std::filesystem::remove(bin);
+}
+
+TEST_CASE("F9 On A Binary Does Nothing") {
+  auto bin = tempPath("fanta_tui_f9.bin");
+  Assembler assem{};
+  writeBinary(bin, {assem.assemble("MOV R1, #5", 0), 0});
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(bin));
+  tui.handle_key(KEY_F(7));
+  tui.handle_key(KEY_F(9));
+  REQUIRE_SAME(4, cpu.get_pc()); // not restarted
+  std::filesystem::remove(bin);
+}
+
+TEST_CASE(":mem Jumps The Memory Tab To An Address") {
+  CPU cpu{};
+  TUI tui(cpu);
+  cpu.store(0x1230, 0x44434241); // "ABCD"
+  auto screen = screenAt(tui, 120, 40, ":mem 1234<CR>");
+  REQUIRE_TRUE(screen.contains("[Memory]"));
+  REQUIRE_TRUE(screen.contains("0x001230  41 42 43 44"));
+}
+
+TEST_CASE("Messages Expire On The Next Key, Build Errors Stay") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "").contains("Loaded"));
+  REQUIRE_TRUE(!screenAt(tui, 120, 40, "j").contains("Loaded"));
+  REQUIRE_TRUE(screenAt(tui, 120, 40, ":out log<CR>").contains("Loaded"));
+  for (int ch : {int{'i'}, int{'@'}, 27})
+    tui.handle_key(ch);
+  REQUIRE_TRUE(screenAt(tui, 120, 40, "<F9>jjk").contains("Compile error"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("A New .fn Says It Isn't Built Instead Of Showing Empty Memory") {
+  auto path = tempPath("fanta_tui_unbuilt.fn");
+  std::filesystem::remove(path);
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  auto screen = screenAt(tui, 120, 40, "");
+  REQUIRE_TRUE(screen.contains("not built yet"));
+  REQUIRE_TRUE(!screen.contains("HALT"));
+}
+
+TEST_CASE("Headless F10 Uses The Screenshot Size") {
+  CPU cpu{};
+  TUI tui(cpu);
+  // At 120x40 there is an output panel, so F10 cycles tabs, not the overlay.
+  auto screen = screenAt(tui, 120, 40, "<F10>");
+  REQUIRE_TRUE(screen.contains("[VRAM]"));
+  REQUIRE_TRUE(screen.contains("REGISTERS"));
 }

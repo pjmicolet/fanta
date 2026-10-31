@@ -1,6 +1,6 @@
 # Fanta TUI: Redesign Spec
 
-**Status:** agreed design, 2026-10-31. Implementation progress: milestone 1 (layout, clipped panes, single status line, output tabs) done; milestone 2 (F-keys, `:` command equivalents, `?`/`:help`, hjkl) done except `Tab` focus, deferred until a second pane is scrollable; milestone 3 (session model: `[+]`/`:w`/`:q!`/`:e!`, new files, STALE, eject, live-patch rule) done; `:eject` refuses compiled code until assembler bug B16 is fixed (see §2.2); milestone 4 (half-block VRAM) to follow. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
+**Status:** agreed design, 2026-10-31; updated after TUI review #1 (`docs/reviews/2026-10-31-tui.md`). Implementation progress: milestone 1 (layout, clipped panes, single status line, output tabs) done; milestone 2 (F-keys, `:` command equivalents, `?`/`:help`, hjkl) done except `Tab` focus, deferred until a second pane is scrollable; milestone 3 (session model: `[+]`/`:w`/`:q!`/`:e!`, new files, STALE, eject, live-patch rule) done; `:eject` refuses compiled code until assembler bug B16 is fixed (see §2.2); milestone 4 (half-block VRAM) to follow. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
 
 ---
 
@@ -54,7 +54,7 @@ A **build** turns the source of truth into an image: compile (SOURCE) or assembl
 
 - Builds happen **on request only**: `F9`, `:build` (alias `:compile`, `:c`). A build that succeeds resets the CPU and loads the new image. A build that fails leaves the previous image loaded and debuggable, and shows the error.
 - **STALE:** whenever the source text differs from what the loaded image was built from, the status line shows a persistent `STALE` badge, and derived views are dimmed. It clears on the next successful build. This replaces the one-off "Edited: …" message.
-- **ASM live patch:** leaving INSERT in an ASM session re-assembles. If every existing instruction kept its address, memory is patched in place (the old live-patch behaviour) and nothing is reset. That covers edits within lines and lines added or removed at the end. If a line was added or removed before existing code, nothing is patched: the session is marked STALE and waits for `F9`. Patching moved code under a running program is how the old TUI silently broke the ISR at `0x100`. (Detection: a line was added or removed since the last build, and the first changed line is before the end of the shorter version.)
+- **ASM live patch:** leaving INSERT in an ASM session re-assembles. If every existing instruction kept its address, memory is patched in place (the old live-patch behaviour) and nothing is reset. That covers edits within lines and lines added or removed at the end. If a line was added or removed before existing code, nothing is patched: the session is marked STALE and waits for `F9`. Patching moved code under a running program is how the old TUI silently broke the ISR at `0x100`. (Detection: a line was added or removed since the last build, and the first changed line is before the end of the shorter version.) While code has moved, the ASM gutter is dimmed and the `>` PC marker hidden, because the text's addresses no longer match memory; the message names the address where lines moved (review #1, Q3). Once the assembler listing (§5) lands, the gutter can show last-built addresses with `+`/`-` marks instead.
 - A compile that hangs (parser bug B6) times out after 2 s and is reported as a failed build (already implemented in `tui/build.hpp`).
 
 ### 2.2 Eject
@@ -82,13 +82,13 @@ The work area depends on the session kind:
 
 | Pane | Shows | Notes |
 | :--- | :--- | :--- |
-| Status line | vim mode, kind, file, `[+]` if dirty, build id/result, `STALE`, run state (`PAUSED` / `RUNNING` / `HALTED at 0x0004`), PC and its symbol, then the latest message | One row, always visible. The only place for state; the old STATUS block goes. The mode comes **first** so truncation on narrow terminals can never hide it (changed after review #1). |
+| Status line | vim mode, kind, file, `[+]` if dirty, build id/result, `STALE`, run state (`PAUSED` / `RUNNING` / `HALTED at 0x0004`), PC and its symbol, then the latest message | One row, always visible. The only place for state; the old STATUS block goes. The mode comes **first** so truncation on narrow terminals can never hide it (changed after review #1). When space is short it uses shorter forms (`#2 FAILED`, `PAUSED 0x000034`, and finally drops the file name, which the pane title has) so a message always has room. |
 | SOURCE | Fanta text, line numbers | Header: `SOURCE  test_input.fn  (source of truth)`. PC marker `>` once the line table exists (§7). |
-| ASM (derived) | disassembly of memory around PC, address gutter | Header: `ASM  build #3  (derived, read-only, :eject to edit)`. Follows PC; scrollable when focused. |
-| ASM (editable) | the assembly text, with an address gutter from the assembler listing (§5) | Header: `ASM  bounce.asm  (source of truth)`. `>` marks the line at PC. Follows PC while running unless the user is in INSERT. |
+| COMPILED (derived) | disassembly of memory around PC, address gutter | Header: `COMPILED  build #3  (derived, read-only, :eject)`, naming the build that is in memory (after a failed build, still the last good one). Called COMPILED, not ASM, so "ASM" only ever means an editable session (review #1, Q4). Before the first build it says `not built yet` instead of disassembling empty memory. Follows PC; scrollable when focused. |
+| ASM (editable) | the assembly text, with an address gutter from the assembler listing (§5) | Header: `ASM  bounce.asm  (source of truth)`. `>` marks the line at PC. Follows PC while running. Entering INSERT or `:` pauses the run on purpose: editing shouldn't burn cycles (review #1, Q1). |
 | Registers | R0–R15, SP, PC, flags | Every register changed by the last step is highlighted, not just the first. R15 labelled FP. |
 | Stack | from SP+4 up, FP marked | Grows with the available height. |
-| Output panel | tabs: **Serial · VRAM · Memory · Build log** | Replaces the `o` toggle and the fixed 32-byte memory pane. On wide terminals two tabs can be shown side by side (Serial + VRAM). |
+| Output panel | tabs: **Serial · VRAM · Memory · Build log** | Shows the device the program **last wrote to** (Serial or VRAM), until the user picks a tab (`F10`, `:out`, `:mem`, `z`); `F6`/`F9` go back to following (review #1, Q5). On wide terminals two tabs are shown side by side (Serial + VRAM). |
 | Hint bar | the keys valid in the current mode | Context-aware. `?` opens a full help overlay. |
 
 ### 3.3 Sizes and degradation
@@ -103,7 +103,7 @@ Minimums and drop order, from first dropped to last kept:
 4. In SOURCE, the derived ASM pane (reachable by `Tab` to swap it in).
 5. Status line, hint bar and the main code pane are never dropped. The smallest supported size is 80×24.
 
-Any pane can be zoomed to full screen (`z` on the focused pane; today's VRAM zoom becomes a special case).
+`z` shows the VRAM tab over the work area, with `+`/`-` to zoom and `hjkl` to pan; `z` or `ESC` closes it. Status line and hint bar stay. This replaced the separate ZOOM mode (review #1, Q2), and it doesn't pause a running program.
 
 ### 3.4 Sketches
 
@@ -113,7 +113,7 @@ These are drawn as the screenshot tool renders them (§8). Exact widths are for 
 
 ```
  SOURCE test_input.fn [+] | build #3 OK 36w | STALE | PAUSED pc 0x0034 main+0x2C | NORMAL
-+- SOURCE  test_input.fn  (source of truth) -------------++- ASM  build #3  (derived, read-only, :eject) ---------------+
++- SOURCE  test_input.fn  (source of truth) -------------++- COMPILED  build #3  (derived, read-only, :eject) ----------+
 |  1  fn main() -> int {                                 ||  0x002C  MOV R1, #A                                        |
 |  2      let b : int = 10;                              ||  0x0030  MOV R2, #14                                       |
 |  3      let c : int = 20;                              || >0x0034  MOV R3, R1                                        |
@@ -153,14 +153,14 @@ These are drawn as the screenshot tool renders them (§8). Exact widths are for 
 +- Serial  [VRAM]  Memory  Build-log -------------------------------------------------------------------------------------+
 |                                    .:=+*#  (VRAM, averaged half-blocks)                                                |
 +------------------------------------------------------------------------------------------------------------------------+
- i edit  : cmd  ? help  |  F5 pause  F6 reset  F7 step  F8 over  F9 build  F10 output  z zoom
+ F5 pause  F6 reset  F7 step  F8 over  F9 build  F10 output | i edit  z VRAM  : cmd  ? help  q quit
 ```
 
 **80×24** (SOURCE): the output panel and the stack are dropped, registers go compact, both code panes stay:
 
 ```
  SOURCE test_input.fn | #3 OK | PAUSED 0x0034 main+0x2C | NORMAL
-+- SOURCE (truth) ------------------++- ASM #3 (derived) ---------------+
++- SOURCE x.fn (truth) -------------++- COMPILED #3  (derived) ---------+
 |  1  fn main() -> int {            ||  0x0030  MOV R2, #14            |
 |  2      let b : int = 10;         || >0x0034  MOV R3, R1             |
 | ...                               || ...                             |
@@ -184,7 +184,7 @@ These are drawn as the screenshot tool renders them (§8). Exact widths are for 
 | `F7` | step one instruction | `:step` |
 | `F8` | step over: like `F7`, but a `CALL` runs until it returns | `:over` |
 | `F9` | build (compile or assemble), then reset | `:build`, `:compile`, `:c` |
-| `F10` | cycle the output panel's tab; on small screens, show it full screen | `:out serial` / `vram` / `memory` / `log` |
+| `F10` | cycle the output panel's tab; on small screens, show it full screen | `:out serial` / `vram` / `memory` / `log`; `:mem ADDR` |
 
 Every F-key has a `:` command, because some terminals intercept F-keys (macOS Terminal sends some to the system unless `fn` is held). The hint bar shows the F-keys; `?` lists both.
 
@@ -194,14 +194,16 @@ Every F-key has a `:` command, because some terminals intercept F-keys (macOS Te
 
 | Mode | Keys |
 | :--- | :--- |
-| NORMAL | `h j k l` / arrows move; `i` insert (refused with a message in read-only panes); `x` delete; `Tab` cycles focus between panes; `z` zoom focused pane; `:` command; `?` help; `q` quit (asks if dirty) |
+| NORMAL | `h j k l` / arrows move; `i` insert (refused in read-only panes; pauses a running program); `x` delete; `Tab` cycles focus between panes (deferred); `z` VRAM over the work area; `:` command (pauses); `?` help; `q` quit (asks if dirty) |
 | INSERT | typing, `ESC` leaves; `TAB` completes a mnemonic in ASM, indents in SOURCE |
 | COMMAND | the cursor sits on the command line; `ESC` cancels, `Enter` runs |
 | any | `Ctrl+C` is an alias for `ESC` everywhere (as in vim) |
 
 Commands: `:w [file]`, `:e file`, `:e! file` (discard unsaved edits), `:q`, `:q!`, `:wq`, `:build` (`:c`, `:compile`), `:eject[!]`, `:run`, `:pause`, `:step`, `:over`, `:reset`, `:out <tab>`, `:help`.
 
-`[` / `]` scroll the Memory tab by 16 bytes (added in milestone 1 without a spec entry; a removal candidate in review #1, in favour of `:mem ADDR`).
+`:mem ADDR` (hex) shows the Memory tab from that address. It replaced the `[` / `]` keys, the only keys that acted on an unfocused tab (review #1).
+
+`F9` in a BINARY session does nothing (there's no source to build; `F6` restarts the image), and the hint bar doesn't offer it or `i`.
 
 ---
 
