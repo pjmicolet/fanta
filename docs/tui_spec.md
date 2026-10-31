@@ -1,6 +1,6 @@
 # Fanta TUI: Redesign Spec
 
-**Status:** agreed design, 2026-10-31. Implementation progress: milestone 1 (layout, clipped panes, single status line, output tabs) done; milestone 2 (F-keys, `:` command equivalents, `?`/`:help`, hjkl) done except `Tab` focus, deferred until a second pane is scrollable; milestones 3 (session model: dirty/`:w`/STALE/eject/live-patch rule) and 4 (half-block VRAM) to follow. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
+**Status:** agreed design, 2026-10-31. Implementation progress: milestone 1 (layout, clipped panes, single status line, output tabs) done; milestone 2 (F-keys, `:` command equivalents, `?`/`:help`, hjkl) done except `Tab` focus, deferred until a second pane is scrollable; milestone 3 (session model: `[+]`/`:w`/`:q!`/`:e!`, new files, STALE, eject, live-patch rule) done; `:eject` refuses compiled code until assembler bug B16 is fixed (see §2.2); milestone 4 (half-block VRAM) to follow. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
 
 ---
 
@@ -54,7 +54,7 @@ A **build** turns the source of truth into an image: compile (SOURCE) or assembl
 
 - Builds happen **on request only**: `F9`, `:build` (alias `:compile`, `:c`). A build that succeeds resets the CPU and loads the new image. A build that fails leaves the previous image loaded and debuggable, and shows the error.
 - **STALE:** whenever the source text differs from what the loaded image was built from, the status line shows a persistent `STALE` badge, and derived views are dimmed. It clears on the next successful build. This replaces the one-off "Edited: …" message.
-- **ASM live patch:** leaving INSERT in an ASM session re-assembles. If every instruction kept its address, the changed words are patched into memory in place (today's live-patch behaviour) and nothing is reset. If any address moved (a line was inserted or removed before running code), nothing is patched: the session is marked STALE and waits for `F9`. Patching moved code under a running program is how the current TUI silently breaks the ISR at `0x100`.
+- **ASM live patch:** leaving INSERT in an ASM session re-assembles. If every existing instruction kept its address, memory is patched in place (the old live-patch behaviour) and nothing is reset. That covers edits within lines and lines added or removed at the end. If a line was added or removed before existing code, nothing is patched: the session is marked STALE and waits for `F9`. Patching moved code under a running program is how the old TUI silently broke the ISR at `0x100`. (Detection: a line was added or removed since the last build, and the first changed line is before the end of the shorter version.)
 - A compile that hangs (parser bug B6) times out after 2 s and is reported as a failed build (already implemented in `tui/build.hpp`).
 
 ### 2.2 Eject
@@ -62,6 +62,8 @@ A **build** turns the source of truth into an image: compile (SOURCE) or assembl
 `:eject` in a SOURCE session takes the current build's disassembly and opens it as a **new ASM session**, written to `<name>.asm` next to the `.fn` (refusing to overwrite an existing file unless `:eject!`). From then on that assembly is its own source of truth; nothing links it back to the `.fn`. To go back, `:e <name>.fn`.
 
 There are no in-place patches of compiled code: eject is the only way to edit it.
+
+Eject writes one line per word (its note rides on line 0 as a comment, so no address shifts), then **reassembles the text and refuses to write it** if any word comes back different, naming the lines in the Build log. Today every compiled prologue contains `MOV R15, SP`, which the string assembler encodes as `MOV R15, #16` (review B16), so eject refuses until that's fixed.
 
 ---
 
