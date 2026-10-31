@@ -50,8 +50,9 @@ with Gemini (see `GEMINI.md`) so both assistants behave consistently on this cod
 - **Headless TUI:** `./build/fanta-tui --dump <output.txt>` — verify UI state and disassembly
   without a terminal.
 - **Headless screenshots:** `./build/fanta-tui <file> --screen <out.txt> --size 120x40 --keys
-  "c<FRAME>o"` — renders the real screen as text after feeding keystrokes (`<ESC> <CR> <TAB> <BS>
-  <UP> <DOWN> <LEFT> <RIGHT> <FRAME>`). Use it to check layouts without a terminal.
+  "<F5><FRAME><F10>"` — renders the real screen as text after feeding keystrokes (`<F1>`..`<F12>`
+  `<ESC> <C-c> <CR> <TAB> <BS> <UP> <DOWN> <LEFT> <RIGHT> <FRAME>`). Use it to check layouts
+  without a terminal.
 - **Live Patching:** The editor assembles and patches memory addresses directly on `ENTER`.
 - **Suggestions:** Mnemonic ghost-text and TAB completion are backed by a Trie.
 - **Safety:** Always wrap external assembler calls in `try-catch` so the TUI doesn't crash on

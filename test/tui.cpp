@@ -540,3 +540,126 @@ TEST_CASE("Ctrl+C Cancels A Command") {
   REQUIRE_TRUE(screen.contains("mode NORMAL")); // still running, not quit
   std::filesystem::remove(path);
 }
+
+// --- Execution keys (spec §4.1) --------------------------------------------
+
+namespace {
+auto loadAdd(TUI &tui) -> std::string {
+  auto path = tempPath("fanta_tui_keys.fn");
+  writeText(path, kAddProgram);
+  REQUIRE_TRUE(tui.load_file(path));
+  return path;
+}
+
+auto screenAfter(TUI &tui, std::string_view keys) -> std::string {
+  auto path = tempPath("fanta_tui_keys_screen.txt");
+  REQUIRE_TRUE(tui.screenshot(path, 120, 40, keys));
+  std::ifstream in(path);
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  std::filesystem::remove(path);
+  return screen;
+}
+} // namespace
+
+TEST_CASE("F7 Steps One Instruction And s No Longer Does") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  tui.handle_key('s');
+  REQUIRE_SAME(0, cpu.get_pc());
+  tui.handle_key(KEY_F(7));
+  REQUIRE_SAME(8, cpu.get_pc()); // CALL main
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("F8 Steps Over A Call To The Next Instruction") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  tui.handle_key(KEY_F(8)); // over CALL main: main runs to its RET
+  REQUIRE_SAME(4, cpu.get_pc());
+  REQUIRE_TRUE(!cpu.halted);
+  REQUIRE_SAME(30, cpu.registers[0]);
+  REQUIRE_SAME(Fanta::Program::kStackTop, cpu.get_sp());
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("F5 Runs And c No Longer Does") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  REQUIRE_TRUE(screenAfter(tui, "c<FRAME>").contains("PAUSED pc 0x000000"));
+  REQUIRE_TRUE(screenAfter(tui, "<F5><FRAME>").contains("HALTED at 0x000004"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("F6 Restarts Without Rebuilding, F9 Rebuilds") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  // Change "10" to "11" in the source, then restart: the old image runs.
+  for (int ch : {KEY_DOWN, int{'i'}})
+    tui.handle_key(ch);
+  for (int i = 0; i < 20; ++i)
+    tui.handle_key(KEY_RIGHT);
+  tui.handle_key(KEY_BACKSPACE); // "10;" -> "1;"
+  tui.handle_key('1');           // -> "11;"
+  tui.handle_key(KEY_F(6));      // also leaves INSERT
+  cpu.run_until_halt();
+  REQUIRE_SAME(30, cpu.registers[0]);
+
+  tui.handle_key(KEY_F(9));
+  cpu.run_until_halt();
+  REQUIRE_SAME(31, cpu.registers[0]);
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("F-Key In INSERT Leaves INSERT First") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto screen = screenAfter(tui, "iMOV R1, #5<F7>");
+  REQUIRE_TRUE(screen.contains("mode NORMAL"));
+  REQUIRE_SAME(5, cpu.registers[1]); // assembled on leaving INSERT, then stepped
+}
+
+TEST_CASE("F6 Restarts An ASM Program From Its Assembled Image") {
+  CPU cpu{};
+  TUI tui(cpu);
+  screenAfter(tui, "iMOV R1, #5<ESC>");
+  cpu.store(0, 0); // the program overwrote itself, say
+  tui.handle_key(KEY_F(6));
+  Assembler assem{};
+  REQUIRE_SAME(assem.assemble("MOV R1, #5", 0), cpu.load(0));
+}
+
+TEST_CASE("Commands Mirror The F-Keys") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  auto type = [&](std::string_view cmd) {
+    tui.handle_key(':');
+    for (char ch : cmd)
+      tui.handle_key(ch);
+    tui.handle_key('\n');
+  };
+  type("step");
+  REQUIRE_SAME(8, cpu.get_pc());
+  type("reset");
+  REQUIRE_SAME(0, cpu.get_pc());
+  type("over");
+  REQUIRE_SAME(4, cpu.get_pc());
+  REQUIRE_TRUE(screenAfter(tui, ":out memory<CR>").contains("[Memory]"));
+  REQUIRE_TRUE(screenAfter(tui, ":help<CR>").contains("HELP"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("Help Explains How To Switch Between Code And Assembly") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto screen = screenAfter(tui, "?");
+  REQUIRE_TRUE(screen.contains(":e prog.fn"));
+  REQUIRE_TRUE(screen.contains(":e prog.asm"));
+  // Any key closes it without acting on the key.
+  REQUIRE_TRUE(!screenAfter(tui, "q").contains("HELP"));
+}

@@ -16,11 +16,8 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           → spec §5 (diagnostics)
 2026-10-31  cc  `return qd;` with qd undefined compiled without complaint                                          (compiler bug, not TUI)
 2026-10-31  cc  memory pane is fixed at 0x0000 and 32 bytes, so it never shows what I'm looking at   [partly tui/layout: Memory tab fills the panel, [ ] scrolls; still doesn't follow anything]
-2026-10-31  cc  the key hint lists 5 of about 15 keys; :help is an unknown command   [partly tui/layout: hint bar lists every key per mode; no ? / :help yet]
 2026-10-31  cc  :w with no filename gives "Unknown command", and q quits without asking even with unsaved edits     → spec §2
-2026-10-31  cc  `c` runs but `:c` compiles; `r` silently recompiles a .fn                                           → spec §4.1
 2026-10-31  cc  "Loaded ..." message stays up long after it means anything                                        → spec §6.2
-2026-11-01  pj  didn't know how to switch from editing assembly to writing Fanta code; nothing on screen says ":e x.fn"
 2026-11-01  cc  can't start a new Fanta file from the TUI: ":e new.fn" on a missing file fails with "Error loading"
 ```
 
@@ -38,6 +35,9 @@ Ideas that don't come from friction. They wait here until an entry in the log gi
 ## Resolved
 
 ```
+2026-10-31  cc  the key hint lists 5 of about 15 keys; :help is an unknown command   [fixed tui/keys: per-mode hint bar, ? and :help overlay]
+2026-10-31  cc  `c` runs but `:c` compiles; `r` silently recompiles a .fn   [fixed tui/keys: F-keys execute, s/c/r/o do nothing, F6 never rebuilds]
+2026-11-01  pj  didn't know how to switch from editing assembly to writing Fanta code; nothing on screen says ":e x.fn"   [fixed tui/keys: help overlay explains :e x.fn / :e x.asm / :e x.bin]
 2026-11-01  pj  Ctrl+C doesn't leave INSERT the way it does in vim   [fixed tui/layout: Ctrl+C is ESC everywhere]
 2026-10-31  cc  at 80x24 the status block overwrites R8-R12, and the editor's first line runs into the memory hex   [fixed tui/layout]
 2026-10-31  cc  stack values run into the disassembly and VRAM headers at 80x24   [fixed tui/layout]
