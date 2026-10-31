@@ -24,6 +24,15 @@ with Gemini (see `GEMINI.md`) so both assistants behave consistently on this cod
   implementing rather than guessing.
 - **Code review checklist:** Use the `fanta-code-review` skill (`.claude/skills/fanta-code-review/`)
   when reviewing any change — it encodes this project's compliance checklist in full.
+- **TUI changes:** `docs/tui_spec.md` is the agreed design. Every TUI change must pass its §0 fit
+  test, and must point to the `docs/tui_friction.md` entry it resolves. Before calling a TUI
+  change done:
+  - check the affected layouts with `fanta-tui --screen` at 80x24, 120x40 and 200x60;
+  - log anything awkward you hit as a friction entry (author `cc`), phrased as the problem, not
+    the fix.
+
+  Run `/fanta-tui-review` at milestones: after a batch of TUI changes, or when a spec §5
+  interface lands.
 
 ## 2. Engineering Standards
 - **C++ Version:** C++23.
@@ -40,6 +49,9 @@ with Gemini (see `GEMINI.md`) so both assistants behave consistently on this cod
   cycles where registers, SP, or flags change.
 - **Headless TUI:** `./build/fanta-tui --dump <output.txt>` — verify UI state and disassembly
   without a terminal.
+- **Headless screenshots:** `./build/fanta-tui <file> --screen <out.txt> --size 120x40 --keys
+  "c<FRAME>o"` — renders the real screen as text after feeding keystrokes (`<ESC> <CR> <TAB> <BS>
+  <UP> <DOWN> <LEFT> <RIGHT> <FRAME>`). Use it to check layouts without a terminal.
 - **Live Patching:** The editor assembles and patches memory addresses directly on `ENTER`.
 - **Suggestions:** Mnemonic ghost-text and TAB completion are backed by a Trie.
 - **Safety:** Always wrap external assembler calls in `try-catch` so the TUI doesn't crash on
