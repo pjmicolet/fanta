@@ -16,6 +16,7 @@ enum class Mode : uint8_t { NORMAL, INSERT, ZOOM, COMMAND };
 enum class Source : uint8_t {
   ASM,    // Editor text is the source of truth; reset reassembles it.
   BINARY, // Editor shows a read-only disassembly; reset restores the image.
+  FANTA,  // Editor is Fanta source; reset (or :compile) recompiles it.
 };
 
 class TUI {
@@ -30,9 +31,20 @@ public:
   bool load_file(const std::string &filename);
   /// Fresh CPU, then rebuild memory from the current source.
   void reset();
+  /// Process one key exactly as if it had been typed.
+  void handle_key(int ch);
+  /**
+   * Renders the real screen headlessly at cols x rows after feeding `keys`
+   * (see parse_keys in tui.cpp for the <ESC>/<CR>/<FRAME> syntax), and writes
+   * it as text plus a list of highlighted cells. For checking the layout
+   * without a terminal.
+   */
+  bool screenshot(const std::string &filename, int cols, int rows,
+                  std::string_view keys = "");
 
 private:
   void update();
+  void configure_ncurses();
   void draw_registers();
   void draw_memory();
   void draw_stack();
@@ -51,6 +63,9 @@ private:
 
   /// Assemble the editor into memory (ASM source only).
   void assemble_editor();
+  /// Compile the editor (FANTA source only). On success the result becomes
+  /// binary_image; on failure memory is left as it was.
+  bool compile_editor();
   void step();
   void run_batch();
   void track_changed_registers(const std::array<std::uint32_t, 17> &before);
@@ -62,6 +77,7 @@ private:
   uint32_t mem_offset = 0;
   bool is_running_continuously = false;
   bool show_serial = false; // bottom-right pane: VRAM monitor or serial
+  bool ascii_vram = false;  // draw VRAM with a character ramp (screenshots)
 
   int term_w = 80;
   int term_h = 24;
@@ -72,6 +88,7 @@ private:
   int editor_scroll = 0;
   std::vector<uint32_t> binary_image;
   std::vector<Fanta::Program::AsmError> asm_errors;
+  bool build_failed = false; // last compile failed (message holds why)
 
   std::string command_buffer; // ":..." while in COMMAND mode
   std::string message;        // last status message, shown in NORMAL mode
