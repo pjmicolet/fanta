@@ -1,9 +1,11 @@
 #include "tui.hpp"
 #include "build.hpp"
+#include "canvas.hpp"
 #include "disasm.hpp"
 #include "instructions.hpp"
 #include "terminal.hpp"
 #include <algorithm>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <iomanip>
@@ -137,13 +139,17 @@ void TUI::run() {
 
 void TUI::track_changed_registers(
     const std::array<std::uint32_t, 17> &before) {
-  last_changed_reg = -1;
-  for (int i = 0; i < 17; ++i) {
-    if (cpu.registers[i] != before[i]) {
-      last_changed_reg = i;
-      break;
-    }
-  }
+  changed_regs.reset();
+  for (int i = 0; i < 17; ++i)
+    changed_regs.set(i, cpu.registers[i] != before[i]);
+}
+
+void TUI::follow_pc() {
+  if (source != Source::ASM || mode == Mode::INSERT)
+    return;
+  auto line = static_cast<int>(display_pc() / 4);
+  if (line < static_cast<int>(editor.lines().size()))
+    editor.goto_line(line);
 }
 
 void TUI::step() {
@@ -153,6 +159,7 @@ void TUI::step() {
   cpu.run_cycle();
   total_cycles++;
   track_changed_registers(before);
+  follow_pc();
 }
 
 void TUI::run_batch() {
@@ -168,6 +175,7 @@ void TUI::run_batch() {
     total_cycles++;
   }
   track_changed_registers(before);
+  follow_pc();
 }
 
 void TUI::assemble_editor() {
@@ -185,6 +193,7 @@ void TUI::assemble_editor() {
 
 bool TUI::compile_editor() {
   editor.trim_trailing();
+  ++build_count;
   auto result = Fanta::Build::compile(editor.text());
   if (!result) {
     build_failed = true;
@@ -206,7 +215,7 @@ void TUI::reset() {
   // A fresh CPU resets registers, SP, flags, pending interrupts, VBLANK
   // timing and all of RAM/VRAM in one go.
   cpu = CPU{};
-  last_changed_reg = -1;
+  changed_regs.reset();
   is_running_continuously = false;
   switch (source) {
   case Source::BINARY:
@@ -296,339 +305,411 @@ void TUI::dump_state(const std::string &filename) {
 }
 
 // ---------------------------------------------------------------------------
-// Drawing
+// Drawing (docs/tui_spec.md §3). Every pane draws through a Canvas clipped to
+// the rectangle Layout::compute gives it, so panes can't overlap.
 // ---------------------------------------------------------------------------
+
+namespace {
+
+constexpr attr_t kChanged = A_BOLD;
+constexpr short kPairRegs = 1;
+constexpr short kPairCode = 2;
+constexpr short kPairStatus = 3;
+constexpr short kPairError = 4;
+constexpr short kPairMemory = 5;
+
+auto hex8(uint32_t v) -> std::string { return std::format("{:08X}", v); }
+
+/// File name without directories, for pane titles (the status line has the
+/// full path).
+auto base_name(const std::string &p) -> std::string {
+  return p.empty() ? "(unsaved)" : std::filesystem::path(p).filename().string();
+}
+
+/// The longest hint that fits: full text, else the short form.
+auto fit(std::string_view full, std::string_view brief, int width)
+    -> std::string_view {
+  return static_cast<int>(full.size()) <= width ? full : brief;
+}
+auto addr(uint32_t v) -> std::string { return std::format("0x{:06X}", v); }
+
+auto tab_name(OutputTab t) -> std::string_view {
+  switch (t) {
+  case OutputTab::SERIAL:
+    return "Serial";
+  case OutputTab::VRAM:
+    return "VRAM";
+  case OutputTab::MEMORY:
+    return "Memory";
+  case OutputTab::LOG:
+    return "Build log";
+  }
+  return "?";
+}
+
+/// "[Serial]  VRAM  Memory  Build log" with the current tab bracketed.
+auto tab_title(OutputTab current) -> std::string {
+  std::string t;
+  for (auto tab : {OutputTab::SERIAL, OutputTab::VRAM, OutputTab::MEMORY,
+                   OutputTab::LOG}) {
+    if (!t.empty())
+      t += "  ";
+    t += tab == current ? "[" + std::string{tab_name(tab)} + "]"
+                        : std::string{tab_name(tab)};
+  }
+  return t;
+}
+
+} // namespace
+
+auto TUI::layout_kind() const -> Fanta::Layout::Kind {
+  switch (source) {
+  case Source::FANTA:
+    return Fanta::Layout::Kind::SOURCE;
+  case Source::BINARY:
+    return Fanta::Layout::Kind::BINARY;
+  case Source::ASM:
+    break;
+  }
+  return Fanta::Layout::Kind::ASM;
+}
+
+auto TUI::display_pc() const -> uint32_t {
+  // After HALT, PC has already moved past it; point at the HALT itself.
+  uint32_t pc = cpu.get_pc();
+  return (cpu.halted && pc >= 4) ? pc - 4 : pc;
+}
 
 void TUI::update() {
   getmaxyx(stdscr, term_h, term_w);
   erase();
+  cursor_at.reset();
+
+  if (!message.empty() && message != last_logged) {
+    build_log.push_back(message);
+    last_logged = message;
+  }
 
   if (mode == Mode::ZOOM) {
-    draw_vram_preview();
+    draw_vram(Fanta::Canvas{{0, 0, term_w, term_h}}, /*zoomed=*/true);
+    curs_set(0);
     refresh();
     return;
   }
 
-  draw_registers();
-  draw_status();
-  draw_disassembly();
-  draw_memory();
-  draw_stack();
-  draw_editor();
-  if (show_serial)
-    draw_serial();
-  else
-    draw_vram_preview();
+  auto l = Fanta::Layout::compute(term_w, term_h, layout_kind());
+  draw_status_line(Fanta::Canvas{l.status});
 
-  // Leave the terminal cursor on the editor cursor.
-  int editor_y = term_h * 0.6;
-  move(editor_y + (editor.y() - editor_scroll), 6 + editor.x());
+  if (output_overlay) {
+    // Small terminal: the output panel takes over the work area until ESC.
+    int top = l.status.bottom();
+    draw_output(Fanta::Canvas{{0, top, term_w, l.hint.y - top}}, output_tab);
+  } else {
+    switch (source) {
+    case Source::FANTA:
+      draw_source(Fanta::Canvas{l.code});
+      if (l.derived)
+        draw_disasm_view(Fanta::Canvas{*l.derived},
+                         std::format("ASM  build #{}  (derived, read-only)",
+                                     build_count));
+      break;
+    case Source::ASM:
+      draw_asm_editor(Fanta::Canvas{l.code});
+      break;
+    case Source::BINARY:
+      draw_disasm_view(
+          Fanta::Canvas{l.code},
+          std::format("BINARY  {}  (read-only image)", base_name(path)));
+      break;
+    }
+    if (l.registers)
+      draw_registers(Fanta::Canvas{*l.registers}, l.register_form);
+    if (l.stack)
+      draw_stack(Fanta::Canvas{*l.stack});
+    if (l.output)
+      draw_output(Fanta::Canvas{*l.output}, output_tab);
+    if (l.output_secondary)
+      draw_output(Fanta::Canvas{*l.output_secondary},
+                  output_tab == OutputTab::VRAM ? OutputTab::SERIAL
+                                                : OutputTab::VRAM);
+  }
 
+  draw_hint_bar(Fanta::Canvas{l.hint});
+
+  if (mode == Mode::COMMAND) {
+    curs_set(1);
+    move(l.hint.y, static_cast<int>(command_buffer.size()));
+  } else if (cursor_at) {
+    curs_set(1);
+    move(cursor_at->first, cursor_at->second);
+  } else {
+    curs_set(0);
+  }
   refresh();
 }
 
-void TUI::draw_registers() {
-  attron(COLOR_PAIR(1));
-  mvprintw(1, 2, "--- REGISTERS ---");
-  attroff(COLOR_PAIR(1));
+void TUI::draw_status_line(const Fanta::Canvas &c) {
+  std::string kind;
+  std::string build;
+  switch (source) {
+  case Source::FANTA:
+    kind = "SOURCE";
+    build = build_count == 0 ? "not built"
+            : build_failed   ? std::format("build #{} FAILED", build_count)
+                             : std::format("build #{} OK {}w", build_count,
+                                           binary_image.size());
+    break;
+  case Source::ASM:
+    kind = "ASM";
+    build = asm_errors.empty()
+                ? std::format("asm OK {} lines", editor.lines().size())
+                : std::format("asm {} error(s)", asm_errors.size());
+    break;
+  case Source::BINARY:
+    kind = "BINARY";
+    build = std::format("image {}w", binary_image.size());
+    break;
+  }
 
-  for (int i = 0; i < 17; ++i) {
-    int col;
-    int row;
-    if (i < 8) {
-      col = 2;
-      row = 2 + i;
-    } else if (i < 16) {
-      col = 20;
-      row = 2 + (i - 8);
-    } else {
-      col = 2; // Put SP below R7
-      row = 10;
-    }
+  std::string state =
+      cpu.halted ? "HALTED at " + addr(display_pc())
+                 : std::format("{} pc {}",
+                               is_running_continuously ? "RUNNING" : "PAUSED",
+                               addr(display_pc()));
+  auto line_for = [&](const std::string &file) {
+    return std::format(" {} | {} {} | {} | {} ", mode_name(mode), kind, file,
+                       build, state);
+  };
+  std::string left = line_for(path.empty() ? "(no file)" : path);
+  if (static_cast<int>(left.size()) > c.width() - 20)
+    left = line_for(base_name(path));
+  if (term_w < Fanta::Layout::kMinCols || term_h < Fanta::Layout::kMinRows)
+    left += std::format("| terminal {}x{} < 80x24 ", term_w, term_h);
 
-    if (row >= term_h)
-      continue;
-
-    std::string label = Fanta::getRegisterName(static_cast<uint8_t>(i));
-    int attrs =
-        (i == last_changed_reg) ? (COLOR_PAIR(3) | A_BOLD) : COLOR_PAIR(1);
-    attron(attrs);
-    mvprintw(row, col, "%-3s: 0x%08X", label.c_str(), cpu.registers[i]);
-    attroff(attrs);
+  c.put_line(0, left, A_REVERSE);
+  if (!message.empty()) {
+    int col = static_cast<int>(left.size()) + 1;
+    attr_t a = A_REVERSE;
+    if (build_failed || !asm_errors.empty())
+      a |= COLOR_PAIR(kPairError) | A_BOLD;
+    c.put(0, col, message, a);
   }
 }
 
-void TUI::draw_status() {
-  attron(COLOR_PAIR(3));
-  int col = term_w * 0.25;
-  if (col < 20)
-    col = 20;
-  mvprintw(1, col, "--- STATUS ---");
-  mvprintw(2, col, "PC: 0x%04X | SP: 0x%04X", cpu.get_pc(), cpu.get_sp());
-  mvprintw(3, col, "FLAGS: Z:%d N:%d V:%d C:%d", cpu.status_reg[0],
-           cpu.status_reg[1], (cpu.status_reg[2] ? 1 : 0),
-           (cpu.status_reg[3] ? 1 : 0));
-  mvprintw(4, col, "IPS: %.0f | SERIAL: %zu bytes (o)", current_ips,
-           serial_output().size());
-  mvprintw(5, col, "MODE: %s %s", mode_name(mode),
-           (is_running_continuously ? "(CONT)" : ""));
-  mvprintw(6, col, "KEYS: %s",
-           (mode == Mode::NORMAL ? "s:step c:cont r:reset i:edit q:quit"
-                                 : "ESC:exit"));
-  attroff(COLOR_PAIR(3));
-
-  // Bottom line: the command being typed, else the last message.
-  const std::string &bottom =
-      (mode == Mode::COMMAND) ? command_buffer : message;
-  if (!bottom.empty()) {
-    int attrs = (mode != Mode::COMMAND && (!asm_errors.empty() || build_failed))
-                    ? (COLOR_PAIR(4) | A_REVERSE)
-                    : A_REVERSE;
-    attron(attrs);
-    mvprintw(term_h - 1, 0, "%s", bottom.c_str());
-    attroff(attrs);
-  }
-
-  if (cpu.halted) {
-    attron(COLOR_PAIR(4) | A_BOLD);
-    mvprintw(7, col, "!!! HALTED !!!");
-    attroff(COLOR_PAIR(4) | A_BOLD);
-  }
-}
-
-void TUI::draw_disassembly() {
-  attron(COLOR_PAIR(2));
-  int col = term_w * 0.60;
-  if (col < 48)
-    col = 48;
-  mvprintw(1, col, "--- DISASSEMBLY ---");
-
-  // Highlight what is ABOUT TO RUN (the current PC)
-  uint32_t current_pc = cpu.get_pc();
-
-  int max_lines = (term_h * 0.5) - 2;
-  if (max_lines < 5)
-    max_lines = 5;
-
-  for (int i = 0; i < max_lines; ++i) {
-    int64_t addr = int64_t{current_pc} - (max_lines / 2 * 4) + (i * 4);
-    if (addr < 0 || addr > static_cast<int64_t>(cpu.ram.getSize()) - 4)
-      continue;
-    if (2 + i >= term_h * 0.6)
-      break;
-
-    std::string line = disassemble((uint32_t)addr);
-    if ((uint32_t)addr == current_pc) {
-      attron(A_BOLD | A_REVERSE);
-      mvprintw(2 + i, col, "> 0x%04X: %s", (uint32_t)addr, line.c_str());
-      attroff(A_BOLD | A_REVERSE);
-    } else {
-      mvprintw(2 + i, col, "0x%04X: %s", (uint32_t)addr, line.c_str());
-    }
-  }
-  attroff(COLOR_PAIR(2));
-}
-
-void TUI::draw_memory() {
-  attron(COLOR_PAIR(5));
-  int start_y = term_h * 0.4;
-  if (start_y < 10)
-    start_y = 10;
-
-  mvprintw(start_y, 2, "--- MEM (0x%04X) ---", mem_offset);
-  for (int i = 0; i < 4; ++i) {
-    uint32_t row_addr = mem_offset + (i * 8);
-    if (row_addr + 8 > cpu.ram.getSize() || start_y + 1 + i >= term_h * 0.6)
-      break;
-    std::stringstream ss;
-    ss << "0x" << std::hex << std::setw(4) << std::setfill('0') << row_addr
-       << ": ";
-    uint8_t *ptr = cpu.ram.from(row_addr);
-    for (int j = 0; j < 8; ++j) {
-      ss << std::hex << std::setw(2) << std::setfill('0') << (int)ptr[j] << " ";
-    }
-    mvprintw(start_y + 1 + i, 2, "%s", ss.str().c_str());
-  }
-  attroff(COLOR_PAIR(5));
-}
-
-void TUI::draw_stack() {
-  attron(COLOR_PAIR(3));
-  int start_y = term_h * 0.4;
-  if (start_y < 10)
-    start_y = 10;
-
-  int col = 34;
-  mvprintw(start_y, col, "--- STACK ---");
-
-  // PUSH writes at SP then decrements, so SP is the next free slot and the
-  // top value lives at SP + 4.
-  uint32_t sp = cpu.registers[16];
-  uint32_t fp = cpu.registers[15];
-  if (sp >= kStackTop) {
-    mvprintw(start_y + 1, col, "(empty)");
-    attroff(COLOR_PAIR(3));
+void TUI::draw_hint_bar(const Fanta::Canvas &c) {
+  if (mode == Mode::COMMAND) {
+    c.put_line(0, command_buffer);
     return;
   }
-
-  int row_offset = 0;
-  for (uint32_t addr = sp + 4; addr <= kStackTop && row_offset < 4;
-       addr += 4) {
-    if (start_y + 1 + row_offset >= term_h * 0.6)
-      break;
-
-    uint32_t val = cpu.ram.read32(addr);
-    const char *fp_marker = (addr == fp) ? " <- FP" : "";
-    const char *tag = (row_offset == 0) ? "TOP ->" : "      ";
-    mvprintw(start_y + 1 + row_offset, col, "%s 0x%06X: 0x%08X%s", tag, addr,
-             val, fp_marker);
-    row_offset++;
+  std::string_view hint;
+  int w = c.width();
+  switch (mode) {
+  case Mode::INSERT:
+    hint = source == Source::ASM ? " ESC normal (re-assembles)  TAB complete "
+                                 : " ESC normal  TAB indent ";
+    break;
+  case Mode::ZOOM:
+    hint = " +/- zoom  hjkl/arrows pan  s step  c run  r reset  ESC back ";
+    break;
+  default:
+    hint = output_overlay
+               ? " o next tab  ESC close output  s step  c run  r reset "
+               : fit(" s step  c run/pause  r reset  i edit  o output tab  "
+                     "[ ] memory  z zoom VRAM  : cmd  q quit ",
+                     " s step  c run  r reset  i edit  o output  z zoom  "
+                     ": cmd  q quit ",
+                     w);
+    break;
   }
-  attroff(COLOR_PAIR(3));
+  c.put_line(0, hint, A_DIM);
 }
 
-void TUI::draw_editor() {
-  int win_y = term_h * 0.6;
-  int win_h = term_h - win_y - 1;
-  if (win_h < 3)
-    win_h = 3;
-
-  attron(A_BOLD);
-  mvprintw(win_y - 1, 2, "%s",
-           source == Source::ASM     ? "--- EDITOR (Mnemonic Entry) ---"
-           : source == Source::FANTA ? "--- EDITOR (Fanta, :compile / :run) ---"
-                                 : "--- EDITOR (binary, read-only) ---");
-  attroff(A_BOLD);
-
-  // Calculate scrolling to keep cursor in view
-  int visible_lines = win_h - 1;
-  if (editor.y() < editor_scroll) {
-    editor_scroll = editor.y();
-  } else if (editor.y() >= editor_scroll + visible_lines) {
-    editor_scroll = editor.y() - visible_lines + 1;
-  }
-
+void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
+                          bool editable) {
   const auto &lines = editor.lines();
-  for (int i = 0; i < visible_lines; ++i) {
-    int line_idx = editor_scroll + i;
-    if (line_idx >= (int)lines.size())
+  int rows = c.height();
+  if (editor.y() < editor_scroll)
+    editor_scroll = editor.y();
+  else if (editor.y() >= editor_scroll + rows)
+    editor_scroll = editor.y() - rows + 1;
+
+  uint32_t pc = display_pc();
+  for (int row = 0; row < rows; ++row) {
+    int idx = editor_scroll + row;
+    if (idx >= static_cast<int>(lines.size()))
       break;
+    auto uidx = static_cast<size_t>(idx);
+    bool bad = std::ranges::any_of(
+        asm_errors, [uidx](const auto &e) { return e.line == uidx; });
+    bool at_pc = show_addresses && static_cast<uint32_t>(idx * 4) == pc;
 
-    const std::string &line = lines[line_idx];
-    bool bad = std::ranges::any_of(asm_errors, [line_idx](const auto &e) {
-      return e.line == (size_t)line_idx;
-    });
-    int attrs = bad ? COLOR_PAIR(4)
-                    : (line_idx == editor.y() ? COLOR_PAIR(2) : A_NORMAL);
-    attron(attrs);
-    mvprintw(win_y + i, 2, "%2d%c %s", line_idx, bad ? '!' : '|',
-             line.c_str());
-    attroff(attrs);
+    std::string gutter =
+        show_addresses ? std::format("{}{} ", at_pc ? '>' : ' ',
+                                     addr(static_cast<uint32_t>(idx * 4)))
+                       : std::format("{:4} ", idx + 1);
+    gutter += bad ? '!' : ' ';
+    gutter += ' ';
+    attr_t a = bad ? COLOR_PAIR(kPairError)
+               : at_pc ? (A_REVERSE | A_BOLD)
+                       : A_NORMAL;
+    c.put_line(row, gutter + lines[uidx], a);
 
-    // Ghost-text mnemonic suggestion while typing the first word.
-    if (line_idx == editor.y() && mode == Mode::INSERT &&
-        source == Source::ASM) {
-      std::string word = first_word(line);
-      if (!word.empty() && word.find_first_of(" \t") == std::string::npos) {
-        std::string suggestion = trie.getSuggestion(word);
-        if (suggestion.size() > word.size()) {
-          attron(A_DIM);
-          mvprintw(win_y + i, 6 + line.size(), "%s",
-                   suggestion.substr(word.size()).c_str());
-          attroff(A_DIM);
+    if (idx == editor.y()) {
+      int col = static_cast<int>(gutter.size()) + editor.x();
+      if (editable)
+        cursor_at = {c.rect().y + row, c.rect().x + std::min(col, c.width() - 1)};
+      // Ghost-text mnemonic suggestion while typing the first word.
+      if (mode == Mode::INSERT && source == Source::ASM) {
+        std::string word = first_word(lines[uidx]);
+        if (!word.empty() && word.find_first_of(" \t") == std::string::npos) {
+          std::string suggestion = trie.getSuggestion(word);
+          if (suggestion.size() > word.size())
+            c.put(row, static_cast<int>(gutter.size() + lines[uidx].size()),
+                  suggestion.substr(word.size()), A_DIM);
         }
       }
     }
   }
 }
 
-void TUI::draw_vram_preview() {
-  int start_col, start_y, preview_w, preview_h;
+void TUI::draw_source(const Fanta::Canvas &c) {
+  auto inner = c.frame(
+      std::format("SOURCE  {}  (source of truth)", base_name(path)));
+  draw_code_lines(inner, /*show_addresses=*/false, /*editable=*/true);
+}
 
-  if (mode == Mode::ZOOM) {
-    start_col = 0;
-    start_y = 0;
-    preview_w = term_w;
-    preview_h = term_h;
-  } else {
-    start_col = term_w * 0.60;
-    start_y = term_h * 0.6;
-    preview_w = term_w - start_col - 4;
-    preview_h = term_h - start_y - 1;
-    mvprintw(start_y - 1, start_col, "--- VRAM MONITOR ---");
-  }
+void TUI::draw_asm_editor(const Fanta::Canvas &c) {
+  auto inner =
+      c.frame(std::format("ASM  {}  (source of truth)", base_name(path)));
+  draw_code_lines(inner, /*show_addresses=*/true, /*editable=*/true);
+}
 
-  if (preview_w <= 0 || preview_h <= 0)
-    return;
-
-  uint32_t *vram = (uint32_t *)cpu.get_vram();
-  bool use_color = (COLORS >= 256) && !ascii_vram;
-
-  // Centered magnifying glass calculations
-  double visible_w = 320.0 / zoom_scale;
-  double visible_h = 240.0 / zoom_scale;
-  double zoom_start_x = zoom_cx - (visible_w / 2.0);
-  double zoom_start_y = zoom_cy - (visible_h / 2.0);
-
-  // Clamp viewport to VRAM boundaries
-  if (zoom_start_x < 0.0)
-    zoom_start_x = 0.0;
-  if (zoom_start_x + visible_w > 320.0)
-    zoom_start_x = 320.0 - visible_w;
-  if (zoom_start_y < 0.0)
-    zoom_start_y = 0.0;
-  if (zoom_start_y + visible_h > 240.0)
-    zoom_start_y = 240.0 - visible_h;
-
-  for (int y = 0; y < preview_h; ++y) {
-    int vy = (int)(zoom_start_y + (y * visible_h) / preview_h);
-    if (vy < 0)
-      vy = 0;
-    if (vy >= 240)
+void TUI::draw_disasm_view(const Fanta::Canvas &c, std::string_view title) {
+  auto inner = c.frame(title, COLOR_PAIR(kPairCode));
+  uint32_t pc = display_pc();
+  int rows = inner.height();
+  // Keep PC a third of the way down, but never start before address 0
+  // (no blank rows above the program).
+  int64_t start = int64_t{pc} - (rows / 3) * 4;
+  start = std::max<int64_t>(start, 0);
+  auto ram = static_cast<int64_t>(cpu.ram.getSize());
+  for (int row = 0; row < rows; ++row) {
+    int64_t a = start + int64_t{row} * 4;
+    if (a > ram - 4)
       break;
-    uint32_t *row = vram + (vy * 320);
-
-    move(start_y + y, start_col);
-    for (int x = 0; x < preview_w; ++x) {
-      int vx = (int)(zoom_start_x + (x * visible_w) / preview_w);
-      if (vx < 0)
-        vx = 0;
-      if (vx >= 320)
-        break;
-
-      uint32_t pixel = row[vx];
-      uint8_t r = (pixel >> 16) & 0xFF;
-      uint8_t g = (pixel >> 8) & 0xFF;
-      uint8_t b = pixel & 0xFF;
-
-      if (use_color) {
-        int r5 = (r * 5) / 255;
-        int g5 = (g * 5) / 255;
-        int b5 = (b * 5) / 255;
-        int pair_idx = 10 + (r5 * 36) + (g5 * 6) + b5;
-
-        attron(COLOR_PAIR(pair_idx));
-        addch(' ');
-        attroff(COLOR_PAIR(pair_idx));
-      } else {
-        const char *ramp = " .:-=+*#%@";
-        uint8_t lum = (r + g + b) / 3;
-        addch(ramp[(lum * 9) / 255]);
-      }
-    }
+    auto ua = static_cast<uint32_t>(a);
+    bool at_pc = ua == pc;
+    std::string line = std::format("{}{}  {}", at_pc ? '>' : ' ', addr(ua),
+                                   disassemble(ua));
+    inner.put_line(row, line,
+                   at_pc ? (A_REVERSE | A_BOLD) : COLOR_PAIR(kPairCode));
   }
+}
 
-  // Draw vivid '+' crosshair cursor at the zoom center coordinate in ZOOM mode
-  if (mode == Mode::ZOOM) {
-    int cur_sx =
-        start_col + (int)((zoom_cx - zoom_start_x) * preview_w / visible_w);
-    int cur_sy =
-        start_y + (int)((zoom_cy - zoom_start_y) * preview_h / visible_h);
-    if (cur_sx >= 0 && cur_sx < term_w && cur_sy >= 0 && cur_sy < term_h) {
-      attron(COLOR_PAIR(3) | A_BOLD | A_REVERSE);
-      mvaddch(cur_sy, cur_sx, '+');
-      attroff(COLOR_PAIR(3) | A_BOLD | A_REVERSE);
+void TUI::draw_registers(const Fanta::Canvas &c,
+                         Fanta::Layout::RegisterForm form) {
+  using Fanta::Layout::RegisterForm;
+  auto name = [](int i) -> std::string {
+    if (i == 15)
+      return "FP";
+    if (i == 16)
+      return "SP";
+    return "R" + std::to_string(i);
+  };
+  // "R1 *0000000A": a '*' and bold mark registers the last step changed.
+  auto cell = [&](int i) {
+    return std::format("{:<3}{}{}", name(i), changed_regs.test(i) ? '*' : ' ',
+                       hex8(cpu.registers[i]));
+  };
+  auto flags = [&] {
+    auto f = [&](int i, char ch) {
+      return cpu.status_reg[i] ? ch : static_cast<char>(ch - 'A' + 'a');
+    };
+    return std::format("FLAGS {} {} {} {}", f(0, 'Z'), f(1, 'N'), f(2, 'V'),
+                       f(3, 'C'));
+  };
+  auto pc_cell = std::format("PC  {}", hex8(display_pc()));
+  // Draw cells left to right, bolding the changed ones.
+  auto row_of = [&](const Fanta::Canvas &cv, int row,
+                    std::initializer_list<int> regs, const std::string &tail,
+                    int cell_w) {
+    int col = 0;
+    for (int i : regs) {
+      cv.put(row, col, cell(i),
+             changed_regs.test(i) ? (kChanged | COLOR_PAIR(kPairStatus))
+                                  : COLOR_PAIR(kPairRegs));
+      col += cell_w;
     }
+    if (!tail.empty())
+      cv.put(row, col, tail, COLOR_PAIR(kPairRegs));
+  };
+
+  switch (form) {
+  case RegisterForm::FOUR_COLUMNS: {
+    auto in = c.frame("REGISTERS", COLOR_PAIR(kPairRegs));
+    for (int r = 0; r < 4; ++r)
+      row_of(in, r, {r, r + 4, r + 8, r + 12}, "", 15);
+    row_of(in, 4, {16}, pc_cell + "   " + flags(), 15);
+    break;
+  }
+  case RegisterForm::TWO_COLUMNS: {
+    auto in = c.frame("REGISTERS", COLOR_PAIR(kPairRegs));
+    for (int r = 0; r < 8; ++r)
+      row_of(in, r, {r, r + 8}, "", 15);
+    row_of(in, 8, {16}, pc_cell, 15);
+    in.put(9, 0, flags(), COLOR_PAIR(kPairRegs));
+    break;
+  }
+  case RegisterForm::COMPACT:
+    row_of(c, 0, {0, 1, 2, 3, 4, 5}, "", 13);
+    row_of(c, 1, {6, 7, 8, 9, 10, 11}, flags(), 13);
+    row_of(c, 2, {12, 13, 14, 15, 16}, pc_cell, 13);
+    break;
+  }
+}
+
+void TUI::draw_stack(const Fanta::Canvas &c) {
+  uint32_t sp = cpu.registers[16];
+  uint32_t fp = cpu.registers[15];
+  auto inner = c.frame(std::format("STACK  SP {}", addr(sp)),
+                       COLOR_PAIR(kPairStatus));
+  // PUSH writes at SP then decrements, so the top value lives at SP + 4.
+  if (sp >= kStackTop) {
+    inner.put(0, 1, "(empty)");
+    return;
+  }
+  int row = 0;
+  for (uint32_t a = sp + 4; a <= kStackTop && row < inner.height(); a += 4) {
+    std::string line = std::format(" {:06X}  {}", a, hex8(cpu.ram.read32(a)));
+    if (row == 0)
+      line += "  <- TOP";
+    if (a == fp)
+      line += "  <- FP";
+    inner.put(row++, 0, line);
+  }
+}
+
+void TUI::draw_output(const Fanta::Canvas &c, OutputTab tab) {
+  auto inner = c.frame(tab_title(tab));
+  switch (tab) {
+  case OutputTab::SERIAL:
+    draw_serial(inner);
+    break;
+  case OutputTab::VRAM:
+    draw_vram(inner, /*zoomed=*/false);
+    break;
+  case OutputTab::MEMORY:
+    draw_memory(inner);
+    break;
+  case OutputTab::LOG: {
+    int rows = inner.height();
+    size_t first = build_log.size() > static_cast<size_t>(rows)
+                       ? build_log.size() - rows
+                       : 0;
+    for (size_t i = first; i < build_log.size(); ++i)
+      inner.put(static_cast<int>(i - first), 0, build_log[i]);
+    break;
+  }
   }
 }
 
@@ -636,21 +717,109 @@ auto TUI::serial_output() -> const std::string & {
   return cpu.bus.get<BasicSerial<>>().output;
 }
 
-void TUI::draw_serial() {
-  int start_col = term_w * 0.60;
-  int start_y = term_h * 0.6;
-  int pane_w = term_w - start_col - 4;
-  int pane_h = term_h - start_y - 1;
-  mvprintw(start_y - 1, start_col, "--- SERIAL (%zu bytes) ---",
-           serial_output().size());
-  if (pane_w <= 0 || pane_h <= 0)
+void TUI::draw_serial(const Fanta::Canvas &c) {
+  if (serial_output().empty()) {
+    c.put(0, 0, "(no serial output)", A_DIM);
     return;
-
-  // Like a terminal: show the most recent lines, oldest at the top.
-  auto lines = Fanta::Terminal::layout(serial_output(), pane_w);
-  size_t first = lines.size() > (size_t)pane_h ? lines.size() - pane_h : 0;
+  }
+  // Like a terminal: the most recent lines, oldest at the top.
+  auto lines = Fanta::Terminal::layout(serial_output(), c.width());
+  size_t first = lines.size() > static_cast<size_t>(c.height())
+                     ? lines.size() - c.height()
+                     : 0;
   for (size_t i = first; i < lines.size(); ++i)
-    mvprintw(start_y + (int)(i - first), start_col, "%s", lines[i].c_str());
+    c.put(static_cast<int>(i - first), 0, lines[i]);
+}
+
+void TUI::draw_memory(const Fanta::Canvas &c) {
+  // As many 16-byte rows as fit: "0x000000  00 11 .. ff  ................"
+  int per_row = c.width() >= 10 + 16 * 3 + 17 ? 16 : 8;
+  for (int row = 0; row < c.height(); ++row) {
+    uint32_t base = mem_offset + static_cast<uint32_t>(row * per_row);
+    if (base + per_row > cpu.ram.getSize())
+      break;
+    std::string hex;
+    std::string ascii;
+    const uint8_t *p = cpu.ram.from(base);
+    for (int j = 0; j < per_row; ++j) {
+      hex += std::format("{:02x} ", p[j]);
+      ascii += (p[j] >= 0x20 && p[j] < 0x7F) ? static_cast<char>(p[j]) : '.';
+    }
+    c.put(row, 0, std::format("{}  {} {}", addr(base), hex, ascii),
+          COLOR_PAIR(kPairMemory));
+  }
+}
+
+void TUI::draw_vram(const Fanta::Canvas &c, bool zoomed) {
+  if (c.width() <= 0 || c.height() <= 0)
+    return;
+  const auto *vram = reinterpret_cast<const uint32_t *>(cpu.get_vram());
+  bool use_color = (COLORS >= 256) && !ascii_vram;
+
+  double visible_w = 320.0 / zoom_scale;
+  double visible_h = 240.0 / zoom_scale;
+  double x0 = std::clamp(zoom_cx - visible_w / 2.0, 0.0, 320.0 - visible_w);
+  double y0 = std::clamp(zoom_cy - visible_h / 2.0, 0.0, 240.0 - visible_h);
+
+  // Each cell shows the AVERAGE of the pixels it covers, so small objects
+  // (a 1-pixel star) still register instead of falling between samples.
+  bool any_lit = false;
+  for (int y = 0; y < c.height(); ++y) {
+    int py0 = static_cast<int>(y0 + y * visible_h / c.height());
+    int py1 = std::max(py0 + 1,
+                       static_cast<int>(y0 + (y + 1) * visible_h / c.height()));
+    for (int x = 0; x < c.width(); ++x) {
+      int px0 = static_cast<int>(x0 + x * visible_w / c.width());
+      int px1 = std::max(px0 + 1, static_cast<int>(x0 + (x + 1) * visible_w /
+                                                         c.width()));
+      uint32_t r = 0;
+      uint32_t g = 0;
+      uint32_t b = 0;
+      uint32_t peak = 0;
+      int n = 0;
+      for (int py = py0; py < std::min(py1, 240); ++py) {
+        for (int px = px0; px < std::min(px1, 320); ++px) {
+          uint32_t p = vram[py * 320 + px];
+          uint32_t pr = (p >> 16) & 0xFF;
+          uint32_t pg = (p >> 8) & 0xFF;
+          uint32_t pb = p & 0xFF;
+          r += pr;
+          g += pg;
+          b += pb;
+          peak = std::max(peak, (pr + pg + pb) / 3);
+          ++n;
+        }
+      }
+      if (n == 0)
+        continue;
+      r /= n;
+      g /= n;
+      b /= n;
+      // Brightness from the average, but never let a lit pixel vanish.
+      uint32_t lum = std::max((r + g + b) / 3, peak / 4);
+      if (lum > 0)
+        any_lit = true;
+      if (use_color) {
+        int pair = 10 + static_cast<int>((r * 5 / 255) * 36 +
+                                         (g * 5 / 255) * 6 + (b * 5 / 255));
+        if (lum > 0 && pair == 10)
+          pair = 10 + 36 + 6 + 1; // dim but lit: darkest non-black
+        c.put(y, x, " ", COLOR_PAIR(pair));
+      } else {
+        static constexpr std::string_view ramp = " .:-=+*#%@";
+        size_t i = lum == 0 ? 0 : std::max<size_t>(1, lum * 9 / 255);
+        c.put(y, x, ramp.substr(i, 1));
+      }
+    }
+  }
+  if (!any_lit)
+    c.put(0, 0, "(blank)", A_DIM);
+
+  if (zoomed) {
+    int sx = static_cast<int>((zoom_cx - x0) * c.width() / visible_w);
+    int sy = static_cast<int>((zoom_cy - y0) * c.height() / visible_h);
+    c.put(sy, sx, "+", COLOR_PAIR(kPairStatus) | A_BOLD | A_REVERSE);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -743,10 +912,21 @@ void TUI::handle_normal_mode(int ch) {
     mode = Mode::ZOOM;
     is_running_continuously = false;
     break;
-  case 'o':
-    show_serial = !show_serial;
+  case 'o': {
+    // Cycle the output tab. On terminals too small for the panel, the first
+    // press opens it over the work area (ESC closes it).
+    auto l = Fanta::Layout::compute(term_w, term_h, layout_kind());
+    if (!l.output && !output_overlay) {
+      output_overlay = true;
+      break;
+    }
+    output_tab = static_cast<OutputTab>((static_cast<int>(output_tab) + 1) % 4);
     break;
-  case '[':
+  }
+  case 27: // ESC
+    output_overlay = false;
+    break;
+  case '[': // memory tab: back one 16-byte row
     if (mem_offset >= 16)
       mem_offset -= 16;
     break;
@@ -923,10 +1103,13 @@ std::string TUI::disassemble(uint32_t addr) {
 
 bool TUI::load_file(const std::string &filename) {
   editor_scroll = 0;
+  build_count = 0;
+  std::string previous_path = path;
+  path = filename;
   if (filename.ends_with(".bin")) {
     auto image = Fanta::Program::readBinary(filename);
     if (!image)
-      return false;
+      return (path = previous_path, false);
 
     binary_image = std::move(*image);
     source = Source::BINARY;
@@ -950,7 +1133,7 @@ bool TUI::load_file(const std::string &filename) {
 
   auto lines = Fanta::Program::readLines(filename);
   if (!lines)
-    return false;
+    return (path = previous_path, false);
 
   if (filename.ends_with(".fn")) {
     source = Source::FANTA;
@@ -1025,9 +1208,15 @@ bool TUI::screenshot(const std::string &filename, int cols, int rows,
   // in the terminal, and we read the cells back from stdscr.
   FILE *sink = std::fopen("/dev/null", "w");
   FILE *source = std::fopen("/dev/null", "r");
-  SCREEN *screen = newterm("xterm-256color", sink, source);
-  if (screen == nullptr)
+  char term_name[] = "xterm-256color"; // newterm takes a non-const char*
+  SCREEN *screen = (sink && source) ? newterm(term_name, sink, source) : nullptr;
+  if (screen == nullptr) {
+    if (sink)
+      std::fclose(sink);
+    if (source)
+      std::fclose(source);
     return false;
+  }
   set_term(screen);
   configure_ncurses();
   resizeterm(rows, cols);

@@ -1,6 +1,7 @@
 #include "build.hpp"
 #include "disasm.hpp"
 #include "editor.hpp"
+#include "layout.hpp"
 #include "program.hpp"
 #include "terminal.hpp"
 #include "tui.hpp"
@@ -418,7 +419,7 @@ TEST_CASE("Screenshot Renders The Real Screen At The Requested Size") {
   REQUIRE_SAME(102, first.size()); // border: '+' + 100 columns + '+'
   std::string screen((std::istreambuf_iterator<char>(in)),
                      std::istreambuf_iterator<char>());
-  REQUIRE_TRUE(screen.contains("--- REGISTERS ---"));
+  REQUIRE_TRUE(screen.contains("REGISTERS"));
   REQUIRE_TRUE(screen.contains("size 100x30"));
   std::filesystem::remove(path);
 }
@@ -431,7 +432,83 @@ TEST_CASE("Screenshot Feeds Keys Before Rendering") {
   std::ifstream in(path);
   std::string screen((std::istreambuf_iterator<char>(in)),
                      std::istreambuf_iterator<char>());
-  REQUIRE_TRUE(screen.contains(" 0| NOP"));
+  REQUIRE_TRUE(screen.contains(">0x000000   NOP")); // PC marker + address gutter
   REQUIRE_TRUE(screen.contains("mode NORMAL"));
   std::filesystem::remove(path);
+}
+
+// --- Layout (spec §3.3): checked for every kind at many sizes ---------------
+
+namespace {
+using Fanta::Layout::Kind;
+
+constexpr std::pair<int, int> kSizes[] = {
+    {80, 24},  {80, 31},  {80, 32},  {99, 30},  {100, 30}, {120, 40},
+    {159, 50}, {160, 50}, {200, 60}, {300, 90}, {60, 15} /* clamped */};
+constexpr Kind kKinds[] = {Kind::SOURCE, Kind::ASM, Kind::BINARY};
+} // namespace
+
+TEST_CASE("Layout Panes Never Overlap And Stay On Screen") {
+  for (auto [cols, rows] : kSizes) {
+    for (auto kind : kKinds) {
+      auto l = Fanta::Layout::compute(cols, rows, kind);
+      int w = std::max(cols, Fanta::Layout::kMinCols);
+      int h = std::max(rows, Fanta::Layout::kMinRows);
+      auto panes = l.panes();
+      for (size_t i = 0; i < panes.size(); ++i) {
+        if (!panes[i])
+          continue;
+        REQUIRE_TRUE(!panes[i]->empty());
+        REQUIRE_TRUE(panes[i]->inside(w, h));
+        for (size_t j = i + 1; j < panes.size(); ++j)
+          if (panes[j])
+            REQUIRE_TRUE(!panes[i]->overlaps(*panes[j]));
+      }
+    }
+  }
+}
+
+TEST_CASE("Layout Always Keeps Status, Hint, Code And Registers") {
+  for (auto [cols, rows] : kSizes) {
+    for (auto kind : kKinds) {
+      auto l = Fanta::Layout::compute(cols, rows, kind);
+      REQUIRE_SAME(0, l.status.y);
+      REQUIRE_SAME(std::max(rows, Fanta::Layout::kMinRows) - 1, l.hint.y);
+      REQUIRE_TRUE(l.code.h >= 10); // room for real code, even at 80x24
+      REQUIRE_TRUE(l.registers.has_value());
+    }
+  }
+}
+
+TEST_CASE("Layout Drops The Output Panel First On Short Terminals") {
+  REQUIRE_TRUE(!Fanta::Layout::compute(120, 31, Kind::SOURCE).output);
+  REQUIRE_TRUE(Fanta::Layout::compute(120, 32, Kind::SOURCE).output.has_value());
+  // Two output tabs side by side only when wide.
+  REQUIRE_TRUE(!Fanta::Layout::compute(159, 50, Kind::ASM).output_secondary);
+  REQUIRE_TRUE(
+      Fanta::Layout::compute(160, 50, Kind::ASM).output_secondary.has_value());
+}
+
+TEST_CASE("Layout SOURCE Keeps Source And Derived ASM Side By Side At 80x24") {
+  auto l = Fanta::Layout::compute(80, 24, Kind::SOURCE);
+  REQUIRE_TRUE(l.derived.has_value());
+  REQUIRE_SAME(l.code.y, l.derived->y);
+  REQUIRE_TRUE(l.register_form == Fanta::Layout::RegisterForm::COMPACT);
+}
+
+TEST_CASE("Layout ASM And BINARY Have A Single Code Pane") {
+  for (auto kind : {Kind::ASM, Kind::BINARY})
+    for (auto [cols, rows] : kSizes)
+      REQUIRE_TRUE(!Fanta::Layout::compute(cols, rows, kind).derived);
+}
+
+TEST_CASE("Clip Cuts Text At The Pane Edge") {
+  using Fanta::Layout::clip;
+  using Fanta::Layout::is_cut;
+  REQUIRE_SAME(std::string{"hello"}, std::string{clip("hello", 0, 10)});
+  REQUIRE_SAME(std::string{"hel"}, std::string{clip("hello", 2, 5)});
+  REQUIRE_TRUE(is_cut("hello", 2, 5));
+  REQUIRE_TRUE(!is_cut("hello", 0, 5));
+  REQUIRE_SAME(std::string{"llo"}, std::string{clip("hello", -2, 10)});
+  REQUIRE_TRUE(clip("hello", 10, 10).empty());
 }

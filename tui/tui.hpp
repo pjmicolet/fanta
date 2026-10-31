@@ -1,10 +1,14 @@
 #pragma once
 #include "cpu.hpp"
+#include "canvas.hpp"
 #include "editor.hpp"
+#include "layout.hpp"
 #include "program.hpp"
 #include "string_assembler.hpp"
 #include "trie.hpp"
 #include <array>
+#include <bitset>
+#include <optional>
 #include <chrono>
 #include <ncurses.h>
 #include <string>
@@ -18,6 +22,9 @@ enum class Source : uint8_t {
   BINARY, // Editor shows a read-only disassembly; reset restores the image.
   FANTA,  // Editor is Fanta source; reset (or :compile) recompiles it.
 };
+
+/// Tabs of the output panel (spec §3.2).
+enum class OutputTab : uint8_t { SERIAL, VRAM, MEMORY, LOG };
 
 class TUI {
 public:
@@ -45,14 +52,25 @@ public:
 private:
   void update();
   void configure_ncurses();
-  void draw_registers();
-  void draw_memory();
-  void draw_stack();
-  void draw_disassembly();
-  void draw_status();
-  void draw_editor();
-  void draw_vram_preview();
-  void draw_serial();
+  auto layout_kind() const -> Fanta::Layout::Kind;
+  /// PC as shown to the user: on the HALT itself once halted (spec §6.1).
+  auto display_pc() const -> uint32_t;
+
+  // Panes; each draws only inside its canvas.
+  void draw_status_line(const Fanta::Canvas &c);
+  void draw_hint_bar(const Fanta::Canvas &c);
+  void draw_source(const Fanta::Canvas &c);
+  void draw_asm_editor(const Fanta::Canvas &c);
+  void draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
+                       bool editable);
+  void draw_disasm_view(const Fanta::Canvas &c, std::string_view title);
+  void draw_registers(const Fanta::Canvas &c,
+                      Fanta::Layout::RegisterForm form);
+  void draw_stack(const Fanta::Canvas &c);
+  void draw_output(const Fanta::Canvas &c, OutputTab tab);
+  void draw_serial(const Fanta::Canvas &c);
+  void draw_memory(const Fanta::Canvas &c);
+  void draw_vram(const Fanta::Canvas &c, bool zoomed);
   auto serial_output() -> const std::string &;
   void handle_input();
 
@@ -69,6 +87,8 @@ private:
   void step();
   void run_batch();
   void track_changed_registers(const std::array<std::uint32_t, 17> &before);
+  /// In an ASM session, move the editor cursor to the line at PC.
+  void follow_pc();
   void reset_zoom();
 
   CPU &cpu;
@@ -76,8 +96,9 @@ private:
   bool ncurses_active = false;
   uint32_t mem_offset = 0;
   bool is_running_continuously = false;
-  bool show_serial = false; // bottom-right pane: VRAM monitor or serial
-  bool ascii_vram = false;  // draw VRAM with a character ramp (screenshots)
+  bool ascii_vram = false; // draw VRAM with a character ramp (screenshots)
+  OutputTab output_tab = OutputTab::SERIAL;
+  bool output_overlay = false; // small terminals: output over the work area
 
   int term_w = 80;
   int term_h = 24;
@@ -89,15 +110,20 @@ private:
   std::vector<uint32_t> binary_image;
   std::vector<Fanta::Program::AsmError> asm_errors;
   bool build_failed = false; // last compile failed (message holds why)
+  int build_count = 0;       // compiles attempted this session
+  std::string path;          // file the session was opened from
 
   std::string command_buffer; // ":..." while in COMMAND mode
   std::string message;        // last status message, shown in NORMAL mode
+  std::vector<std::string> build_log; // every message, for the Build log tab
+  std::string last_logged;
+  std::optional<std::pair<int, int>> cursor_at; // editor cursor, screen row/col
 
   Assembler assem;
   Trie trie;
   void init_trie();
 
-  int last_changed_reg = -1;
+  std::bitset<17> changed_regs; // registers changed by the last step/batch
 
   // IPS Monitoring
   uint64_t total_cycles = 0;
