@@ -8,7 +8,6 @@
 struct ParserError {};
 
 struct Parser {
-  Parser() : program_("") {};
   Parser(std::string program);
 
   auto walk() -> void;
@@ -19,7 +18,6 @@ struct Parser {
   auto tokenTypeToString(Lexer::TokenType t) -> std::string_view;
   auto dumpNodes() -> void;
   auto printAST(Fanta::AST::NodeIndex idx, int indent = 0) -> void;
-  auto resetProgram(std::string program) -> void { program_ = program; }
 
 private:
   enum class Precedence : uint8_t {
