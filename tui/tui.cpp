@@ -15,6 +15,12 @@
 
 using Fanta::Program::kStackTop;
 
+namespace Fanta {
+auto base_name_of(const std::string &p) -> std::string {
+  return p.empty() ? "(unsaved)" : std::filesystem::path(p).filename().string();
+}
+} // namespace Fanta
+
 namespace {
 
 // Cycles per 60 Hz UI frame in continuous mode.
@@ -260,6 +266,7 @@ void TUI::assemble_editor() {
   binary_image.clear();
   for (size_t i = 0; i < editor.lines().size(); ++i)
     binary_image.push_back(cpu.ram.read32(static_cast<uint32_t>(i * 4)));
+  mark_built();
   if (asm_errors.empty()) {
     message = std::format("Assembled {} lines", editor.lines().size());
   } else {
@@ -281,6 +288,7 @@ bool TUI::compile_editor() {
   }
   build_failed = false;
   binary_image = std::move(*result);
+  mark_built();
   message = std::format("Compiled {} instructions", binary_image.size());
   return true;
 }
@@ -414,7 +422,7 @@ auto hex8(uint32_t v) -> std::string { return std::format("{:08X}", v); }
 /// File name without directories, for pane titles (the status line has the
 /// full path).
 auto base_name(const std::string &p) -> std::string {
-  return p.empty() ? "(unsaved)" : std::filesystem::path(p).filename().string();
+  return Fanta::base_name_of(p);
 }
 
 /// The longest hint that fits: full text, else the short form.
@@ -503,9 +511,14 @@ void TUI::update() {
     case Source::FANTA:
       draw_source(Fanta::Canvas{l.code});
       if (l.derived)
-        draw_disasm_view(Fanta::Canvas{*l.derived},
-                         std::format("ASM  build #{}  (derived, read-only)",
-                                     build_count));
+        draw_disasm_view(
+            Fanta::Canvas{*l.derived},
+            stale() && build_count > 0
+                ? std::format("ASM  build #{}  STALE: source changed, F9",
+                              build_count)
+                : std::format("ASM  build #{}  (derived, read-only, :eject)",
+                              build_count),
+            stale());
       break;
     case Source::ASM:
       draw_asm_editor(Fanta::Canvas{l.code});
@@ -570,9 +583,11 @@ void TUI::draw_status_line(const Fanta::Canvas &c) {
                  : std::format("{} pc {}",
                                is_running_continuously ? "RUNNING" : "PAUSED",
                                addr(display_pc()));
+  if (stale() && (source == Source::ASM || build_count > 0))
+    build += " STALE";
   auto line_for = [&](const std::string &file) {
-    return std::format(" {} | {} {} | {} | {} ", mode_name(mode), kind, file,
-                       build, state);
+    return std::format(" {} | {} {}{} | {} | {} ", mode_name(mode), kind, file,
+                       dirty() ? " [+]" : "", build, state);
   };
   std::string left = line_for(path.empty() ? "(no file)" : path);
   if (static_cast<int>(left.size()) > c.width() - 20)
@@ -710,13 +725,16 @@ void TUI::draw_source(const Fanta::Canvas &c) {
 }
 
 void TUI::draw_asm_editor(const Fanta::Canvas &c) {
-  auto inner =
-      c.frame(std::format("ASM  {}  (source of truth)", base_name(path)));
+  auto inner = c.frame(
+      stale() ? std::format("ASM  {}  STALE: memory differs, F9 rebuilds",
+                            base_name(path))
+              : std::format("ASM  {}  (source of truth)", base_name(path)));
   draw_code_lines(inner, /*show_addresses=*/true, /*editable=*/true);
 }
 
-void TUI::draw_disasm_view(const Fanta::Canvas &c, std::string_view title) {
-  auto inner = c.frame(title, COLOR_PAIR(kPairCode));
+void TUI::draw_disasm_view(const Fanta::Canvas &c, std::string_view title,
+                           bool dimmed) {
+  auto inner = c.frame(title, dimmed ? A_DIM : COLOR_PAIR(kPairCode));
   uint32_t pc = display_pc();
   int rows = inner.height();
   // Keep PC a third of the way down, but never start before address 0
@@ -732,8 +750,8 @@ void TUI::draw_disasm_view(const Fanta::Canvas &c, std::string_view title) {
     bool at_pc = ua == pc;
     std::string line = std::format("{}{}  {}", at_pc ? '>' : ' ', addr(ua),
                                    disassemble(ua));
-    inner.put_line(row, line,
-                   at_pc ? (A_REVERSE | A_BOLD) : COLOR_PAIR(kPairCode));
+    attr_t normal = dimmed ? A_DIM : COLOR_PAIR(kPairCode);
+    inner.put_line(row, line, at_pc ? (A_REVERSE | A_BOLD) : normal);
   }
 }
 
@@ -1037,7 +1055,7 @@ void TUI::handle_zoom_mode(int ch) {
 void TUI::handle_normal_mode(int ch) {
   switch (ch) {
   case 'q':
-    running = false;
+    run_command("q");
     break;
   case ':':
     mode = Mode::COMMAND;
@@ -1100,9 +1118,25 @@ void TUI::handle_insert_mode(int ch) {
     curs_set(0);
     if (source == Source::FANTA) {
       // Recompiling moves every address, so no live patch: rebuild on demand.
-      message = "Edited: F9 (or :build) to rebuild";
-    } else {
-      assemble_editor(); // live-patch memory with the buffer
+      if (stale())
+        message = "Edited: STALE until F9 (or :build) rebuilds";
+    } else if (source == Source::ASM && stale()) {
+      // Live-patch only edits that leave every instruction at its address.
+      // Adding or removing lines before existing code shifts it under a
+      // running program (the ISR leaves 0x100), so that waits for F9.
+      const auto &now = editor.lines();
+      size_t prefix = 0;
+      while (prefix < now.size() && prefix < built_lines.size() &&
+             now[prefix] == built_lines[prefix])
+        ++prefix;
+      bool moved = editor.structure_version() != built_structure &&
+                   prefix < std::min(now.size(), built_lines.size());
+      if (moved)
+        message = std::format("Line {} added/removed: code below it moved, "
+                              "memory not patched. STALE until F9",
+                              prefix);
+      else
+        assemble_editor(); // live-patch memory with the buffer
     }
     break;
   case KEY_LEFT:
@@ -1165,62 +1199,193 @@ void TUI::handle_command_mode(int ch) {
     std::string cmd = command_buffer.substr(1); // skip ':'
     command_buffer = "";
     mode = Mode::NORMAL;
-
-    if (cmd.starts_with("w ")) {
-      std::string filename = cmd.substr(2);
-      std::ofstream out(filename);
-      if (!out) {
-        message = "Error writing " + filename;
-        return;
-      }
-      for (const auto &line : editor.lines()) {
-        out << line << "\n";
-      }
-      message = "Written to " + filename;
-    } else if (cmd.starts_with("e ")) {
-      std::string filename = cmd.substr(2);
-      if (!load_file(filename))
-        message = "Error loading " + filename;
-    } else if (cmd == "build" || cmd == "compile" || cmd == "c") {
-      build();
-    } else if (cmd == "run") {
-      if (!is_running_continuously)
-        run_pause();
-    } else if (cmd == "pause") {
-      if (is_running_continuously)
-        run_pause();
-    } else if (cmd == "step") {
-      step();
-    } else if (cmd == "over") {
-      step_over();
-    } else if (cmd == "reset") {
-      reset();
-      message = "Restarted (F9 rebuilds)";
-    } else if (cmd.starts_with("out")) {
-      std::string_view which = std::string_view{cmd}.substr(3);
-      while (!which.empty() && which.front() == ' ')
-        which.remove_prefix(1);
-      static constexpr std::pair<std::string_view, OutputTab> tabs[] = {
-          {"serial", OutputTab::SERIAL}, {"vram", OutputTab::VRAM},
-          {"memory", OutputTab::MEMORY}, {"log", OutputTab::LOG}};
-      auto it = std::ranges::find(tabs, which, [](auto &t) { return t.first; });
-      if (it == std::end(tabs)) {
-        message = "Usage: :out serial|vram|memory|log";
-      } else {
-        output_tab = it->second;
-        if (!Fanta::Layout::compute(term_w, term_h, layout_kind()).output)
-          output_overlay = true;
-      }
-    } else if (cmd == "help") {
-      help_open = true;
-    } else if (cmd == "q") {
-      running = false;
-    } else {
-      message = "Unknown command: " + cmd;
-    }
+    run_command(cmd);
   } else if (isprint(ch)) {
     command_buffer += (char)ch;
   }
+}
+
+void TUI::run_command(const std::string &cmd) {
+  auto arg_of = [&](size_t n) {
+    std::string a = cmd.size() > n ? cmd.substr(n) : "";
+    a.erase(0, a.find_first_not_of(' '));
+    return a;
+  };
+  if (cmd == "w" || cmd.starts_with("w ")) {
+    std::string target = arg_of(1);
+    if (target.empty())
+      target = path;
+    if (target.empty())
+      message = "No file name: :w FILE";
+    else
+      write_file(target);
+  } else if (cmd == "wq") {
+    if (!path.empty() && write_file(path))
+      running = false;
+    else if (path.empty())
+      message = "No file name: :w FILE first";
+  } else if (cmd == "q") {
+    if (dirty())
+      message = "Unsaved changes: :w to save, :q! to quit anyway";
+    else
+      running = false;
+  } else if (cmd == "q!") {
+    running = false;
+  } else if (cmd.starts_with("e ") || cmd.starts_with("e! ")) {
+    bool force = cmd.starts_with("e!");
+    std::string filename = arg_of(force ? 2 : 1);
+    if (dirty() && !force)
+      message = "Unsaved changes: :w first, or :e! " + filename + " to discard";
+    else if (!load_file(filename))
+      message = "Error loading " + filename;
+  } else if (cmd == "eject" || cmd == "eject!") {
+    eject(cmd == "eject!");
+  } else if (cmd == "build" || cmd == "compile" || cmd == "c") {
+    build();
+  } else if (cmd == "run") {
+    if (!is_running_continuously)
+      run_pause();
+  } else if (cmd == "pause") {
+    if (is_running_continuously)
+      run_pause();
+  } else if (cmd == "step") {
+    step();
+  } else if (cmd == "over") {
+    step_over();
+  } else if (cmd == "reset") {
+    reset();
+    message = "Restarted (F9 rebuilds)";
+  } else if (cmd.starts_with("out")) {
+    std::string which = arg_of(3);
+    static constexpr std::pair<std::string_view, OutputTab> tabs[] = {
+        {"serial", OutputTab::SERIAL}, {"vram", OutputTab::VRAM},
+        {"memory", OutputTab::MEMORY}, {"log", OutputTab::LOG}};
+    auto it = std::ranges::find(tabs, std::string_view{which},
+                                [](auto &t) { return t.first; });
+    if (it == std::end(tabs)) {
+      message = "Usage: :out serial|vram|memory|log";
+    } else {
+      output_tab = it->second;
+      if (!Fanta::Layout::compute(term_w, term_h, layout_kind()).output)
+        output_overlay = true;
+    }
+  } else if (cmd == "help") {
+    help_open = true;
+  } else {
+    message = "Unknown command: " + cmd;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Session model (spec §2)
+// ---------------------------------------------------------------------------
+
+auto TUI::dirty() const -> bool {
+  return source != Source::BINARY && editor.version() != saved_version;
+}
+
+auto TUI::stale() const -> bool {
+  return source != Source::BINARY && editor.version() != built_version;
+}
+
+void TUI::mark_built() {
+  built_version = editor.version();
+  built_structure = editor.structure_version();
+  built_lines = editor.lines();
+}
+
+bool TUI::write_file(const std::string &target) {
+  if (source == Source::BINARY) {
+    message = "A binary is read-only: nothing to write";
+    return false;
+  }
+  std::ofstream out(target);
+  if (!out) {
+    message = "Error writing " + target;
+    return false;
+  }
+  for (const auto &line : editor.lines())
+    out << line << "\n";
+  if (path.empty())
+    path = target; // an unnamed buffer takes the name it was saved as
+  if (target == path)
+    saved_version = editor.version();
+  message = std::format("Written {} ({} lines)", target, editor.lines().size());
+  return true;
+}
+
+void TUI::eject(bool force) {
+  if (source != Source::FANTA) {
+    message = ":eject turns a .fn build into a new .asm; open a .fn first";
+    return;
+  }
+  if (build_count == 0 || binary_image.empty()) {
+    message = "Nothing to eject yet: F9 to build first";
+    return;
+  }
+  if (dirty() && !force) {
+    message = "Unsaved changes in " + path + ": :w first, or :eject! to discard";
+    return;
+  }
+  std::string target = path.empty()
+                           ? std::string{"ejected.asm"}
+                           : std::filesystem::path(path)
+                                 .replace_extension(".asm")
+                                 .string();
+  if (std::filesystem::exists(target) && !force) {
+    message = target + " exists: :eject! to overwrite";
+    return;
+  }
+
+  // One line per word, so addresses stay put. The note rides on line 0 as a
+  // comment: an extra line would shift every address by 4.
+  std::vector<std::string> lines;
+  for (size_t i = 0; i < binary_image.size(); ++i)
+    lines.push_back(
+        Fanta::disassemble(binary_image[i], static_cast<uint32_t>(i * 4)));
+  lines[0] += std::format("   ; ejected from {} build #{}; edits here don't "
+                          "flow back to the .fn",
+                          Fanta::base_name_of(path), build_count);
+
+  // Refuse to write anything that doesn't assemble back to the same program.
+  std::string all;
+  for (const auto &l : lines)
+    all += l + "\n";
+  Assembler check;
+  check.scan_for_labels(all);
+  std::vector<size_t> bad;
+  for (size_t i = 0; i < lines.size(); ++i) {
+    uint32_t again = check.assemble(lines[i], static_cast<int>(i * 4));
+    bool same = again == binary_image[i] ||
+                ((again >> 26) == 0 && (binary_image[i] >> 26) == 0); // HALT
+    if (!same)
+      bad.push_back(i);
+  }
+  if (!bad.empty()) {
+    std::string where;
+    for (size_t k = 0; k < bad.size() && k < 3; ++k)
+      where += std::format("{}line {}: {}", k ? "; " : "", bad[k],
+                           lines[bad[k]]);
+    message = std::format("Not ejected: {} line(s) don't assemble back to the "
+                          "same words ({})",
+                          bad.size(), where);
+    return;
+  }
+
+  std::ofstream out(target);
+  if (!out) {
+    message = "Error writing " + target;
+    return;
+  }
+  for (const auto &l : lines)
+    out << l << "\n";
+  out.close();
+  int from_build = build_count;
+  std::string from = path;
+  load_file(target);
+  message = std::format("Ejected build #{} of {} to {}: now editing assembly "
+                        "(:e {} to go back)",
+                        from_build, from, target, from);
 }
 
 // ---------------------------------------------------------------------------
@@ -1272,16 +1437,33 @@ bool TUI::load_file(const std::string &filename) {
     return true;
   }
 
+  bool is_fn = filename.ends_with(".fn");
+  if (!std::filesystem::exists(filename)) {
+    // Like vim: a new file opens as an empty buffer; :w creates it.
+    fresh_cpu();
+    source = is_fn ? Source::FANTA : Source::ASM;
+    assem = Assembler();
+    asm_errors.clear();
+    binary_image.clear();
+    build_failed = false;
+    editor.set_lines({});
+    saved_version = editor.version();
+    mark_built();
+    message = "New file " + filename + ": :w creates it";
+    return true;
+  }
+
   auto lines = Fanta::Program::readLines(filename);
   if (!lines)
     return (path = previous_path, false);
 
-  if (filename.ends_with(".fn")) {
+  if (is_fn) {
     source = Source::FANTA;
     assem = Assembler(); // compiled code carries no labels
     asm_errors.clear();
     binary_image.clear();
     editor.set_lines(std::move(*lines));
+    saved_version = editor.version();
     build(); // compile, then fresh CPU with the result
     if (build_failed) {
       // Still open the file so it can be fixed here, but don't leave the
@@ -1297,6 +1479,7 @@ bool TUI::load_file(const std::string &filename) {
   source = Source::ASM;
   binary_image.clear();
   editor.set_lines(std::move(*lines));
+  saved_version = editor.version();
   build(); // fresh CPU, then assemble the new buffer
   if (asm_errors.empty())
     message = "Loaded " + filename;

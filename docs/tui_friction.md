@@ -10,15 +10,10 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 
 ```
 2026-10-31  cc  stepping a .fn program, nothing shows which source line is executing                                → spec §7 (needs line table)
-2026-10-31  cc  edited the .fn source, kept stepping, and the old program ran with no sign it was out of date        → spec §2.1
-2026-10-31  cc  failed compile keeps the old program loaded, but nothing says so once the message is gone           → spec §2.1
-2026-10-31  cc  inserted a blank line in a running .asm and every address shifted under it (ISR no longer at 0x100) → spec §2.1, §5
 2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           → spec §5 (diagnostics)
 2026-10-31  cc  `return qd;` with qd undefined compiled without complaint                                          (compiler bug, not TUI)
 2026-10-31  cc  memory pane is fixed at 0x0000 and 32 bytes, so it never shows what I'm looking at   [partly tui/layout: Memory tab fills the panel, [ ] scrolls; still doesn't follow anything]
-2026-10-31  cc  :w with no filename gives "Unknown command", and q quits without asking even with unsaved edits     → spec §2
 2026-10-31  cc  "Loaded ..." message stays up long after it means anything                                        → spec §6.2
-2026-11-01  cc  can't start a new Fanta file from the TUI: ":e new.fn" on a missing file fails with "Error loading"
 ```
 
 ## Parked ideas
@@ -35,6 +30,11 @@ Ideas that don't come from friction. They wait here until an entry in the log gi
 ## Resolved
 
 ```
+2026-10-31  cc  edited the .fn source, kept stepping, and the old program ran with no sign it was out of date   [fixed tui/session: [+] and STALE in the status line, derived ASM dimmed]
+2026-10-31  cc  failed compile keeps the old program loaded, but nothing says so once the message is gone   [fixed tui/session: STALE stays until a build succeeds]
+2026-10-31  cc  inserted a blank line in a running .asm and every address shifted under it (ISR no longer at 0x100)   [fixed tui/session: edits that move code aren't patched; STALE until F9]
+2026-10-31  cc  :w with no filename gives "Unknown command", and q quits without asking even with unsaved edits   [fixed tui/session: :w uses the session's file; q/:q refuse with unsaved changes, :q! forces]
+2026-11-01  cc  can't start a new Fanta file from the TUI: ":e new.fn" on a missing file fails with "Error loading"   [fixed tui/session: :e on a missing .fn/.asm opens an empty buffer, :w creates it]
 2026-10-31  cc  the key hint lists 5 of about 15 keys; :help is an unknown command   [fixed tui/keys: per-mode hint bar, ? and :help overlay]
 2026-10-31  cc  `c` runs but `:c` compiles; `r` silently recompiles a .fn   [fixed tui/keys: F-keys execute, s/c/r/o do nothing, F6 never rebuilds]
 2026-11-01  pj  didn't know how to switch from editing assembly to writing Fanta code; nothing on screen says ":e x.fn"   [fixed tui/keys: help overlay explains :e x.fn / :e x.asm / :e x.bin]

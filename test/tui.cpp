@@ -663,3 +663,195 @@ TEST_CASE("Help Explains How To Switch Between Code And Assembly") {
   // Any key closes it without acting on the key.
   REQUIRE_TRUE(!screenAfter(tui, "q").contains("HELP"));
 }
+
+// --- Session model (spec §2) -----------------------------------------------
+
+namespace {
+auto typeCmd(TUI &tui, std::string_view cmd) -> void {
+  tui.handle_key(':');
+  for (char ch : cmd)
+    tui.handle_key(ch);
+  tui.handle_key('\n');
+}
+
+auto statusLine(TUI &tui) -> std::string {
+  auto screen = screenAfter(tui, "");
+  auto start = screen.find('\n') + 1; // skip the top border
+  return screen.substr(start, screen.find('\n', start) - start);
+}
+
+auto readFile(const std::string &path) -> std::string {
+  std::ifstream in(path);
+  return {(std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()};
+}
+
+auto editLine2(TUI &tui) -> void { // insert 'X' at the start of line 2
+  for (int ch : {KEY_DOWN, int{'i'}, int{'X'}, 27})
+    tui.handle_key(ch);
+}
+} // namespace
+
+TEST_CASE("Editing Marks The Buffer Dirty And :w Saves It") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  REQUIRE_TRUE(!statusLine(tui).contains("[+]"));
+  editLine2(tui);
+  REQUIRE_TRUE(statusLine(tui).contains("[+]"));
+  typeCmd(tui, "w");
+  REQUIRE_TRUE(!statusLine(tui).contains("[+]"));
+  REQUIRE_TRUE(readFile(path).contains("X    let b : int = 10;"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("q Refuses To Quit With Unsaved Changes, q! Quits") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  editLine2(tui);
+  REQUIRE_TRUE(screenAfter(tui, "q").contains("Unsaved changes"));
+  REQUIRE_TRUE(screenAfter(tui, ":q<CR>").contains("Unsaved changes"));
+  // :q! stops the key script (the TUI quit), so later keys never run.
+  REQUIRE_TRUE(!screenAfter(tui, ":q!<CR>iZZZ").contains("ZZZ"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE(":e Refuses To Drop Unsaved Changes, :e! Discards Them") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  editLine2(tui);
+  typeCmd(tui, "e test/serial_hello.asm");
+  REQUIRE_TRUE(statusLine(tui).contains("SOURCE"));
+  typeCmd(tui, "e! test/serial_hello.asm");
+  REQUIRE_TRUE(statusLine(tui).contains("ASM"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE(":e On A Missing File Opens A New Buffer That :w Creates") {
+  auto path = tempPath("fanta_tui_new.fn");
+  std::filesystem::remove(path);
+  CPU cpu{};
+  TUI tui(cpu);
+  typeCmd(tui, "e " + path);
+  REQUIRE_TRUE(statusLine(tui).contains("SOURCE"));
+  REQUIRE_TRUE(!std::filesystem::exists(path));
+  for (char ch : std::string{"ifn main() -> int { return 7; }"})
+    tui.handle_key(ch);
+  tui.handle_key(27);
+  typeCmd(tui, "w");
+  REQUIRE_TRUE(std::filesystem::exists(path));
+  tui.handle_key(KEY_F(9));
+  cpu.run_until_halt();
+  REQUIRE_SAME(7, cpu.registers[0]);
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("Editing Source Makes The Build STALE Until F9") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  REQUIRE_TRUE(!statusLine(tui).contains("STALE"));
+  editLine2(tui);
+  REQUIRE_TRUE(statusLine(tui).contains("STALE"));
+  // Undo the edit so it compiles, then rebuild.
+  for (int ch : {int{'i'}, KEY_BACKSPACE, 27})
+    tui.handle_key(ch);
+  REQUIRE_TRUE(statusLine(tui).contains("STALE")); // any edit counts
+  tui.handle_key(KEY_F(9));
+  REQUIRE_TRUE(!statusLine(tui).contains("STALE"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("ASM Edit In Place Is Live-Patched") {
+  auto path = tempPath("fanta_tui_patch.asm");
+  writeText(path, "MOV R1, #1\nMOV R2, #2\nHALT\n");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  // Change "#2" to "#3" on line 1: same lines, so memory is patched.
+  tui.handle_key(KEY_DOWN);
+  tui.handle_key('i');
+  for (int i = 0; i < 10; ++i)
+    tui.handle_key(KEY_RIGHT);
+  tui.handle_key(KEY_BACKSPACE);
+  tui.handle_key('3');
+  tui.handle_key(27);
+  Assembler assem{};
+  REQUIRE_SAME(assem.assemble("MOV R2, #3", 4), cpu.load(4));
+  REQUIRE_TRUE(!statusLine(tui).contains("STALE"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("ASM Line Inserted Before Code Is Not Patched And Goes STALE") {
+  auto path = tempPath("fanta_tui_moved.asm");
+  writeText(path, "MOV R1, #1\nMOV R2, #2\nHALT\n");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  uint32_t before = cpu.load(4);
+  // A new line at the top shifts every instruction by 4.
+  for (int ch : {int{'i'}, int{'\n'}, 27})
+    tui.handle_key(ch);
+  REQUIRE_SAME(before, cpu.load(4)); // memory left alone
+  REQUIRE_TRUE(statusLine(tui).contains("STALE"));
+  tui.handle_key(KEY_F(9));
+  Assembler assem{};
+  REQUIRE_SAME(assem.assemble("MOV R2, #2", 8), cpu.load(8));
+  REQUIRE_TRUE(!statusLine(tui).contains("STALE"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("ASM Line Appended At The End Is Live-Patched") {
+  auto path = tempPath("fanta_tui_append.asm");
+  writeText(path, "MOV R1, #1\nHALT\n");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  tui.handle_key(KEY_DOWN);
+  tui.handle_key('i');
+  for (int i = 0; i < 4; ++i)
+    tui.handle_key(KEY_RIGHT);
+  tui.handle_key('\n');
+  for (char ch : std::string{"MOV R3, #3"})
+    tui.handle_key(ch);
+  tui.handle_key(27);
+  Assembler assem{};
+  REQUIRE_SAME(assem.assemble("MOV R3, #3", 8), cpu.load(8));
+  REQUIRE_TRUE(!statusLine(tui).contains("STALE"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE(":eject Only Works On A Built .fn") {
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file("test/serial_hello.asm"));
+  typeCmd(tui, "eject");
+  REQUIRE_TRUE(screenAfter(tui, ":out log<CR>").contains("open a .fn first"));
+}
+
+TEST_CASE(":eject Refuses What Wouldn't Assemble Back, Writing Nothing") {
+  // Compiled prologues contain MOV R15, SP, which the string assembler
+  // encodes as MOV R15, #16 (review B16). Until that's fixed, eject must
+  // refuse rather than write a program that differs from the build.
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui);
+  auto asm_path = std::filesystem::path(path).replace_extension(".asm");
+  std::filesystem::remove(asm_path);
+  typeCmd(tui, "eject");
+  if (std::filesystem::exists(asm_path)) {
+    // B16 fixed: the ejected program must be the build, word for word.
+    auto image = Fanta::DefaultCompiler{}.compile(kAddProgram);
+    REQUIRE_TRUE(statusLine(tui).contains("ASM"));
+    for (size_t i = 0; i < image.size(); ++i)
+      if ((image[i] >> 26) != 0) // HALT payload bits may differ
+        REQUIRE_SAME(image[i], cpu.load(static_cast<uint32_t>(i * 4)));
+    std::filesystem::remove(asm_path);
+  } else {
+    REQUIRE_TRUE(screenAfter(tui, ":out log<CR>")
+                     .contains("MOV R15, SP")); // named in the Build log
+    REQUIRE_TRUE(statusLine(tui).contains("SOURCE"));
+  }
+  std::filesystem::remove(path);
+}

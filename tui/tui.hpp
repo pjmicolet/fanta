@@ -66,7 +66,8 @@ private:
   void draw_asm_editor(const Fanta::Canvas &c);
   void draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
                        bool editable);
-  void draw_disasm_view(const Fanta::Canvas &c, std::string_view title);
+  void draw_disasm_view(const Fanta::Canvas &c, std::string_view title,
+                        bool dimmed = false);
   void draw_registers(const Fanta::Canvas &c,
                       Fanta::Layout::RegisterForm form);
   void draw_stack(const Fanta::Canvas &c);
@@ -96,6 +97,17 @@ private:
   /// Execution keys work in every mode but COMMAND (spec §4.1).
   bool handle_fkey(int ch);
   void draw_help(const Fanta::Canvas &c);
+
+  // Session model (spec §2).
+  /// Edited since the last :w / load.
+  auto dirty() const -> bool;
+  /// The source changed since the image in memory was built from it.
+  auto stale() const -> bool;
+  /// After a build or a live patch: memory now matches the editor text.
+  void mark_built();
+  bool write_file(const std::string &target);
+  void eject(bool force);
+  void run_command(const std::string &cmd);
   void track_changed_registers(const std::array<std::uint32_t, 17> &before);
   /// In an ASM session, move the editor cursor to the line at PC.
   void follow_pc();
@@ -124,6 +136,10 @@ private:
   std::vector<Fanta::Program::AsmError> asm_errors;
   bool build_failed = false; // last compile failed (message holds why)
   int build_count = 0;       // compiles attempted this session
+  uint64_t saved_version = 0; // editor.version() at the last save / load
+  uint64_t built_version = 0; // editor.version() the image was built from
+  uint64_t built_structure = 0;          // editor.structure_version() likewise
+  std::vector<std::string> built_lines;  // ASM: the text memory matches
   std::string path;          // file the session was opened from
 
   std::string command_buffer; // ":..." while in COMMAND mode
