@@ -28,8 +28,9 @@ Then take screenshots: `./build/fanta-tui <file> --screen OUT.txt --size COLSxRO
 The output is the real ncurses screen with a border, followed by the cursor position, the mode,
 and the highlighted cells (R = reverse video, B = bold). The key script is plain characters plus
 `<ESC> <CR> <TAB> <BS> <UP> <DOWN> <LEFT> <RIGHT> <FRAME>`, where `<FRAME>` is one UI frame and
-runs a batch of cycles while running continuously. If F-keys exist by the time you review, check
-`parse_keys` in `tui/tui.cpp` for their names. Colours aren't captured, and VRAM is drawn with an
+runs a batch of cycles while running continuously. `<F1>`..`<F12>` and `<C-c>` are also accepted
+(F5 run, F6 restart, F7 step, F8 step over, F9 build, F10 output tab; see `parse_keys` in
+`tui/tui.cpp`). Colours aren't captured, and VRAM is drawn with an
 ASCII ramp.
 
 Always cover 80x24, 120x40 and 200x60.

@@ -1,6 +1,6 @@
 # Fanta TUI: Redesign Spec
 
-**Status:** agreed design, 2026-10-31. Implementation progress: milestone 1 (layout, clipped panes, single status line, output tabs) in `tui/layout`; milestones 2 (F-keys, help), 3 (session model: dirty/`:w`/STALE/eject/live-patch rule) and 4 (half-block VRAM) to follow. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
+**Status:** agreed design, 2026-10-31. Implementation progress: milestone 1 (layout, clipped panes, single status line, output tabs) done; milestone 2 (F-keys, `:` command equivalents, `?`/`:help`, hjkl) done except `Tab` focus, deferred until a second pane is scrollable; milestones 3 (session model: dirty/`:w`/STALE/eject/live-patch rule) and 4 (half-block VRAM) to follow. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
 
 ---
 

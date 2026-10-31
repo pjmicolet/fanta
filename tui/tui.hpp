@@ -36,8 +36,11 @@ public:
   void dump_state(const std::string &filename);
   std::string disassemble(uint32_t addr);
   bool load_file(const std::string &filename);
-  /// Fresh CPU, then rebuild memory from the current source.
+  /// F6: fresh CPU with the current image. Never rebuilds.
   void reset();
+  /// F9: compile (.fn) or assemble (.asm), then restart. A failed compile
+  /// keeps the previous image loaded. Returns whether the build succeeded.
+  bool build();
   /// Process one key exactly as if it had been typed.
   void handle_key(int ch);
   /**
@@ -86,6 +89,13 @@ private:
   bool compile_editor();
   void step();
   void run_batch();
+  void fresh_cpu();
+  void run_pause();   // F5
+  void step_over();   // F8
+  void cycle_output(); // F10
+  /// Execution keys work in every mode but COMMAND (spec §4.1).
+  bool handle_fkey(int ch);
+  void draw_help(const Fanta::Canvas &c);
   void track_changed_registers(const std::array<std::uint32_t, 17> &before);
   /// In an ASM session, move the editor cursor to the line at PC.
   void follow_pc();
@@ -99,6 +109,9 @@ private:
   bool ascii_vram = false; // draw VRAM with a character ramp (screenshots)
   OutputTab output_tab = OutputTab::SERIAL;
   bool output_overlay = false; // small terminals: output over the work area
+  bool help_open = false;      // '?' / :help overlay; any key closes it
+  std::optional<uint32_t> run_target; // step over: stop at this PC...
+  uint32_t run_target_sp = 0;         // ...with this SP (the call returned)
 
   int term_w = 80;
   int term_h = 24;

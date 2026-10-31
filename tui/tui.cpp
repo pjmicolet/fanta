@@ -5,6 +5,7 @@
 #include "instructions.hpp"
 #include "terminal.hpp"
 #include <algorithm>
+#include <charconv>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -173,14 +174,92 @@ void TUI::run_batch() {
     }
     cpu.run_cycle();
     total_cycles++;
+    // Step over (F8): stop once the CALL has returned to the next
+    // instruction with the stack as it was.
+    if (run_target && cpu.get_pc() == *run_target &&
+        cpu.get_sp() == run_target_sp) {
+      run_target.reset();
+      is_running_continuously = false;
+      break;
+    }
   }
   track_changed_registers(before);
   follow_pc();
 }
 
+void TUI::run_pause() {
+  if (cpu.halted) {
+    message = "Halted: F6 to restart";
+    return;
+  }
+  is_running_continuously = !is_running_continuously;
+  if (!is_running_continuously)
+    run_target.reset();
+}
+
+void TUI::step_over() {
+  if (cpu.halted)
+    return;
+  uint32_t pc = cpu.get_pc();
+  if ((cpu.ram.read32(pc) >> 26) != Fanta::Info::Instructions::CALL) {
+    step();
+    return;
+  }
+  // Run until the call returns. Short calls finish in this batch; long
+  // ones keep running frame by frame (F5 interrupts).
+  run_target = pc + 4;
+  run_target_sp = cpu.get_sp();
+  is_running_continuously = true;
+  run_batch();
+}
+
+void TUI::cycle_output() {
+  // On terminals too small for the panel, the first press opens it over the
+  // work area (ESC closes it); after that it cycles the tab.
+  auto l = Fanta::Layout::compute(term_w, term_h, layout_kind());
+  if (!l.output && !output_overlay) {
+    output_overlay = true;
+    return;
+  }
+  output_tab = static_cast<OutputTab>((static_cast<int>(output_tab) + 1) % 4);
+}
+
+bool TUI::handle_fkey(int ch) {
+  if (mode == Mode::COMMAND || ch < KEY_F(5) || ch > KEY_F(10))
+    return false;
+  if (mode == Mode::INSERT)
+    handle_insert_mode(27); // leave INSERT exactly as ESC would
+  switch (ch - KEY_F0) {
+  case 5:
+    run_pause();
+    break;
+  case 6:
+    reset();
+    message = "Restarted (F9 rebuilds)";
+    break;
+  case 7:
+    step();
+    break;
+  case 8:
+    step_over();
+    break;
+  case 9:
+    build();
+    break;
+  case 10:
+    cycle_output();
+    break;
+  }
+  return true;
+}
+
 void TUI::assemble_editor() {
   editor.trim_trailing();
   asm_errors = Fanta::Program::assembleInto(cpu, assem, editor.lines());
+  // Keep what was assembled as the image, so F6 restarts this program.
+  binary_image.clear();
+  for (size_t i = 0; i < editor.lines().size(); ++i)
+    binary_image.push_back(cpu.ram.read32(static_cast<uint32_t>(i * 4)));
   if (asm_errors.empty()) {
     message = std::format("Assembled {} lines", editor.lines().size());
   } else {
@@ -206,29 +285,41 @@ bool TUI::compile_editor() {
   return true;
 }
 
-void TUI::reset() {
-  // Compile before touching the CPU, so a failed build keeps the last good
-  // program loaded and debuggable.
-  if (source == Source::FANTA && !compile_editor())
-    return;
-
+void TUI::fresh_cpu() {
   // A fresh CPU resets registers, SP, flags, pending interrupts, VBLANK
   // timing and all of RAM/VRAM in one go.
   cpu = CPU{};
   changed_regs.reset();
   is_running_continuously = false;
+  run_target.reset();
+}
+
+void TUI::reset() {
+  // F6: restart the current image. Never rebuilds; that's F9.
+  fresh_cpu();
+  Fanta::Program::storeImage(cpu, binary_image);
+}
+
+bool TUI::build() {
   switch (source) {
-  case Source::BINARY:
-    Fanta::Program::storeImage(cpu, binary_image);
-    message = "Reset";
-    break;
   case Source::FANTA:
-    Fanta::Program::storeImage(cpu, binary_image); // message set by compile
-    break;
+    // Compile before touching the CPU, so a failed build keeps the last good
+    // program loaded and debuggable.
+    if (!compile_editor())
+      return false;
+    reset();
+    return true;
   case Source::ASM:
+    ++build_count;
+    fresh_cpu();
     assemble_editor();
-    break;
+    return asm_errors.empty();
+  case Source::BINARY:
+    reset();
+    message = "A binary has no source to build: restarted its image";
+    return true;
   }
+  return false;
 }
 
 void TUI::reset_zoom() {
@@ -400,10 +491,13 @@ void TUI::update() {
   auto l = Fanta::Layout::compute(term_w, term_h, layout_kind());
   draw_status_line(Fanta::Canvas{l.status});
 
-  if (output_overlay) {
+  int body_top = l.status.bottom();
+  Fanta::Layout::Rect body{0, body_top, term_w, l.hint.y - body_top};
+  if (help_open) {
+    draw_help(Fanta::Canvas{body});
+  } else if (output_overlay) {
     // Small terminal: the output panel takes over the work area until ESC.
-    int top = l.status.bottom();
-    draw_output(Fanta::Canvas{{0, top, term_w, l.hint.y - top}}, output_tab);
+    draw_output(Fanta::Canvas{body}, output_tab);
   } else {
     switch (source) {
     case Source::FANTA:
@@ -505,23 +599,60 @@ void TUI::draw_hint_bar(const Fanta::Canvas &c) {
   int w = c.width();
   switch (mode) {
   case Mode::INSERT:
-    hint = source == Source::ASM ? " ESC normal (re-assembles)  TAB complete "
-                                 : " ESC normal  TAB indent ";
+    hint = source == Source::ASM
+               ? " ESC/^C normal (re-assembles)  TAB complete | F-keys work here too "
+               : " ESC/^C normal  TAB indent | F-keys work here too ";
     break;
   case Mode::ZOOM:
-    hint = " +/- zoom  hjkl/arrows pan  s step  c run  r reset  ESC back ";
+    hint = " +/- zoom  hjkl pan  ESC back | F5 run  F6 reset  F7 step ";
     break;
   default:
-    hint = output_overlay
-               ? " o next tab  ESC close output  s step  c run  r reset "
-               : fit(" s step  c run/pause  r reset  i edit  o output tab  "
-                     "[ ] memory  z zoom VRAM  : cmd  q quit ",
-                     " s step  c run  r reset  i edit  o output  z zoom  "
-                     ": cmd  q quit ",
-                     w);
+    if (help_open)
+      hint = " any key closes help ";
+    else if (output_overlay)
+      hint = " F10 next tab  ESC close | F5 run  F6 reset  F7 step  F8 over  F9 build ";
+    else
+      hint = fit(" F5 run  F6 reset  F7 step  F8 over  F9 build  F10 output | "
+                 "i edit  z zoom VRAM  : cmd  ? help  q quit ",
+                 " F5 run F6 reset F7 step F8 over F9 build F10 out | "
+                 "i edit ? help q quit ",
+                 w);
     break;
   }
   c.put_line(0, hint, A_DIM);
+}
+
+void TUI::draw_help(const Fanta::Canvas &c) {
+  static constexpr std::string_view lines[] = {
+      "Execution: F-keys, in any mode (also as : commands)",
+      "  F5   run / pause                       :run  :pause",
+      "  F6   restart the loaded image          :reset",
+      "  F7   step one instruction              :step",
+      "  F8   step over a CALL                  :over",
+      "  F9   build (compile .fn / assemble .asm), then restart   :build  :c",
+      "  F10  next output tab                   :out serial|vram|memory|log",
+      "",
+      "Editing: vim keys",
+      "  i            insert            ESC / Ctrl+C   back to normal",
+      "  h j k l      move (or arrows)  x              delete character",
+      "  TAB          complete a mnemonic (.asm) / indent (.fn)",
+      "",
+      "Switching between code and assembly: open a different file",
+      "  :e prog.fn   write Fanta code: source left, compiled assembly right",
+      "  :e prog.asm  write assembly: one editable pane",
+      "  :e prog.bin  inspect a binary: read-only",
+      "",
+      "Other",
+      "  :w FILE  save    z  zoom VRAM    [ ]  scroll the Memory tab",
+      "  ?  this help     q  quit         ESC  close the output overlay",
+      "",
+      "F-keys not reaching the TUI (macOS Terminal)? Hold fn, or use the : commands.",
+  };
+  c.clear();
+  auto inner = c.frame("HELP  (any key closes)", A_BOLD);
+  int row = 0;
+  for (auto line : lines)
+    inner.put(row++, 1, line);
 }
 
 void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
@@ -840,9 +971,18 @@ void TUI::handle_key(int ch) {
   if (ch == kCtrlC)
     ch = 27;
 
+  if (help_open) { // any key closes the help overlay
+    help_open = false;
+    return;
+  }
+
   if (ch == 27) { // ESC always stops a continuous run
     is_running_continuously = false;
+    run_target.reset();
   }
+
+  if (handle_fkey(ch))
+    return;
 
   switch (mode) {
   case Mode::NORMAL:
@@ -866,16 +1006,6 @@ void TUI::handle_zoom_mode(int ch) {
   case 27: // ESC
   case 'z':
     reset_zoom();
-    break;
-  case 's':
-    step();
-    break;
-  case 'c':
-    if (!cpu.halted)
-      is_running_continuously = !is_running_continuously;
-    break;
-  case 'r':
-    reset();
     break;
   case '+':
   case '=':
@@ -918,17 +1048,9 @@ void TUI::handle_normal_mode(int ch) {
     mode = Mode::ZOOM;
     is_running_continuously = false;
     break;
-  case 'o': {
-    // Cycle the output tab. On terminals too small for the panel, the first
-    // press opens it over the work area (ESC closes it).
-    auto l = Fanta::Layout::compute(term_w, term_h, layout_kind());
-    if (!l.output && !output_overlay) {
-      output_overlay = true;
-      break;
-    }
-    output_tab = static_cast<OutputTab>((static_cast<int>(output_tab) + 1) % 4);
+  case '?':
+    help_open = true;
     break;
-  }
   case 27: // ESC
     output_overlay = false;
     break;
@@ -940,9 +1062,6 @@ void TUI::handle_normal_mode(int ch) {
     if (mem_offset + 16 + 32 <= cpu.ram.getSize()) // keep the 32-byte pane in RAM
       mem_offset += 16;
     break;
-  case 'r':
-    reset();
-    break;
   case 'i':
     if (editor.read_only()) {
       message = "Editor is read-only for binaries; :e a .asm file to edit";
@@ -952,23 +1071,20 @@ void TUI::handle_normal_mode(int ch) {
     curs_set(1);
     is_running_continuously = false;
     break;
-  case 's':
-    step();
-    break;
-  case 'c':
-    if (!cpu.halted)
-      is_running_continuously = !is_running_continuously;
-    break;
   case KEY_UP:
+  case 'k':
     editor.up();
     break;
   case KEY_DOWN:
+  case 'j':
     editor.down();
     break;
   case KEY_LEFT:
+  case 'h':
     editor.left();
     break;
   case KEY_RIGHT:
+  case 'l':
     editor.right();
     break;
   case 'x': // Delete character
@@ -984,7 +1100,7 @@ void TUI::handle_insert_mode(int ch) {
     curs_set(0);
     if (source == Source::FANTA) {
       // Recompiling moves every address, so no live patch: rebuild on demand.
-      message = "Edited: :compile (or r) to rebuild, :run to rebuild and run";
+      message = "Edited: F9 (or :build) to rebuild";
     } else {
       assemble_editor(); // live-patch memory with the buffer
     }
@@ -1065,19 +1181,38 @@ void TUI::handle_command_mode(int ch) {
       std::string filename = cmd.substr(2);
       if (!load_file(filename))
         message = "Error loading " + filename;
-    } else if (cmd == "compile" || cmd == "c") {
-      if (source != Source::FANTA)
-        message = "Nothing to compile: :e a .fn file first";
-      else
-        reset();
+    } else if (cmd == "build" || cmd == "compile" || cmd == "c") {
+      build();
     } else if (cmd == "run") {
-      if (source != Source::FANTA) {
-        message = "Nothing to compile: :e a .fn file first";
+      if (!is_running_continuously)
+        run_pause();
+    } else if (cmd == "pause") {
+      if (is_running_continuously)
+        run_pause();
+    } else if (cmd == "step") {
+      step();
+    } else if (cmd == "over") {
+      step_over();
+    } else if (cmd == "reset") {
+      reset();
+      message = "Restarted (F9 rebuilds)";
+    } else if (cmd.starts_with("out")) {
+      std::string_view which = std::string_view{cmd}.substr(3);
+      while (!which.empty() && which.front() == ' ')
+        which.remove_prefix(1);
+      static constexpr std::pair<std::string_view, OutputTab> tabs[] = {
+          {"serial", OutputTab::SERIAL}, {"vram", OutputTab::VRAM},
+          {"memory", OutputTab::MEMORY}, {"log", OutputTab::LOG}};
+      auto it = std::ranges::find(tabs, which, [](auto &t) { return t.first; });
+      if (it == std::end(tabs)) {
+        message = "Usage: :out serial|vram|memory|log";
       } else {
-        reset();
-        if (!build_failed)
-          is_running_continuously = true;
+        output_tab = it->second;
+        if (!Fanta::Layout::compute(term_w, term_h, layout_kind()).output)
+          output_overlay = true;
       }
+    } else if (cmd == "help") {
+      help_open = true;
     } else if (cmd == "q") {
       running = false;
     } else {
@@ -1147,7 +1282,7 @@ bool TUI::load_file(const std::string &filename) {
     asm_errors.clear();
     binary_image.clear();
     editor.set_lines(std::move(*lines));
-    reset(); // compile, then fresh CPU with the result
+    build(); // compile, then fresh CPU with the result
     if (build_failed) {
       // Still open the file so it can be fixed here, but don't leave the
       // previous file's program running underneath it.
@@ -1162,7 +1297,7 @@ bool TUI::load_file(const std::string &filename) {
   source = Source::ASM;
   binary_image.clear();
   editor.set_lines(std::move(*lines));
-  reset(); // fresh CPU, then assemble the new buffer
+  build(); // fresh CPU, then assemble the new buffer
   if (asm_errors.empty())
     message = "Loaded " + filename;
   return true;
@@ -1174,7 +1309,7 @@ bool TUI::load_file(const std::string &filename) {
 
 namespace {
 
-/// Parses a key script: plain characters, plus <ESC> <C-c> <CR> <TAB> <BS> <UP>
+/// Parses a key script: plain characters, plus <F1>..<F12> <ESC> <C-c> <CR> <TAB> <BS> <UP>
 /// <DOWN> <LEFT> <RIGHT> <FRAME> (<FRAME> = let one UI frame pass, which runs
 /// a batch of cycles in continuous mode). Returns -1 for <FRAME>.
 auto parse_keys(std::string_view script) -> std::vector<int> {
@@ -1193,6 +1328,15 @@ auto parse_keys(std::string_view script) -> std::vector<int> {
         auto it = std::ranges::find(names, name, [](auto &p) { return p.first; });
         if (it != std::end(names)) {
           keys.push_back(it->second);
+          i = close;
+          continue;
+        }
+        int n = 0;
+        if (name.size() >= 2 && name[0] == 'F' &&
+            std::from_chars(name.data() + 1, name.data() + name.size(), n).ec ==
+                std::errc{} &&
+            n >= 1 && n <= 12) {
+          keys.push_back(KEY_F(n));
           i = close;
           continue;
         }
