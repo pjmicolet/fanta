@@ -20,6 +20,8 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 2026-10-31  cc  :w with no filename gives "Unknown command", and q quits without asking even with unsaved edits     → spec §2
 2026-10-31  cc  `c` runs but `:c` compiles; `r` silently recompiles a .fn                                           → spec §4.1
 2026-10-31  cc  "Loaded ..." message stays up long after it means anything                                        → spec §6.2
+2026-11-01  pj  didn't know how to switch from editing assembly to writing Fanta code; nothing on screen says ":e x.fn"
+2026-11-01  cc  can't start a new Fanta file from the TUI: ":e new.fn" on a missing file fails with "Error loading"
 ```
 
 ## Parked ideas
