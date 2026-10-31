@@ -4,6 +4,15 @@
 #include <fanta_utils.hpp>
 
 namespace Fanta {
+
+auto Allocator::outputIRWithRegs(IR &ir) -> RegAllocIR {
+  RegAllocIR rir{};
+  for (const auto &func : ir.functions) {
+    rir.functions.push_back(assignFunc(func));
+  }
+  return rir;
+}
+
 auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
   reset();
   FunctionIR fir = function;

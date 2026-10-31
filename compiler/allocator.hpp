@@ -10,6 +10,8 @@ struct Allocator {
 
   auto assignFunc(const FunctionIR &function) -> FunctionIR;
 
+  auto outputIRWithRegs(IR &ir) -> RegAllocIR;
+
 private:
   auto reset() -> void {
     next = 1;
