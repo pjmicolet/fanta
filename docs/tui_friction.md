@@ -14,6 +14,21 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 2026-10-31  cc  `return qd;` with qd undefined compiled without complaint                                          (compiler bug, not TUI)
 2026-10-31  cc  memory pane is fixed at 0x0000 and 32 bytes, so it never shows what I'm looking at   [partly tui/layout: Memory tab fills the panel, [ ] scrolls; still doesn't follow anything]
 2026-10-31  cc  "Loaded ..." message stays up long after it means anything                                        → spec §6.2
+2026-10-31  cc  after inserting a line in a running .asm (STALE), the gutter and > show the edited text's addresses, not memory's: >0x000064 sits on a blank line while memory at 0x64 is still JMP MAIN_LOOP   (review #1, Q3)
+2026-10-31  cc  "Line 25 added/removed" is a 0-based line number, but the ASM gutter only shows addresses, so I couldn't find line 25
+2026-10-31  cc  at 80x24 the status line drops messages entirely and cuts the PC; a compile error is only visible via F10 > Build log
+2026-10-31  cc  at 80x24 the flags are cut off in every session ("R11 00000000 F~")
+2026-10-31  cc  at 80x24 the pane titles lose "(source of truth)" / "(derived ...)" with no "~": "(source -", ":ej-"
+2026-10-31  cc  after a failed build the derived pane is titled "build #2" but shows build #1's code
+2026-10-31  cc  pressing i, : or z pauses a running program; "edit while it runs" means edit while paused, then F5 again   (review #1, Q1)
+2026-10-31  cc  a VRAM program at 120x40 opens on the Serial tab showing "(no serial output)"; I had to F10 to see the ball   (review #1, Q5)
+2026-10-31  cc  editing a .fn shows STALE three times (badge, pane title, "Edited: STALE until F9" message)
+2026-10-31  cc  in a BINARY session j/k do nothing visible and there's no way to look at code away from PC; the hint bar still offers "i edit" and "F9 build"
+2026-10-31  cc  the hint bar says "F5 run" while the program is RUNNING
+2026-10-31  cc  at 80x24 the help overlay silently loses its last 3 lines (q quit, ESC closes the overlay, the macOS fn note)
+2026-10-31  cc  a new .fn shows "ASM build #0 (derived ...)" full of HALTs from empty memory
+2026-10-31  cc  headless screenshots: F10 and :out act as if the terminal were 80x24 whatever --size says (term_w/term_h are only set in update())
+2026-10-31  cc  test/serial_hello.asm still says "Press 'o' in the TUI to see it"; o does nothing now
 ```
 
 ## Parked ideas

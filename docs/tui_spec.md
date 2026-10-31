@@ -82,7 +82,7 @@ The work area depends on the session kind:
 
 | Pane | Shows | Notes |
 | :--- | :--- | :--- |
-| Status line | kind, file, `[+]` if dirty, build id/result, `STALE`, run state (`PAUSED` / `RUNNING` / `HALTED at 0x0004`), PC and its symbol, vim mode | One row, always visible. The only place for state; the old STATUS block goes. |
+| Status line | vim mode, kind, file, `[+]` if dirty, build id/result, `STALE`, run state (`PAUSED` / `RUNNING` / `HALTED at 0x0004`), PC and its symbol, then the latest message | One row, always visible. The only place for state; the old STATUS block goes. The mode comes **first** so truncation on narrow terminals can never hide it (changed after review #1). |
 | SOURCE | Fanta text, line numbers | Header: `SOURCE  test_input.fn  (source of truth)`. PC marker `>` once the line table exists (§7). |
 | ASM (derived) | disassembly of memory around PC, address gutter | Header: `ASM  build #3  (derived, read-only, :eject to edit)`. Follows PC; scrollable when focused. |
 | ASM (editable) | the assembly text, with an address gutter from the assembler listing (§5) | Header: `ASM  bounce.asm  (source of truth)`. `>` marks the line at PC. Follows PC while running unless the user is in INSERT. |
@@ -199,7 +199,9 @@ Every F-key has a `:` command, because some terminals intercept F-keys (macOS Te
 | COMMAND | the cursor sits on the command line; `ESC` cancels, `Enter` runs |
 | any | `Ctrl+C` is an alias for `ESC` everywhere (as in vim) |
 
-Commands: `:w [file]`, `:e file`, `:q`, `:q!`, `:wq`, `:build`, `:eject[!]`, `:run`, `:pause`, `:step`, `:over`, `:reset`, `:out <tab>`, `:help`.
+Commands: `:w [file]`, `:e file`, `:e! file` (discard unsaved edits), `:q`, `:q!`, `:wq`, `:build` (`:c`, `:compile`), `:eject[!]`, `:run`, `:pause`, `:step`, `:over`, `:reset`, `:out <tab>`, `:help`.
+
+`[` / `]` scroll the Memory tab by 16 bytes (added in milestone 1 without a spec entry; a removal candidate in review #1, in favour of `:mem ADDR`).
 
 ---
 
