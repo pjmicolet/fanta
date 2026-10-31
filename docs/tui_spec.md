@@ -1,6 +1,6 @@
 # Fanta TUI: Redesign Spec
 
-**Status:** agreed design, 2026-10-31. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
+**Status:** agreed design, 2026-10-31. Implementation progress: milestone 1 (layout, clipped panes, single status line, output tabs) in `tui/layout`; milestones 2 (F-keys, help), 3 (session model: dirty/`:w`/STALE/eject/live-patch rule) and 4 (half-block VRAM) to follow. Input: the usability review (findings F1–F12, summarised in §9) and the owner's answers to its design questions. This is the checklist for the rewrite of `tui/`.
 
 ---
 
@@ -195,6 +195,7 @@ Every F-key has a `:` command, because some terminals intercept F-keys (macOS Te
 | NORMAL | `h j k l` / arrows move; `i` insert (refused with a message in read-only panes); `x` delete; `Tab` cycles focus between panes; `z` zoom focused pane; `:` command; `?` help; `q` quit (asks if dirty) |
 | INSERT | typing, `ESC` leaves; `TAB` completes a mnemonic in ASM, indents in SOURCE |
 | COMMAND | the cursor sits on the command line; `ESC` cancels, `Enter` runs |
+| any | `Ctrl+C` is an alias for `ESC` everywhere (as in vim) |
 
 Commands: `:w [file]`, `:e file`, `:q`, `:q!`, `:wq`, `:build`, `:eject[!]`, `:run`, `:pause`, `:step`, `:over`, `:reset`, `:out <tab>`, `:help`.
 
@@ -232,7 +233,7 @@ When the CPU halts, the status line shows `HALTED at 0x0004` (the address of the
 
 ### 6.2 Messages
 
-Messages (build results, errors, `:w` confirmations) go to the status line's right side and to the Build log tab. A message expires on the next keypress that changes state; errors stay until the next build. Long messages are truncated with `…` and kept in full in the Build log.
+Messages (build results, errors, `:w` confirmations) go to the status line's right side and to the Build log tab. A message expires on the next keypress that changes state; errors stay until the next build. Long messages are truncated and kept in full in the Build log. Truncation is marked with `~` rather than `…`: the TUI draws ASCII only, so screenshots read back exactly and no wide-character ncurses is needed.
 
 ### 6.3 Breakpoints (deferred)
 
@@ -240,7 +241,7 @@ Undecided between a TUI-side address set checked in the run loop and a `BRK` ins
 
 ### 6.4 VRAM
 
-Each character cell shows the **average** of the pixels it covers (not one sample), using half-block characters (`▀` with separate foreground/background colours) for twice the vertical resolution. A frame that is entirely black is labelled `(blank)`, so it can't be confused with a missing pane.
+Each character cell shows the **average** of the pixels it covers (not one sample), and a cell with any lit pixel never renders as black, so 1-pixel objects stay visible (done). Half-block characters (`▀` with separate foreground/background colours) for twice the vertical resolution are still to do: they need wide-character ncurses, and the screenshot tool would need to read them back. A frame that is entirely black is labelled `(blank)`, so it can't be confused with a missing pane.
 
 ---
 

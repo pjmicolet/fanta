@@ -60,6 +60,12 @@ public:
     }
   }
 
+  /// Puts the cursor on line `y` (clamped), keeping the column if it fits.
+  auto goto_line(int y) -> void {
+    y_ = std::clamp(y, 0, static_cast<int>(lines_.size()) - 1);
+    clamp_x();
+  }
+
   // --- Edits (no-ops when read-only) ---
   auto insert(char c) -> void {
     if (read_only_)
