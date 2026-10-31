@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-enum class Mode : uint8_t { NORMAL, INSERT, ZOOM, COMMAND };
+enum class Mode : uint8_t { NORMAL, INSERT, COMMAND };
 
 /// What the editor buffer is, and therefore how a reset rebuilds memory.
 enum class Source : uint8_t {
@@ -54,6 +54,8 @@ public:
 
 private:
   void update();
+  /// Append the current message to the Build log (once).
+  void log_message();
   void configure_ncurses();
   auto layout_kind() const -> Fanta::Layout::Kind;
   /// PC as shown to the user: on the HALT itself once halted (spec §6.1).
@@ -71,7 +73,7 @@ private:
   void draw_registers(const Fanta::Canvas &c,
                       Fanta::Layout::RegisterForm form);
   void draw_stack(const Fanta::Canvas &c);
-  void draw_output(const Fanta::Canvas &c, OutputTab tab);
+  void draw_output(const Fanta::Canvas &c, OutputTab tab, bool overlay = false);
   void draw_serial(const Fanta::Canvas &c);
   void draw_memory(const Fanta::Canvas &c);
   void draw_vram(const Fanta::Canvas &c, bool zoomed);
@@ -80,7 +82,7 @@ private:
 
   void handle_normal_mode(int ch);
   void handle_insert_mode(int ch);
-  void handle_zoom_mode(int ch);
+  void handle_overlay_key(int ch); // VRAM zoom/pan in the output overlay
   void handle_command_mode(int ch);
 
   /// Assemble the editor into memory (ASM source only).
@@ -111,6 +113,9 @@ private:
   void track_changed_registers(const std::array<std::uint32_t, 17> &before);
   /// In an ASM session, move the editor cursor to the line at PC.
   void follow_pc();
+  /// Switch the output tab to the device the program last wrote to.
+  void follow_output();
+  auto vram_hash() -> std::size_t;
   void reset_zoom();
 
   CPU &cpu;
@@ -120,7 +125,10 @@ private:
   bool is_running_continuously = false;
   bool ascii_vram = false; // draw VRAM with a character ramp (screenshots)
   OutputTab output_tab = OutputTab::SERIAL;
-  bool output_overlay = false; // small terminals: output over the work area
+  bool output_overlay = false; // output over the work area ('z', small terms)
+  bool tab_pinned = false;     // user picked a tab: stop following devices
+  std::size_t seen_serial = 0; // serial bytes at the last check
+  std::size_t seen_vram = 0;   // VRAM hash at the last check
   bool help_open = false;      // '?' / :help overlay; any key closes it
   std::optional<uint32_t> run_target; // step over: stop at this PC...
   uint32_t run_target_sp = 0;         // ...with this SP (the call returned)
@@ -136,6 +144,9 @@ private:
   std::vector<Fanta::Program::AsmError> asm_errors;
   bool build_failed = false; // last compile failed (message holds why)
   int build_count = 0;       // compiles attempted this session
+  int image_build = 0;       // build number of the image in memory (0: none)
+  bool code_moved = false;   // ASM: lines added/removed before code since build
+  bool message_sticky = false; // build error: message stays until next build
   uint64_t saved_version = 0; // editor.version() at the last save / load
   uint64_t built_version = 0; // editor.version() the image was built from
   uint64_t built_structure = 0;          // editor.structure_version() likewise
@@ -154,10 +165,6 @@ private:
 
   std::bitset<17> changed_regs; // registers changed by the last step/batch
 
-  // IPS Monitoring
-  uint64_t total_cycles = 0;
-  double current_ips = 0;
-  std::chrono::steady_clock::time_point last_ips_time;
 
   // Zooming
   double zoom_scale = 1.0;

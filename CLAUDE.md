@@ -44,7 +44,7 @@ with Gemini (see `GEMINI.md`) so both assistants behave consistently on this cod
   `static constexpr auto emit()` functions — these are hand-optimized by the user.
 
 ## 3. TUI & Debugging Tools
-- **Modality:** The TUI uses a Vim-inspired modal system (NORMAL, INSERT, ZOOM, COMMAND).
+- **Modality:** The TUI uses a Vim-inspired modal system (NORMAL, INSERT, COMMAND); F-keys execute in every mode. See `docs/tui_spec.md`.
 - **fanta-diff:** `./build/fanta-diff <file.asm>` — high-signal, mutation-only tracing. Only logs
   cycles where registers, SP, or flags change.
 - **Headless TUI:** `./build/fanta-tui --dump <output.txt>` — verify UI state and disassembly
