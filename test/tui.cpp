@@ -512,3 +512,31 @@ TEST_CASE("Clip Cuts Text At The Pane Edge") {
   REQUIRE_SAME(std::string{"llo"}, std::string{clip("hello", -2, 10)});
   REQUIRE_TRUE(clip("hello", 10, 10).empty());
 }
+
+TEST_CASE("Ctrl+C Leaves Insert Like ESC") {
+  auto path = tempPath("fanta_tui_ctrlc.txt");
+  CPU cpu{};
+  TUI tui(cpu);
+  // Type an instruction, leave INSERT with Ctrl+C: back in NORMAL, and the
+  // line was assembled into memory exactly as ESC would have done.
+  REQUIRE_TRUE(tui.screenshot(path, 100, 30, "iMOV R1, #5<C-c>"));
+  std::ifstream in(path);
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  REQUIRE_TRUE(screen.contains("mode NORMAL"));
+  Assembler assem{};
+  REQUIRE_SAME(assem.assemble("MOV R1, #5", 0), cpu.load(0));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("Ctrl+C Cancels A Command") {
+  auto path = tempPath("fanta_tui_ctrlc_cmd.txt");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.screenshot(path, 100, 30, ":q<C-c>"));
+  std::ifstream in(path);
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  REQUIRE_TRUE(screen.contains("mode NORMAL")); // still running, not quit
+  std::filesystem::remove(path);
+}

@@ -834,6 +834,12 @@ void TUI::handle_input() {
 }
 
 void TUI::handle_key(int ch) {
+  // Ctrl+C is ESC, as in vim. The terminal is in raw mode, so it never
+  // reaches us as SIGINT.
+  constexpr int kCtrlC = 3;
+  if (ch == kCtrlC)
+    ch = 27;
+
   if (ch == 27) { // ESC always stops a continuous run
     is_running_continuously = false;
   }
@@ -1168,12 +1174,13 @@ bool TUI::load_file(const std::string &filename) {
 
 namespace {
 
-/// Parses a key script: plain characters, plus <ESC> <CR> <TAB> <BS> <UP>
+/// Parses a key script: plain characters, plus <ESC> <C-c> <CR> <TAB> <BS> <UP>
 /// <DOWN> <LEFT> <RIGHT> <FRAME> (<FRAME> = let one UI frame pass, which runs
 /// a batch of cycles in continuous mode). Returns -1 for <FRAME>.
 auto parse_keys(std::string_view script) -> std::vector<int> {
   static const std::pair<std::string_view, int> names[] = {
-      {"ESC", 27},          {"CR", '\n'},          {"TAB", '\t'},
+      {"ESC", 27},          {"C-c", 3},            {"CR", '\n'},
+      {"TAB", '\t'},
       {"BS", KEY_BACKSPACE}, {"UP", KEY_UP},       {"DOWN", KEY_DOWN},
       {"LEFT", KEY_LEFT},   {"RIGHT", KEY_RIGHT}, {"FRAME", -1},
   };

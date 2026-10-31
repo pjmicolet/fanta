@@ -195,6 +195,7 @@ Every F-key has a `:` command, because some terminals intercept F-keys (macOS Te
 | NORMAL | `h j k l` / arrows move; `i` insert (refused with a message in read-only panes); `x` delete; `Tab` cycles focus between panes; `z` zoom focused pane; `:` command; `?` help; `q` quit (asks if dirty) |
 | INSERT | typing, `ESC` leaves; `TAB` completes a mnemonic in ASM, indents in SOURCE |
 | COMMAND | the cursor sits on the command line; `ESC` cancels, `Enter` runs |
+| any | `Ctrl+C` is an alias for `ESC` everywhere (as in vim) |
 
 Commands: `:w [file]`, `:e file`, `:q`, `:q!`, `:wq`, `:build`, `:eject[!]`, `:run`, `:pause`, `:step`, `:over`, `:reset`, `:out <tab>`, `:help`.
 

@@ -38,6 +38,7 @@ Ideas that don't come from friction. They wait here until an entry in the log gi
 ## Resolved
 
 ```
+2026-11-01  pj  Ctrl+C doesn't leave INSERT the way it does in vim   [fixed tui/layout: Ctrl+C is ESC everywhere]
 2026-10-31  cc  at 80x24 the status block overwrites R8-R12, and the editor's first line runs into the memory hex   [fixed tui/layout]
 2026-10-31  cc  stack values run into the disassembly and VRAM headers at 80x24   [fixed tui/layout]
 2026-10-31  cc  editor doesn't follow PC in ASM mode: plasma runs at line 135 while the editor shows lines 0-13   [fixed tui/layout]
