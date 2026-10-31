@@ -98,7 +98,8 @@ inline auto disassemble(uint32_t raw, uint32_t addr = 0,
   std::stringstream ss;
   ss << name;
   switch (mtd.fmt) {
-  case Instructions::HALT: // HALT and NOP: no operands
+  case Instructions::HALT: // no operands
+  case Instructions::NOP:
   case Instructions::RET:
     break;
   case Instructions::THREE_OP:
