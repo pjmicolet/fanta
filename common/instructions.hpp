@@ -7,7 +7,17 @@
 
 namespace Instructions {
 
-enum InstFormat { THREE_OP, TWO_OP, MEM, JUMP, BRANCH, HALT, RET, STACK_INST };
+enum InstFormat {
+  THREE_OP,
+  TWO_OP,
+  MEM,
+  JUMP,
+  BRANCH,
+  HALT,
+  RET,
+  STACK_INST,
+  NOP
+};
 
 struct InstMetadata {
   InstFormat fmt;
@@ -87,6 +97,7 @@ struct InstEntry {
   };
 
 #define HALT_INST(class_name, mnemonic, op)
+#define NOP_INST(class_name, mnemonic, op)
 
 #define RET_INST(class_name, mnemonic, op)
 
@@ -192,7 +203,7 @@ struct Ret {
 // before main() runs.
 inline constexpr std::array<InstEntry, 25> kInstructionTable{{
     {"HALT", {InstFormat::HALT, 0, 0}},
-    {"NOP", {InstFormat::HALT, 0x14, 0}},
+    {"NOP", {InstFormat::NOP, 0x14, 0}},
     {"ADD", {InstFormat::THREE_OP, 0x1, 0x2}},
     {"MOV", {InstFormat::TWO_OP, 0x3, 0x4}},
     {"SUB", {InstFormat::THREE_OP, 0x5, 0x6}},

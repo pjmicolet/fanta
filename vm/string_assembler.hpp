@@ -58,6 +58,8 @@ struct Assembler {
         return parse_one(tokens, mtdc, address);
       case Instructions::STACK_INST:
         return parse_one(tokens, mtdc, address);
+      case Instructions::NOP:
+        return 0x14;
       case Instructions::HALT:
         return 0;
       case Instructions::RET:
