@@ -1,3 +1,4 @@
+#include "build.hpp"
 #include "disasm.hpp"
 #include "editor.hpp"
 #include "program.hpp"
@@ -304,4 +305,133 @@ TEST_CASE("Reset Clears Serial Output") {
   cpu.store(0x0200'0000, 'x');
   tui.reset();
   REQUIRE_TRUE(cpu.bus.get<BasicSerial<>>().output.empty());
+}
+
+// --- Code mode (Fanta source) ----------------------------------------------
+
+namespace {
+auto writeText(const std::string &path, const std::string &text) -> void {
+  std::ofstream out(path);
+  out << text;
+}
+
+auto dumpOf(TUI &tui) -> std::string {
+  auto path = tempPath("fanta_tui_codemode_dump.txt");
+  tui.dump_state(path);
+  std::ifstream in(path);
+  std::string dump((std::istreambuf_iterator<char>(in)),
+                   std::istreambuf_iterator<char>());
+  std::filesystem::remove(path);
+  return dump;
+}
+
+constexpr auto kAddProgram = "fn main() -> int {\n"
+                             "    let b : int = 10;\n"
+                             "    let c : int = 20;\n"
+                             "    return b + c;\n"
+                             "}\n";
+} // namespace
+
+TEST_CASE("Build Compile Matches The Default Compiler") {
+  auto built = Fanta::Build::compile(kAddProgram);
+  REQUIRE_TRUE(built.has_value());
+  auto direct = Fanta::DefaultCompiler{}.compile(kAddProgram);
+  REQUIRE_TRUE(*built == direct);
+}
+
+TEST_CASE("Build Compile Reports Errors Instead Of Throwing") {
+  auto built = Fanta::Build::compile("fn main() -> int { return nope(1); }");
+  REQUIRE_TRUE(!built.has_value());
+  REQUIRE_TRUE(!built.error().empty());
+}
+
+TEST_CASE("Build Compile Times Out On A Parser Hang") {
+  // EOF inside a function body loops forever in the parser (review B6). The
+  // TUI must get control back instead of freezing.
+  auto start = std::chrono::steady_clock::now();
+  auto built = Fanta::Build::compile("fn main() -> int { let x: int = 1;",
+                                     std::chrono::milliseconds(200));
+  auto took = std::chrono::steady_clock::now() - start;
+  REQUIRE_TRUE(!built.has_value());
+  REQUIRE_TRUE(built.error().contains("did not finish"));
+  REQUIRE_TRUE(took < std::chrono::seconds(2));
+}
+
+TEST_CASE("Loading A .fn File Compiles It Into Memory") {
+  auto path = tempPath("fanta_tui_add.fn");
+  writeText(path, kAddProgram);
+
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  auto expected = Fanta::DefaultCompiler{}.compile(kAddProgram);
+  for (size_t i = 0; i < expected.size(); ++i)
+    REQUIRE_SAME(expected[i], cpu.load(static_cast<uint32_t>(i * 4)));
+
+  cpu.run_until_halt();
+  REQUIRE_SAME(30, cpu.registers[0]);
+  REQUIRE_TRUE(dumpOf(tui).contains("SOURCE: FANTA"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("Reset Recompiles And Restarts A .fn Program") {
+  auto path = tempPath("fanta_tui_reset.fn");
+  writeText(path, kAddProgram);
+
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  cpu.run_until_halt();
+  tui.reset();
+  REQUIRE_TRUE(!cpu.halted);
+  REQUIRE_SAME(0, cpu.get_pc());
+  cpu.run_until_halt();
+  REQUIRE_SAME(30, cpu.registers[0]);
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("A .fn File That Fails To Compile Still Opens") {
+  auto path = tempPath("fanta_tui_bad.fn");
+  writeText(path, "fn main() -> int { return nope(1); }\n");
+
+  CPU cpu{};
+  TUI tui(cpu);
+  cpu.store(0, 0xDEADBEEF); // stale program from before the load
+  REQUIRE_TRUE(tui.load_file(path));
+  auto dump = dumpOf(tui);
+  REQUIRE_TRUE(dump.contains("MESSAGE: Compile error"));
+  REQUIRE_TRUE(dump.contains("return nope(1);")); // source is in the editor
+  REQUIRE_SAME(0, cpu.load(0)); // nothing stale left running
+  std::filesystem::remove(path);
+}
+
+// --- Headless screenshots --------------------------------------------------
+
+TEST_CASE("Screenshot Renders The Real Screen At The Requested Size") {
+  auto path = tempPath("fanta_tui_screen.txt");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.screenshot(path, 100, 30));
+  std::ifstream in(path);
+  std::string first;
+  std::getline(in, first);
+  REQUIRE_SAME(102, first.size()); // border: '+' + 100 columns + '+'
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  REQUIRE_TRUE(screen.contains("--- REGISTERS ---"));
+  REQUIRE_TRUE(screen.contains("size 100x30"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("Screenshot Feeds Keys Before Rendering") {
+  auto path = tempPath("fanta_tui_screen_keys.txt");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.screenshot(path, 100, 30, "iNOP<ESC>"));
+  std::ifstream in(path);
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  REQUIRE_TRUE(screen.contains(" 0| NOP"));
+  REQUIRE_TRUE(screen.contains("mode NORMAL"));
+  std::filesystem::remove(path);
 }

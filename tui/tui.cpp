@@ -1,4 +1,5 @@
 #include "tui.hpp"
+#include "build.hpp"
 #include "disasm.hpp"
 #include "instructions.hpp"
 #include "terminal.hpp"
@@ -58,6 +59,10 @@ TUI::~TUI() {
 
 void TUI::init_ncurses() {
   initscr();
+  configure_ncurses();
+}
+
+void TUI::configure_ncurses() {
   ncurses_active = true;
   raw();
   keypad(stdscr, TRUE);
@@ -178,17 +183,42 @@ void TUI::assemble_editor() {
   }
 }
 
+bool TUI::compile_editor() {
+  editor.trim_trailing();
+  auto result = Fanta::Build::compile(editor.text());
+  if (!result) {
+    build_failed = true;
+    message = "Compile error: " + result.error();
+    return false;
+  }
+  build_failed = false;
+  binary_image = std::move(*result);
+  message = std::format("Compiled {} instructions", binary_image.size());
+  return true;
+}
+
 void TUI::reset() {
+  // Compile before touching the CPU, so a failed build keeps the last good
+  // program loaded and debuggable.
+  if (source == Source::FANTA && !compile_editor())
+    return;
+
   // A fresh CPU resets registers, SP, flags, pending interrupts, VBLANK
   // timing and all of RAM/VRAM in one go.
   cpu = CPU{};
   last_changed_reg = -1;
   is_running_continuously = false;
-  if (source == Source::BINARY) {
+  switch (source) {
+  case Source::BINARY:
     Fanta::Program::storeImage(cpu, binary_image);
     message = "Reset";
-  } else {
+    break;
+  case Source::FANTA:
+    Fanta::Program::storeImage(cpu, binary_image); // message set by compile
+    break;
+  case Source::ASM:
     assemble_editor();
+    break;
   }
 }
 
@@ -213,7 +243,10 @@ void TUI::dump_state(const std::string &filename) {
       << std::dec << " FLAGS: Z:" << (int)cpu.status_reg[0]
       << " N:" << (int)cpu.status_reg[1] << " V:" << (int)cpu.status_reg[2]
       << " C:" << (int)cpu.status_reg[3] << "\n";
-  out << "SOURCE: " << (source == Source::ASM ? "ASM" : "BINARY (read-only)")
+  out << "SOURCE: "
+      << (source == Source::ASM      ? "ASM"
+          : source == Source::FANTA ? "FANTA"
+                                    : "BINARY (read-only)")
       << "\n";
   if (!message.empty())
     out << "MESSAGE: " << message << "\n";
@@ -348,7 +381,7 @@ void TUI::draw_status() {
   const std::string &bottom =
       (mode == Mode::COMMAND) ? command_buffer : message;
   if (!bottom.empty()) {
-    int attrs = (mode != Mode::COMMAND && !asm_errors.empty())
+    int attrs = (mode != Mode::COMMAND && (!asm_errors.empty() || build_failed))
                     ? (COLOR_PAIR(4) | A_REVERSE)
                     : A_REVERSE;
     attron(attrs);
@@ -462,7 +495,8 @@ void TUI::draw_editor() {
 
   attron(A_BOLD);
   mvprintw(win_y - 1, 2, "%s",
-           source == Source::ASM ? "--- EDITOR (Mnemonic Entry) ---"
+           source == Source::ASM     ? "--- EDITOR (Mnemonic Entry) ---"
+           : source == Source::FANTA ? "--- EDITOR (Fanta, :compile / :run) ---"
                                  : "--- EDITOR (binary, read-only) ---");
   attroff(A_BOLD);
 
@@ -492,7 +526,8 @@ void TUI::draw_editor() {
     attroff(attrs);
 
     // Ghost-text mnemonic suggestion while typing the first word.
-    if (line_idx == editor.y() && mode == Mode::INSERT) {
+    if (line_idx == editor.y() && mode == Mode::INSERT &&
+        source == Source::ASM) {
       std::string word = first_word(line);
       if (!word.empty() && word.find_first_of(" \t") == std::string::npos) {
         std::string suggestion = trie.getSuggestion(word);
@@ -527,7 +562,7 @@ void TUI::draw_vram_preview() {
     return;
 
   uint32_t *vram = (uint32_t *)cpu.get_vram();
-  bool use_color = (COLORS >= 256);
+  bool use_color = (COLORS >= 256) && !ascii_vram;
 
   // Centered magnifying glass calculations
   double visible_w = 320.0 / zoom_scale;
@@ -626,7 +661,10 @@ void TUI::handle_input() {
   int ch = getch();
   if (ch == ERR)
     return;
+  handle_key(ch);
+}
 
+void TUI::handle_key(int ch) {
   if (ch == 27) { // ESC always stops a continuous run
     is_running_continuously = false;
   }
@@ -755,10 +793,15 @@ void TUI::handle_normal_mode(int ch) {
 
 void TUI::handle_insert_mode(int ch) {
   switch (ch) {
-  case 27: // ESC: leave insert mode and live-patch memory with the buffer
+  case 27: // ESC: leave insert mode
     mode = Mode::NORMAL;
     curs_set(0);
-    assemble_editor();
+    if (source == Source::FANTA) {
+      // Recompiling moves every address, so no live patch: rebuild on demand.
+      message = "Edited: :compile (or r) to rebuild, :run to rebuild and run";
+    } else {
+      assemble_editor(); // live-patch memory with the buffer
+    }
     break;
   case KEY_LEFT:
     editor.left();
@@ -773,6 +816,12 @@ void TUI::handle_insert_mode(int ch) {
     editor.down();
     break;
   case '\t': { // TAB completion of the mnemonic
+    if (source == Source::FANTA) { // no mnemonics: indent to the next 4
+      do {
+        editor.insert(' ');
+      } while (editor.x() % 4 != 0);
+      break;
+    }
     std::string word = first_word(editor.line());
     if (!word.empty() && word.find_first_of(" \t") == std::string::npos) {
       std::string suggestion = trie.getSuggestion(word);
@@ -830,6 +879,19 @@ void TUI::handle_command_mode(int ch) {
       std::string filename = cmd.substr(2);
       if (!load_file(filename))
         message = "Error loading " + filename;
+    } else if (cmd == "compile" || cmd == "c") {
+      if (source != Source::FANTA)
+        message = "Nothing to compile: :e a .fn file first";
+      else
+        reset();
+    } else if (cmd == "run") {
+      if (source != Source::FANTA) {
+        message = "Nothing to compile: :e a .fn file first";
+      } else {
+        reset();
+        if (!build_failed)
+          is_running_continuously = true;
+      }
     } else if (cmd == "q") {
       running = false;
     } else {
@@ -890,11 +952,143 @@ bool TUI::load_file(const std::string &filename) {
   if (!lines)
     return false;
 
+  if (filename.ends_with(".fn")) {
+    source = Source::FANTA;
+    assem = Assembler(); // compiled code carries no labels
+    asm_errors.clear();
+    binary_image.clear();
+    editor.set_lines(std::move(*lines));
+    reset(); // compile, then fresh CPU with the result
+    if (build_failed) {
+      // Still open the file so it can be fixed here, but don't leave the
+      // previous file's program running underneath it.
+      cpu = CPU{};
+      return true;
+    }
+    message = std::format("Loaded {}: compiled {} instructions", filename,
+                          binary_image.size());
+    return true;
+  }
+
   source = Source::ASM;
   binary_image.clear();
   editor.set_lines(std::move(*lines));
   reset(); // fresh CPU, then assemble the new buffer
   if (asm_errors.empty())
     message = "Loaded " + filename;
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Headless screenshots
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Parses a key script: plain characters, plus <ESC> <CR> <TAB> <BS> <UP>
+/// <DOWN> <LEFT> <RIGHT> <FRAME> (<FRAME> = let one UI frame pass, which runs
+/// a batch of cycles in continuous mode). Returns -1 for <FRAME>.
+auto parse_keys(std::string_view script) -> std::vector<int> {
+  static const std::pair<std::string_view, int> names[] = {
+      {"ESC", 27},          {"CR", '\n'},          {"TAB", '\t'},
+      {"BS", KEY_BACKSPACE}, {"UP", KEY_UP},       {"DOWN", KEY_DOWN},
+      {"LEFT", KEY_LEFT},   {"RIGHT", KEY_RIGHT}, {"FRAME", -1},
+  };
+  std::vector<int> keys;
+  for (size_t i = 0; i < script.size(); ++i) {
+    if (script[i] == '<') {
+      auto close = script.find('>', i);
+      if (close != std::string_view::npos) {
+        auto name = script.substr(i + 1, close - i - 1);
+        auto it = std::ranges::find(names, name, [](auto &p) { return p.first; });
+        if (it != std::end(names)) {
+          keys.push_back(it->second);
+          i = close;
+          continue;
+        }
+      }
+    }
+    keys.push_back(static_cast<unsigned char>(script[i]));
+  }
+  return keys;
+}
+
+} // namespace
+
+bool TUI::screenshot(const std::string &filename, int cols, int rows,
+                     std::string_view keys) {
+  std::ofstream out(filename);
+  if (!out)
+    return false;
+
+  // A real ncurses screen drawing into /dev/null: update() runs exactly as
+  // in the terminal, and we read the cells back from stdscr.
+  FILE *sink = std::fopen("/dev/null", "w");
+  FILE *source = std::fopen("/dev/null", "r");
+  SCREEN *screen = newterm("xterm-256color", sink, source);
+  if (screen == nullptr)
+    return false;
+  set_term(screen);
+  configure_ncurses();
+  resizeterm(rows, cols);
+  ascii_vram = true; // colour blocks would read back as blank cells
+
+  for (int key : parse_keys(keys)) {
+    if (key == -1) {
+      if (is_running_continuously)
+        run_batch();
+      continue;
+    }
+    handle_key(key);
+    if (!running)
+      break;
+  }
+  if (is_running_continuously)
+    run_batch(); // one frame's worth, like the real loop before drawing
+  update();
+
+  int cur_y = 0;
+  int cur_x = 0;
+  getyx(stdscr, cur_y, cur_x);
+
+  std::string border = "+" + std::string(cols, '-') + "+";
+  out << border << "\n";
+  std::vector<chtype> cells(cols + 1);
+  std::string attrs_report;
+  for (int y = 0; y < rows; ++y) {
+    mvinchnstr(y, 0, cells.data(), cols);
+    std::string text(cols, ' ');
+    std::string marks(cols, ' ');
+    bool any_mark = false;
+    for (int x = 0; x < cols; ++x) {
+      char c = static_cast<char>(cells[x] & A_CHARTEXT);
+      text[x] = (c >= 0x20 && c < 0x7F) ? c : ' ';
+      if (cells[x] & A_REVERSE) {
+        marks[x] = 'R';
+        any_mark = true;
+      } else if (cells[x] & A_BOLD) {
+        marks[x] = 'B';
+        any_mark = true;
+      }
+    }
+    out << "|" << text << "|\n";
+    if (any_mark) {
+      marks.erase(marks.find_last_not_of(' ') + 1);
+      attrs_report += std::format("{:3} {}\n", y, marks);
+    }
+  }
+  out << border << "\n";
+  out << std::format("size {}x{}  cursor at row {}, col {}  mode {}\n", cols,
+                     rows, cur_y, cur_x, mode_name(mode));
+  if (!attrs_report.empty())
+    out << "highlights (R = reverse video, B = bold), by row:\n"
+        << attrs_report;
+
+  endwin();
+  set_term(nullptr);
+  delscreen(screen);
+  ncurses_active = false;
+  std::fclose(sink);
+  std::fclose(source);
   return true;
 }
