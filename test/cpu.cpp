@@ -1,5 +1,6 @@
 #include "cpu.hpp"
 #include "../common/cpu_info.hpp"
+#include "../common/hook.hpp"
 #include "assembler.hpp"
 #include "instructions.hpp"
 #include "string_assembler.hpp"
@@ -400,5 +401,33 @@ TEST_CASE("Unmapped Device Space Reads Zero And Drops Writes") {
   constexpr uint32_t unmapped = 0x0200'1000;
   cpu.store(unmapped, 'x');
   REQUIRE_SAME(0u, cpu.load(unmapped));
+  REQUIRE_TRUE(serialOut(cpu).empty());
+}
+
+// --- Intrinsic hook range ---------------------------------------------------
+namespace {
+// Runs one CALL at address 0 whose PC-relative operand lands on `target`.
+auto cpuAfterCallTo(uint32_t target) -> CPU {
+  CPU cpu{};
+  cpu.store(0, Instructions::Emitter::single_inst(Fanta::Info::Instructions::CALL,
+                                                  static_cast<int32_t>(target)));
+  cpu.run_cycle();
+  return cpu;
+}
+} // namespace
+
+TEST_CASE("Call Into The Hook Range Runs The Hook Without Jumping") {
+  CPU fresh{};
+  auto cpu = cpuAfterCallTo(Fanta::HOOK_BASE);
+  REQUIRE_SAME(4u, cpu.get_pc());
+  REQUIRE_SAME(fresh.registers[16], cpu.registers[16]); // no return address
+}
+
+TEST_CASE("Call Just Past The Hook Range Is An Ordinary Call") {
+  CPU fresh{};
+  const uint32_t past = Fanta::HOOK_END + 4;
+  auto cpu = cpuAfterCallTo(past);
+  REQUIRE_SAME(past, cpu.get_pc());
+  REQUIRE_SAME(fresh.registers[16] - 4, cpu.registers[16]);
   REQUIRE_TRUE(serialOut(cpu).empty());
 }

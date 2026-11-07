@@ -185,9 +185,9 @@ TEST_CASE("Intrinsic Call") {
   auto call = std::get<Fanta::AST::FunctionCall>(node.t);
 
   REQUIRE_SAME(Fanta::AST::INTRINSIC, call.isIntrinsic);
-  REQUIRE_SAME("print", std::get<Fanta::AST::Identifier>(
-                            p.getNodeAtIndex(call.funcNameIdx).t)
-                            .name);
+  REQUIRE_SAME("@print", std::get<Fanta::AST::Identifier>(
+                             p.getNodeAtIndex(call.funcNameIdx).t)
+                             .name);
   REQUIRE_SAME(std::size_t{2}, call.params.size());
   REQUIRE_SAME(
       "a", std::get<Fanta::AST::Identifier>(p.getNodeAtIndex(call.params[0]).t)

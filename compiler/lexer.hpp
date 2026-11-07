@@ -250,7 +250,7 @@ private:
       return Token{TokenType::Colon, body_.substr(cursor_, 1), 0, cursor_,
                    cursor_++};
     case '@':
-      auto start = ++cursor_;
+      auto start = cursor_++;
       while (cursor_ < end_ && allowedCharsInAlpha(body_[cursor_]) &&
              (body_[cursor_] != ' ' || body_[cursor_] != '\0')) {
         cursor_++;

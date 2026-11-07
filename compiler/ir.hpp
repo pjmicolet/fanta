@@ -32,10 +32,13 @@ struct FuncParam {
   std::uint32_t frameOffset;
 };
 
+enum CallNature { INTRINSIC, USER };
+
 struct CallFunc {
   std::vector<FuncParam> args;
   std::string_view name;
   std::optional<Operand> dest; // some calls are void
+  CallNature cn = USER;
 };
 
 struct Branch {

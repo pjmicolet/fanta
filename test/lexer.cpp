@@ -224,5 +224,5 @@ TEST_CASE("Intrinsic Lexing") {
   Lexer lx{src};
   auto t = lx.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Intrinsic, t);
-  REQUIRE_SAME("print", t->lexeme);
+  REQUIRE_SAME("@print", t->lexeme);
 }

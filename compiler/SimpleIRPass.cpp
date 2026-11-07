@@ -500,6 +500,9 @@ auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
                             IRListing &ir, const GlobalTable &gt,
                             LocalTable &lt) -> void {
   CallFunc cf;
+  if (fcall.isIntrinsic == AST::FunctionNature::INTRINSIC) {
+    cf.cn = INTRINSIC;
+  }
   cf.name =
       std::get<AST::Identifier>(p.getNodeAtIndex(fcall.funcNameIdx).t).name;
   for (auto it = fcall.params.rbegin(); it != fcall.params.rend(); ++it) {
