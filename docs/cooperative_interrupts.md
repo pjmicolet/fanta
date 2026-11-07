@@ -120,9 +120,9 @@ graph TD
 6.  **No injection in `quiet` regions** (§8).
 
 ### Code Generation Example:
-If the user writes a high-level `while` loop:
+If the user writes this loop:
 ```fanta
-while (x < 10) {
+for (; x < 10;) {
     x = x + 1;
 }
 ```
@@ -223,7 +223,7 @@ Pending bits stay set during the region and are serviced at the first `CIP` afte
 | `handle X with f` | `CIP #X, f` | `CIP #X, f`, or a trap-handler entry |
 | `quiet { }` | suppress `CIP`, plus an optional hold-back-lines syscall | suppress `CIP`, plus `DI` / `EI` |
 
-- [ ] User vs kernel is a compile-time mode. Tie it to the mode bit question (`docs/interrupts_proposal.md` §6, Q4).
+- [ ] User vs kernel is a compile-time mode (`docs/language_design.md` §4), matching the CPU mode bit (`docs/interrupts_proposal.md` §4).
 - [ ] Kernel side: a `critical { }` construct compiled to `DI`/`EI`, allowed only in kernel code (needs EI/DI from the kernel layer).
 - [ ] OS side: a "hold back non-essential lines" syscall with a time limit, so a user-mode `quiet` can also ask the kernel to defer preemption (the single-core equivalent of `isolcpus`/`nohz_full`).
 

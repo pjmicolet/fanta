@@ -103,6 +103,6 @@ with Gemini (see `GEMINI.md`) so both assistants behave consistently on this cod
 - **ALU Flags:** Z (Zero), N (Negative/Sign), V (Overflow), C (Carry). Signed logic relies on N
   (`BPL`/`BMI`).
 
-See `docs/developer_guide.md` for the full architecture reference (memory map, stack frame layout,
+See `docs/README.md` for the documentation index, `docs/developer_guide.md` for the full architecture reference (memory map, stack frame layout,
 instruction encoding, compiler pipeline) and `docs/commenting_standards.md` for the Doxygen
 comment conventions used throughout the codebase.
