@@ -863,7 +863,7 @@ void TUI::draw_output(const Fanta::Canvas &c, OutputTab tab) {
 }
 
 auto TUI::serial_output() -> const std::string & {
-  return cpu.bus.get<BasicSerial<>>().output;
+  return cpu.bus.get<Serial>().output;
 }
 
 void TUI::draw_serial(const Fanta::Canvas &c) {

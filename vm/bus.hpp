@@ -28,13 +28,14 @@ template <typename... Dv> struct Bus {
   std::tuple<Dv...> devices;
   static constexpr uint32_t lowest = std::min({Dv::base...});
 
+  /// `now` is the CPU's cycle count, passed through to the device.
   /// @return true if a device decoded the address.
-  auto write(uint32_t addr, uint32_t data) -> bool {
+  auto write(uint32_t addr, uint32_t data, uint64_t now) -> bool {
     return std::apply(
         [&](auto &...dev) {
           // addr - base < size: unsigned wrap makes this a two-sided check.
           return ((addr - dev.base < dev.size
-                       ? (dev.s.write(addr - dev.base, data), true)
+                       ? (dev.s.write(addr - dev.base, data, now), true)
                        : false) ||
                   ...);
         },
@@ -42,13 +43,13 @@ template <typename... Dv> struct Bus {
   }
 
   /// @return the device's value, or nullopt if no device decoded the address.
-  auto read(uint32_t addr) -> std::optional<uint32_t> {
+  auto read(uint32_t addr, uint64_t now) -> std::optional<uint32_t> {
     std::optional<uint32_t> out;
     std::apply(
         [&](auto &...dev) {
           // Only the short-circuit matters here; the value is in `out`.
           (void)((addr - dev.base < dev.size
-                      ? (out = dev.s.read(addr - dev.base), true)
+                      ? (out = dev.s.read(addr - dev.base, now), true)
                       : false) ||
                  ...);
         },

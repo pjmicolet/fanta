@@ -11,7 +11,8 @@ static constexpr uint32_t CYCLES_PER_FRAME = 50000;
 
 auto decodeOpt(uint32_t inst) { return (inst >> 26) & 0x3F; }
 
-template <typename BType> auto BaseCPU<BType>::run_cycle() -> void {
+template <MachineSpec Spec, typename BType>
+auto BaseCPU<Spec, BType>::run_cycle() -> void {
   auto instr = fetch();
   auto byte = decodeOpt(instr);
   if (inst_count >= CYCLES_PER_FRAME) {
@@ -54,9 +55,11 @@ template <typename BType> auto BaseCPU<BType>::run_cycle() -> void {
     EXEC_INST(0x20, Bnc)
   }
   inst_count++;
+  cycle_count++; // every instruction is one cycle, for now
 }
 
-template <typename BType> auto BaseCPU<BType>::run_until_halt() -> void {
+template <MachineSpec Spec, typename BType>
+auto BaseCPU<Spec, BType>::run_until_halt() -> void {
   while (!halted) {
     run_cycle();
   }
@@ -64,4 +67,4 @@ template <typename BType> auto BaseCPU<BType>::run_until_halt() -> void {
 
 // Member definitions live here rather than in cpu.hpp, because they need
 // execute.hpp, which itself includes cpu.hpp. Instantiate each board once.
-template struct BaseCPU<BasicBus>;
+template struct BaseCPU<DefaultSpec>;

@@ -69,7 +69,9 @@ using HookFn = auto (*)(CPU &) -> void;
 // DEFINE INTRINSICS HERE
 inline auto intrinPrint(CPU &cpu) -> void {
   auto val = cpu.ram.read32(cpu.registers[16] + 4);
-  cpu.bus.write(SERIAL_BASE, val);
+  // Like a BIOS print routine: wait for the port, then send.
+  cpu.stall(cpu.bus.get<Serial>().cycles_until_ready(cpu.cycles()));
+  cpu.store(SERIAL_BASE, val);
 }
 
 inline constexpr std::array<HookFn, Fanta::NUM_HOOKS> callHooks{&intrinPrint};

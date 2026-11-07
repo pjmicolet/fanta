@@ -337,7 +337,7 @@ constexpr uint32_t kSerialData = 0x0200'0000;
 constexpr uint32_t kSerialStatus = kSerialData + 4;
 
 auto serialOut(CPU &cpu) -> const std::string & {
-  return cpu.bus.get<BasicSerial<>>().output;
+  return cpu.bus.get<Serial>().output;
 }
 } // namespace
 
@@ -352,20 +352,60 @@ TEST_CASE("Serial Store Sends Only The Low Byte") {
   REQUIRE_SAME(std::string{"H"}, serialOut(cpu));
 }
 
-TEST_CASE("Serial Program Output Keeps Byte Order") {
-  // The hello-world from the serial spec, run through the real dispatch path.
-  CPU cpu{};
+auto runSerialProgram(CPU &cpu, std::initializer_list<const char *> lines) {
   Assembler assem{};
   uint32_t addr = 0;
-  for (const auto *line :
-       {"MOV R1, #200", "LSH R1, R1, #10", "MOV R2, #48", "STORE R2, 0(R1)",
-        "MOV R2, #69", "STORE R2, 0(R1)", "MOV R2, #A", "STORE R2, 0(R1)",
-        "HALT"}) {
+  for (const auto *line : lines) {
     cpu.store(addr, assem.assemble(line, static_cast<int>(addr)));
     addr += 4;
   }
   cpu.run_until_halt();
+}
+
+TEST_CASE("Serial Program Output Keeps Byte Order") {
+  // The hello-world from the serial spec, run through the real dispatch path.
+  // Each byte waits for TX_READY (STATUS bit 1) before it's written.
+  CPU cpu{};
+  runSerialProgram(cpu, {"MOV R1, #200", "LSH R1, R1, #10",
+                         "MOV R2, #48", "LOAD R3, 4(R1)", "AND R3, R3, #2",
+                         "BEQ -8", "STORE R2, 0(R1)",
+                         "MOV R2, #69", "LOAD R3, 4(R1)", "AND R3, R3, #2",
+                         "BEQ -8", "STORE R2, 0(R1)",
+                         "MOV R2, #A", "LOAD R3, 4(R1)", "AND R3, R3, #2",
+                         "BEQ -8", "STORE R2, 0(R1)", "HALT"});
   REQUIRE_SAME(std::string{"Hi\n"}, serialOut(cpu));
+  REQUIRE_SAME(0u, cpu.bus.get<Serial>().dropped);
+}
+
+TEST_CASE("Serial Writes That Don't Poll Are Dropped") {
+  // Back-to-back stores: the port is still sending 'H' when 'i' and '\n'
+  // arrive, so only the first byte goes out.
+  CPU cpu{};
+  runSerialProgram(cpu, {"MOV R1, #200", "LSH R1, R1, #10", "MOV R2, #48",
+                         "STORE R2, 0(R1)", "MOV R2, #69", "STORE R2, 0(R1)",
+                         "MOV R2, #A", "STORE R2, 0(R1)", "HALT"});
+  REQUIRE_SAME(std::string{"H"}, serialOut(cpu));
+  REQUIRE_SAME(2u, cpu.bus.get<Serial>().dropped);
+}
+
+TEST_CASE("Serial Port Is Busy For One Character Time") {
+  CPU cpu{};
+  cpu.store(kSerialData, 'x');
+  cpu.stall(Serial::cycles_per_char - 1);
+  REQUIRE_SAME(0u, cpu.load(kSerialStatus)); // one cycle short
+  cpu.store(kSerialData, 'y');                // dropped
+  cpu.stall(1);
+  REQUIRE_SAME(Serial::TX_READY, cpu.load(kSerialStatus));
+  cpu.store(kSerialData, 'z');
+  REQUIRE_SAME(std::string{"xz"}, serialOut(cpu));
+  REQUIRE_SAME(1u, cpu.bus.get<Serial>().dropped);
+}
+
+TEST_CASE("Serial Character Time Comes From The Machine Spec") {
+  // 200 MHz / (115200 baud / 10 bits per character)
+  REQUIRE_SAME(17361u, Serial::cycles_per_char);
+  constexpr MachineSpec slow{.cpu_hz = 11'520};
+  REQUIRE_SAME(1u, slow.cycles_per_serial_char());
 }
 
 TEST_CASE("Serial Store Does Not Touch RAM") {
@@ -380,12 +420,12 @@ TEST_CASE("Serial Store Does Not Touch RAM") {
 }
 
 TEST_CASE("Serial Status Reads Ready To Send, Nothing Received") {
-  // bit 1 = ready to send (always, the wire is instant)
+  // bit 1 = ready to send (clear while a byte is going out)
   // bit 0 = received byte waiting (never, until input exists)
   CPU cpu{};
   REQUIRE_SAME(0x2u, cpu.load(kSerialStatus));
   cpu.store(kSerialData, 'x');
-  REQUIRE_SAME(0x2u, cpu.load(kSerialStatus));
+  REQUIRE_SAME(0x0u, cpu.load(kSerialStatus));
 }
 
 TEST_CASE("Serial Data Read Is The Receive Side, Not Sent Output") {
