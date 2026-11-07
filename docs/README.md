@@ -17,6 +17,7 @@ Read only what the task needs.
 | `low_latency_architecture.md` | Why events are cooperative; where older ideas went | Rationale |
 | `tui_spec.md` | TUI design | Agreed spec |
 | `tui_friction.md` | TUI problems log | Living log |
+| `known_bugs.md` | Reproduced bugs with causes, to check before debugging | Living log |
 | `reviews/` | Dated review reports | Historical, not updated |
 
 When documents overlap, the code wins for current behaviour, and the specs win for planned behaviour.
