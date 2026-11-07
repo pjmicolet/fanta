@@ -36,6 +36,18 @@ if(FANTA_WARNINGS_AS_ERRORS)
   add_compile_options(-Werror)
 endif()
 
+# Sanitizer build for finding memory and UB bugs; tools/crash.py configures and
+# uses it in build-sanitize/. Libc++ hardening traps on bad container accesses at
+# the access itself, so failures don't depend on heap layout, and no-recover stops
+# at the first UB report instead of carrying on with corrupted state.
+option(FANTA_SANITIZE "Build with ASan, UBSan and libc++ hardening" OFF)
+if(FANTA_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=all
+                      -fno-omit-frame-pointer -g)
+  add_compile_definitions(_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG)
+  add_link_options(-fsanitize=address,undefined)
+endif()
+
 # `cmake --build build --target tidy` runs clang-tidy over the project via
 # tools/run-clang-tidy.sh (thin wrapper around LLVM's run-clang-tidy using
 # compile_commands.json). Not wired into the default build -- it's a

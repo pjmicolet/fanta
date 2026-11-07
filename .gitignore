@@ -1,5 +1,6 @@
 build/
 build-fast/
+build-sanitize/
 .cache/
 compile_commands.json
 .DS_Store
