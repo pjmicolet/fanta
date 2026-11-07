@@ -1,5 +1,6 @@
 #pragma once
 #include "bus.hpp"
+#include "machine_spec.hpp"
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -25,7 +26,18 @@ private:
   std::vector<std::uint8_t> memory; // 32MB
 };
 
-template <typename BType> struct BaseCPU {
+// The default board: a serial port at the start of the device area, right
+// above the 32MB of RAM, timed by the machine spec.
+inline constexpr uint32_t SERIAL_BASE = 0x0200'0000;
+template <MachineSpec Spec>
+using SpecSerial = BasicSerial<8, Spec.cycles_per_serial_char()>;
+template <MachineSpec Spec>
+using SpecBus = Bus<Mapped<SpecSerial<Spec>, SERIAL_BASE>>;
+
+template <MachineSpec Spec = DefaultSpec, typename BType = SpecBus<Spec>>
+struct BaseCPU {
+  static constexpr MachineSpec spec = Spec;
+
   enum FLAG : uint8_t { ZERO, NEGATIVE, OVFL, CARRY };
 
   BaseCPU() : ram(32 * 1024 * 1024) {
@@ -40,7 +52,7 @@ template <typename BType> struct BaseCPU {
 
   constexpr auto store(uint32_t addr, uint32_t val) -> void {
     if (addr >= bus.lowest) [[unlikely]] {
-      bus.write(addr, val);
+      bus.write(addr, val, cycle_count);
       return;
     }
     ram.write32(addr, val);
@@ -48,7 +60,7 @@ template <typename BType> struct BaseCPU {
 
   constexpr auto load(uint32_t addr) -> std::uint32_t {
     if (addr >= bus.lowest) [[unlikely]] {
-      return bus.read(addr).value_or(0); // unmapped device space reads 0
+      return bus.read(addr, cycle_count).value_or(0); // unmapped device space reads 0
     }
     return ram.read32(addr);
   }
@@ -66,6 +78,13 @@ template <typename BType> struct BaseCPU {
   auto get_vram() { return ram.from(0x800000); }
 
   auto get_prev_pc() -> std::uint32_t { return PC - 4; }
+
+  /// Cycles since reset. Devices read it to time themselves.
+  [[nodiscard]] auto cycles() const -> std::uint64_t { return cycle_count; }
+
+  /// Burns n cycles without executing anything, e.g. a hook waiting on a
+  /// device, the way a BIOS routine spins on a status bit.
+  auto stall(std::uint64_t n) -> void { cycle_count += n; }
 
   auto check_arith(uint32_t s1, uint32_t s2, uint32_t res, bool isSub) -> void {
     set_zero(res);
@@ -163,13 +182,12 @@ template <typename BType> struct BaseCPU {
 
 private:
   std::uint32_t PC = 0;
+  std::uint64_t cycle_count = 0;
 };
 
-// The default machine: a serial port at the start of the device area, right
-// above the 32MB of RAM.
-inline constexpr uint32_t SERIAL_BASE = 0x0200'0000;
-using BasicBus = Bus<Mapped<BasicSerial<>, SERIAL_BASE>>;
+using BasicBus = SpecBus<DefaultSpec>;
+using Serial = SpecSerial<DefaultSpec>;
 
 // The rest of the codebase (execute.hpp, TUI, tests, tools) uses this name.
 // run_cycle/run_until_halt are explicitly instantiated for it in cpu.cpp.
-using CPU = BaseCPU<BasicBus>;
+using CPU = BaseCPU<DefaultSpec>;

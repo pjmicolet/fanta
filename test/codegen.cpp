@@ -604,7 +604,7 @@ TEST_CASE("Bitwise - Mixed With Arithmetic And Comparison") {
 // --- Intrinsics -------------------------------------------------------------
 namespace {
 auto serialOf(CPU &cpu) -> const std::string & {
-  return cpu.bus.get<BasicSerial<>>().output;
+  return cpu.bus.get<Serial>().output;
 }
 } // namespace
 

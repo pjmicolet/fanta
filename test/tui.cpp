@@ -291,6 +291,7 @@ TEST_CASE("Dump Includes Serial Output") {
   CPU cpu{};
   TUI tui(cpu);
   cpu.store(0x0200'0000, 'H');
+  cpu.stall(Serial::cycles_per_char); // wait for the port to be free again
   cpu.store(0x0200'0000, 'i');
   tui.dump_state(path);
   std::ifstream in(path);
@@ -305,7 +306,7 @@ TEST_CASE("Reset Clears Serial Output") {
   TUI tui(cpu);
   cpu.store(0x0200'0000, 'x');
   tui.reset();
-  REQUIRE_TRUE(cpu.bus.get<BasicSerial<>>().output.empty());
+  REQUIRE_TRUE(cpu.bus.get<Serial>().output.empty());
 }
 
 // --- Code mode (Fanta source) ----------------------------------------------
