@@ -6,8 +6,8 @@ Usage:
   tools/tidy-summary.py [REGEX] --from LOG  summarise saved clang-tidy output instead
   add --update to accept the current findings as the baseline
 
-A finding's identity is file + check + message, so line shifts don't make it "new". The
-baseline is local, in .cache/tidy-baseline.txt. Findings still go to the user for triage:
+A finding's identity is file + check + message + occurrence, so line shifts don't make it
+"new". The baseline is local, in .cache/tidy-baseline.txt. Findings still go to the user for triage:
 see CLAUDE.md §5.
 """
 import argparse
@@ -28,13 +28,21 @@ def relative(path):
 
 
 def parse(log):
-    """Return {identity: first line number}; headers repeat once per includer."""
-    found = {}
+    """Return {identity: line number}; a repeat of one location is a header's other includer."""
+    found, locations, counts = {}, set(), collections.Counter()
     for line in log.splitlines():
         m = FINDING.match(line)
-        if m:
-            path, number, _, message, check = m.groups()
-            found.setdefault((relative(path), check, message), int(number))
+        if not m:
+            continue
+        path, number, _, message, check = m.groups()
+        location = (relative(path), number, check, message)
+        if location in locations:
+            continue
+        locations.add(location)
+        # The same message can recur in a file, so each occurrence gets its own identity.
+        base = (relative(path), check, message)
+        counts[base] += 1
+        found[base + (str(counts[base]),)] = int(number)
     return found
 
 
@@ -89,8 +97,9 @@ def main():
         seen = {k[0] for k in found}
         scope = {k for k in old if not args.regex or k[0] in seen or re.search(args.regex, k[0])}
         print(f"\n{len(new)} new, {len(scope - set(found))} gone since the baseline")
-        for path, check, message in new[:MAX_NEW]:
-            print(f"{path}:{found[(path, check, message)]}: {message} [{check}]")
+        for key in new[:MAX_NEW]:
+            path, check, message, _ = key
+            print(f"{path}:{found[key]}: {message} [{check}]")
         if len(new) > MAX_NEW:
             print(f"... and {len(new) - MAX_NEW} more")
 
