@@ -15,6 +15,7 @@ Crashes and hangs reproduce with `tools/crash.py fanta-compiler c.fn -o c.bin`. 
 | B7 | A source file containing only `@` | Crash | Dereferences an errored `expected` | `Parser::Parser` |
 | B6 | EOF inside a body; `fn main(1)` | Parser hangs | Parser loops without advancing | `compiler/parser.cpp` |
 | B10 | `for (; i < 3; i = i + 1)` | `bad_variant_access` error | Empty init is read as a `VariableDecl` | `compiler/SimpleIRPass.cpp` |
+| New (`lang/intrin`, from reading the code, not run) | `let x : int = @print(72);` | `x` gets a stale `R0` | Hooks don't set `R0`, and an intrinsic in value position isn't rejected | `compiler/SimpleIRPass.cpp`, `vm/execute.hpp` |
 | B4 | `2 * 3`, `6 / 3` | Program halts early, wrong result | Unsupported operators map to opcode 0 (HALT) | `getOpcodeFromString` |
 | B3 | `let a : int = 70000;` | Value truncated to `0x1170` | Literals above `0xFFFF` aren't built up | `compiler/SimpleIRPass.cpp`, `compiler/instruction_emit.cpp` |
 | New | `return qd;` with `qd` undefined | Compiles without error | Undefined variables aren't rejected | Compiler |

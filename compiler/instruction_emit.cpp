@@ -48,9 +48,16 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
     il[movId] = Instructions::Emitter::two_op_imm(Info::Instructions::MOV_IMM,
                                                   reg, globalBaseAddr);
   }
+  for (const auto &[idx, name] : intrinsicLinks) {
+    const auto hook = intrinsics.find(name);
+    if (hook == intrinsics.end()) {
+      throw std::runtime_error("Unknown symbol: " + std::string{name});
+    }
+    il[idx] = Instructions::Emitter::single_inst(Info::Instructions::CALL,
+                                                 hook->second - (idx * 4));
+  }
   for (const auto &[idx, linkName] : missingLinks) {
-    if (!resolvedAddresses.contains(linkName) &&
-        !intrinsics.contains(linkName)) {
+    if (!resolvedAddresses.contains(linkName)) {
       throw std::runtime_error("Unknown symbol: " + std::string{linkName});
     }
     const auto &func = il[idx];
@@ -64,9 +71,7 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
         (opcode == Info::Instructions::BMI) ||
         (opcode == Info::Instructions::JREL) ||
         (opcode == Info::Instructions::JUMP)) {
-      auto newAddr = linkName[0] == '@'
-                         ? intrinsics[linkName] - (idx * 4)
-                         : (resolvedAddresses[linkName] - (idx)) * 4;
+      auto newAddr = (resolvedAddresses[linkName] - (idx)) * 4;
       auto newFunc = Instructions::Emitter::single_inst(opcode, newAddr);
       il[idx] = newFunc;
     } // it's a call
@@ -83,8 +88,9 @@ auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                      il.push_back(Instructions::Emitter::single_inst(
                          Info::Instructions::CALL,
                          -1)); // We probably don't know the callsite yet.
-                     missingLinks.push_back(
-                         {static_cast<uint32_t>(il.size() - 1), op.name});
+                     (op.cn == INTRINSIC ? intrinsicLinks : missingLinks)
+                         .push_back(
+                             {static_cast<uint32_t>(il.size() - 1), op.name});
                      if (op.dest) {
                        il.push_back(Instructions::Emitter::two_op(
                            Info::Instructions::MOV_REG, op.dest->val, 0));
@@ -141,8 +147,8 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
               il.push_back(Instructions::Emitter::single_inst(
                   Info::Instructions::CALL,
                   -1)); // We probably don't know the callsite yet.
-              missingLinks.push_back(
-                  {static_cast<uint32_t>(il.size() - 1), op.name});
+              (op.cn == INTRINSIC ? intrinsicLinks : missingLinks)
+                  .push_back({static_cast<uint32_t>(il.size() - 1), op.name});
               if (op.dest) {
                 il.push_back(Instructions::Emitter::two_op(
                     Info::Instructions::MOV_REG, op.dest->val, 0));
@@ -265,6 +271,7 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,
 auto InstructionEmitter::reset() -> void {
   globalBaseMovs.clear();
   missingLinks.clear();
+  intrinsicLinks.clear();
   resolvedAddresses.clear();
   intrinsics.clear();
 }

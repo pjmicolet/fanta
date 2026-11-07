@@ -32,7 +32,8 @@ private:
                       const GlobalTable &gt, LocalTable &lt, TempReg tr)
       -> void;
   auto emitCall(const Parser &p, const AST::FunctionCall &node, IRListing &ir,
-                const GlobalTable &gt, LocalTable &lt) -> void;
+                const GlobalTable &gt, LocalTable &lt,
+                std::optional<TempReg> dest = std::nullopt) -> void;
   auto emitIf(const Parser &p, const AST::IfStm &ifStm, IRListing &ir,
               const GlobalTable &gt, LocalTable &lt) -> void;
   auto emitFor(const Parser &p, const AST::For &forStm, IRListing &ir,

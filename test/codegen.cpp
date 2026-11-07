@@ -616,6 +616,14 @@ TEST_CASE("Intrinsic - @print Sends Its Argument To Serial") {
   REQUIRE_SAME(std::string{"H"}, serialOf(cpu));
 }
 
+TEST_CASE("Intrinsic - Value Position Still Calls The Hook") {
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "let x : int = @print(72);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"H"}, serialOf(cpu));
+}
+
 TEST_CASE("Intrinsic - Repeated @print Calls Keep Source Order") {
   // Each call sits at a different index, so this also covers the link-time
   // offset being computed per call site rather than once.

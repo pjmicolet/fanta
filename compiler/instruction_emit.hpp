@@ -29,6 +29,7 @@ private:
   using funcName = std::string_view;
   using globalName = std::string_view;
   std::vector<std::pair<index, globalName>> missingLinks;
+  std::vector<std::pair<index, funcName>> intrinsicLinks;
   std::unordered_map<funcName, uint32_t> resolvedAddresses;
   std::unordered_map<funcName, uint32_t> intrinsics;
   std::vector<index> globalBaseMovs;

@@ -40,6 +40,7 @@ The Fanta CPU is a custom 32-bit RISC processor designed for 90s-style execution
 * **Control Flow:** Branches and `CALL` are PC-relative, offset from the instruction's own address, which is what allows position-independent code.
 * **Signed Comparisons:** These rely on the N flag (`BPL`/`BMI`).
 * **Devices:** loads and stores at or above `0x02000000` go to the bus. The serial port is mapped there.
+* **Hooks:** `CALL` targets from `0xFFFFFF00` run a VM intrinsic such as `@print` instead of jumping (`common/hook.hpp`). This range is outside RAM and the device area. `CALL`'s 26-bit offset can't reach it from the top 256 bytes of RAM, so don't place code there.
 
 ---
 

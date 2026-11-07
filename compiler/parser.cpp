@@ -4,6 +4,7 @@
 #include <charconv>
 #include <fanta_utils.hpp>
 #include <print>
+#include <stdexcept>
 
 Parser::Parser(std::string program) : program_(program), lexer(program_) {
   currentToken = *lexer.getToken();
@@ -359,6 +360,12 @@ auto Parser::walkThroughCallArgs(std::vector<Fanta::AST::NodeIndex> &args)
     -> void {
   while (currentToken.t != Lexer::TokenType::CloseParam) {
     auto expr = walkExpression(Precedence::LOWEST);
+    // walkPrefix consumes nothing when it can't start an expression, so going
+    // round again would never reach the CloseParam (or Eof).
+    if (expr == static_cast<Fanta::AST::NodeIndex>(-1)) {
+      throw std::runtime_error("Parse error: expected an expression or ')' in "
+                               "call arguments");
+    }
     args.push_back(expr);
     auto c = expect(Lexer::TokenType::Comma);
   }
@@ -386,7 +393,10 @@ auto Parser::walkPrefix() -> Fanta::AST::NodeIndex {
     Fanta::AST::Identifier id{intrinsicName->lexeme};
     asts.push_back({id, 0});
     auto idIndx = asts.size() - 1;
-    auto openParam = expect(Lexer::TokenType::OpenParam);
+    if (!expect(Lexer::TokenType::OpenParam)) {
+      throw std::runtime_error("Parse error: expected '(' after intrinsic " +
+                               std::string{intrinsicName->lexeme});
+    }
     std::vector<Fanta::AST::NodeIndex> args;
     walkThroughCallArgs(args);
     auto b = expect(Lexer::TokenType::CloseParam);

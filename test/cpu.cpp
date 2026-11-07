@@ -423,6 +423,25 @@ TEST_CASE("Call Into The Hook Range Runs The Hook Without Jumping") {
   REQUIRE_SAME(fresh.registers[16], cpu.registers[16]); // no return address
 }
 
+TEST_CASE("Hook Range Is Reachable Up To The Top 256 Bytes Of RAM") {
+  constexpr uint32_t lastInst = 0x0200'0000 - 0x100;
+  CPU fresh{};
+  CPU cpu{};
+  cpu.store(lastInst, Instructions::Emitter::single_inst(
+                          Fanta::Info::Instructions::CALL,
+                          static_cast<int32_t>(Fanta::HOOK_BASE - lastInst)));
+  cpu.set_pc(lastInst);
+  cpu.run_cycle();
+  REQUIRE_SAME(lastInst + 4, cpu.get_pc());
+  REQUIRE_SAME(fresh.registers[16], cpu.registers[16]); // no return address
+}
+
+TEST_CASE("Call To The Old Hook Address In RAM Is An Ordinary Call") {
+  constexpr uint32_t oldHook = 0x0010'0000;
+  auto cpu = cpuAfterCallTo(oldHook);
+  REQUIRE_SAME(oldHook, cpu.get_pc());
+}
+
 TEST_CASE("Call Just Past The Hook Range Is An Ordinary Call") {
   CPU fresh{};
   const uint32_t past = Fanta::HOOK_END + 4;
