@@ -40,18 +40,24 @@ A custom 32-bit RISC CPU, compiler, VM and TUI debugger for a 90s-style PC. Docs
   large C++ file.
 - `tools/tui-shots.py [--update]`: renders standard TUI workflows and prints only screen changes.
 - `tools/tidy-summary.py [regex] [--update]`: clang-tidy counts by check, plus new findings.
+- `tools/crash.py TARGET [ARGS]`: runs under sanitizers and prints a short crash report.
 - `tools/token-usage.py [--tools]`: token use per session and subagent.
 - **TUI safety:** wrap external assembler calls in `try-catch`, so malformed experimental
   instructions can't crash the TUI.
 
-## 4. Common Pitfalls
+## 4. Debugging
+Check `docs/known_bugs.md` first. Reproduce the failure, run `tools/crash.py`, then read only the
+reported ranges. After two failed theories, stop and tell the user what's known. Add any new root
+cause to `docs/known_bugs.md`.
+
+## 5. Common Pitfalls
 - **PC underflow:** check `PC < 4` when calculating "previous PC".
 - **Opcodes** are shifted left by 26 bits.
 - **Literals** after `#` or `$` are hexadecimal by default.
 - **Immediates** are 16-bit (`0x0000`-`0xFFFF`). Build larger constants with `LSH`/`ADD`.
 - **Mnemonics** are normalized to UPPERCASE before Registry lookup.
 
-## 5. Static Analysis
+## 6. Static Analysis
 `-Wall -Wextra` are always on. Lint with `tools/run-clang-tidy.sh [file-regex]`, and raise new
 findings on touched files in the same session. Don't bulk-fix: some point to real bugs, some need
 re-architecture, some deserve a suppression. Bring findings to the user first. In `tui/` and
