@@ -1,6 +1,6 @@
 # Fanta Architecture & Compiler Developer Guide
 
-Welcome to the central developer guide for **Project Fanta**. This document maps out the system architecture, memory map, stack layouts, instruction formats, and compiler pipeline to serve as a reliable reference when returning to or scaling the codebase.
+Welcome to the central developer guide for **Project Fanta**. This document maps out the system architecture, memory map, stack layouts, instruction formats, and compiler pipeline to serve as a reliable reference when returning to or scaling the codebase. It describes what exists today; `docs/README.md` indexes the rest, including planned designs.
 
 ---
 
@@ -32,10 +32,11 @@ The Fanta CPU is a custom 32-bit RISC processor designed for 90s-style execution
 ### Key Specs:
 * **Word Size:** 32-bit (4 bytes).
 * **RAM Size:** 32MB flat memory.
-* **Stack Position:** The Stack Pointer (`SP`/`R16`) starts at the top of the stack space (`0x7FFFFF`) and grows downward.
+* **Stack Position:** The Stack Pointer (`SP`/`R16`) starts at the top of the stack space (`0x7FFFFC`, word aligned) and grows downward.
 * **VRAM Mapping:** Standard VRAM starts at address `0x800000` (8MB boundary).
   * Resolution: 320x240 @ 32bpp.
   * Pitch: 1280 bytes per row.
+* **Devices:** loads and stores at or above `0x02000000` go to the bus. The serial port is mapped there.
 
 ---
 
@@ -92,7 +93,7 @@ Standard formats:
 | **SUB** | THREE_OP | `0x05` | `0x06` | Dest = Src1 - Src2 |
 | **STORE** | MEM | — | `0x08` | `[Dest_Base + Offset] = Reg_Val` |
 | **LOAD** | MEM | — | `0x09` | `Reg_Val = [Src_Base + Offset]` |
-| **CALL** | BRANCH | — | `0x15` | Call subroutine at absolute/relative PC |
+| **CALL** | BRANCH | — | `0x15` | Call subroutine at a PC-relative offset |
 | **RET** | RET | `0x16` | — | Return from subroutine |
 | **PUSH** | STACK | `0x1D` | — | Push register onto stack, SP -= 4 |
 | **POP** | STACK | `0x1E` | — | Pop stack to register, SP += 4 |
@@ -101,7 +102,7 @@ Standard formats:
 
 ## 4. The Compilation Pipeline
 
-The Fanta compiler target runs a flat multi-pass sequence to turn source `.fan` files into raw `.bin` executables.
+The Fanta compiler target runs a flat multi-pass sequence to turn source `.fn` files into raw `.bin` executables.
 
 ```
  +-------------+       +-------------+       +-------------------+       +-----------------+
@@ -130,7 +131,7 @@ The Fanta compiler target runs a flat multi-pass sequence to turn source `.fan` 
 Fanta provides high-signal debugging tools:
 
 1. **Modal TUI (`fanta-tui`):**
-   * Vim-inspired modal environment: `NORMAL`, `INSERT`, `ZOOM`, `COMMAND`.
+   * Vim-inspired modal environment: `NORMAL`, `INSERT`, `COMMAND`.
    * Live memory patching directly upon hitting `ENTER`.
 2. **High-Signal Trace Diff (`fanta-diff`):**
    * Trace execution using: `./build/fanta-diff <file.asm>`.

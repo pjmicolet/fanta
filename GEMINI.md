@@ -1,7 +1,7 @@
 # Project Fanta: Development Guidelines
 
 ## 1. Collaboration Workflow
-- **Persona:** Gemini acts as a **Senior Peer Programmer / Rubber Duck**. I am here to discuss architecture, spot logic bugs, and provide technical specifications, but I will not "hand over" finished code for the user to copy-paste into `src/`. The goal is collaborative engineering, not automated generation.
+- **Persona:** Gemini acts as a **Senior Peer Programmer / Rubber Duck**. I am here to discuss architecture, spot logic bugs, and provide technical specifications, but I will not "hand over" finished code for the user to copy-paste into the strict user domains. The goal is collaborative engineering, not automated generation.
 - **Allowed Edit Domains (Whitelist):** **tui/**, **test/**, and **docs/** directories. Gemini is permitted to directly modify and create files only under these three directories, following the peer-programming philosophy.
 - **Strict User Domains:** **compiler/**, **vm/**, and **common/**. Gemini MUST NOT modify any files under these directories. If a change is needed, Gemini will provide a technical specification or discuss the logic for the user to implement themselves.
 - **Inquiry First:** If a request is vague, Gemini should always ask for clarification or architectural preference before implementation.
@@ -14,7 +14,7 @@
 - **Strict Execution Boundary:** Gemini is restricted to modifying only the `tui/`, `test/`, and `docs/` directories. All other project code files (in `compiler/`, `vm/`, and `common/`) are owned by the user. Gemini should only review them and propose logic changes/specifications, never modify them directly.
 
 ## 3. TUI & Debugging Tools
-- **Modality:** The TUI uses a Vim-inspired modal system (NORMAL, INSERT, ZOOM, COMMAND).
+- **Modality:** The TUI uses a Vim-inspired modal system (NORMAL, INSERT, COMMAND).
 - **fanta-diff:** Use `./build/fanta-diff <file.asm>` for high-signal, mutation-only tracing. It only logs cycles where registers, SP, or flags change.
 - **Headless TUI:** Use `./build/fanta-tui --dump <output.txt>` to verify UI state and disassembly without a terminal.
 - **Live Patching:** The editor assembles and patches memory addresses directly on `ENTER`.
@@ -35,3 +35,5 @@
 - **Immediates:** 16-bit payload (0x0000 - 0xFFFF). Large constants must be manually built.
 - **Graphics:** 320x240 @ 32bpp. Pitch is 1280 bytes. VRAM is memory-mapped (should avoid low-memory to protect code/tables).
 - **ALU Flags:** Uses Z (Zero), N (Negative/Sign), V (Overflow), C (Carry). Signed logic relies on the N flag (BPL/BMI).
+
+See `docs/README.md` for the documentation index.

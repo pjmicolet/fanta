@@ -24,9 +24,9 @@ effect when the program reaches a `CIP`.
 **Known issues to resolve first:**
 - **B2 (fixed):** SP now starts at `0x7FFFFC`, the top word below VRAM, so stack pushes no longer
   overwrite pixel 0.
-- **B14:** the instruction counter that drives VBLANK is a file-scope global, so it is shared
-  between CPU instances. It should be a per-CPU countdown (perf finding P1). That is also where
-  the preemption check below belongs.
+- **B14 (fixed):** the instruction counter that drives VBLANK is now the per-CPU `inst_count`. It
+  could still become a countdown (perf finding P1), which is also where the preemption check below
+  belongs.
 
 ---
 
@@ -95,10 +95,12 @@ sequenceDiagram
 
 - Add `IE` (Interrupt Enable) to the status flags. Today `status_reg` is a
   `std::array<std::uint8_t, 4>` indexed by raw `0..3`. With the flag enum from design finding D9,
-  `IE` is one more enumerator, `{ ZERO, NEGATIVE, OVFL, CARRY, IE, COUNT }`.
+  `IE` is one more enumerator, `{ ZERO, NEGATIVE, OVFL, CARRY, IE, MODE, COUNT }`.
+- Add `MODE` (0 = kernel, 1 = user). It resets to 0, trap entry sets it to 0, and `RETI` restores
+  it. `docs/adaptive_cpu.md` depends on it to keep the adaptive unit out of kernel code.
 - No separate `IP` (pending) bit is needed, because `cip_interrupts` already is the pending
   register.
-- Flags are pushed as one packed word: bit 0 Z, bit 1 N, bit 2 V, bit 3 C, bit 4 IE.
+- Flags are pushed as one packed word: bit 0 Z, bit 1 N, bit 2 V, bit 3 C, bit 4 IE, bit 5 MODE.
 
 ---
 
@@ -133,9 +135,8 @@ rejected the earlier draft's `0x1F`/`0x20`.
    with `IE = 1` *is* the kernel, so its trap handler is the program's own code. That's fine, but
    it means the first programs to enable `IE` must be written as trap handlers (save and restore
    everything, end in `RETI`), not as `CIP` handlers.
-4. **Mode bit and kernel stack:** an OS will need a user/kernel mode bit and a separate kernel SP
-   on entry. Decide whether to reserve the status bit now even while everything runs in kernel
-   mode.
+4. **Partly resolved: mode bit yes, kernel stack open.** The mode bit is in §4. Still open: whether
+   trap entry switches to a separate kernel SP, and which memory protection scheme to use.
 
 ---
 
@@ -157,6 +158,7 @@ lands first, steps 1–3 collapse to one row per instruction.
 6. **Tests** (`test/cpu.cpp`):
    - `EI` with a line already pending enters the handler on the next instruction.
    - With `IE = 0`, a pending line stays pending and `CIP` still services it (user layer).
-   - Entry pushes two words, and `RETI` restores PC, flags and `IE`, with SP balanced.
+   - Entry pushes two words and enters kernel mode, and `RETI` restores PC, flags, `IE` and `MODE`,
+     with SP balanced.
    - No nesting: a second pending line during the handler waits until `RETI`.
    - The stack never touches VRAM (already covered by the B2 tests).
