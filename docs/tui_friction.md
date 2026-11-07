@@ -29,6 +29,7 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 2026-10-31  cc  a new .fn shows "ASM build #0 (derived ...)" full of HALTs from empty memory
 2026-10-31  cc  headless screenshots: F10 and :out act as if the terminal were 80x24 whatever --size says (term_w/term_h are only set in update())
 2026-10-31  cc  test/serial_hello.asm still says "Press 'o' in the TUI to see it"; o does nothing now
+2026-11-07  cc  building `let b : int = ;` can crash the TUI, or report OK when it doesn't                           (compiler bug, not TUI: out-of-bounds read in emitVariableIR)
 ```
 
 ## Parked ideas

@@ -36,6 +36,11 @@ A custom 32-bit RISC CPU, compiler, VM and TUI debugger for a 90s-style PC. Docs
 - `./build/fanta-tui <file> --screen <out.txt> --size 120x40 --keys "<F5><FRAME><F10>"`: renders
   the real screen as text after the keystrokes (`<F1>`..`<F12> <ESC> <C-c> <CR> <TAB> <BS> <UP>
   <DOWN> <LEFT> <RIGHT> <FRAME>`).
+- `tools/outline.py <file>`: lists types and functions with line ranges. Use it before reading a
+  large C++ file.
+- `tools/tui-shots.py [--update]`: renders standard TUI workflows and prints only screen changes.
+- `tools/tidy-summary.py [regex] [--update]`: clang-tidy counts by check, plus new findings.
+- `tools/token-usage.py [--tools]`: token use per session and subagent.
 - **TUI safety:** wrap external assembler calls in `try-catch`, so malformed experimental
   instructions can't crash the TUI.
 
