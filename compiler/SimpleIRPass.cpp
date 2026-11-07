@@ -223,32 +223,7 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
             }
           },
           [&](const AST::FunctionCall &fcall) {
-            CallFunc cf;
-            cf.dest = {dest, true};
-            cf.name =
-                std::get<AST::Identifier>(p.getNodeAtIndex(fcall.funcNameIdx).t)
-                    .name;
-            for (auto it = fcall.params.rbegin(); it != fcall.params.rend();
-                 ++it) {
-              auto expr = lt.allocateAnonymous();
-              emitExpression(p, p.getNodeAtIndex(*it), ir, gt, lt, expr);
-              IROp op{};
-              op.opcode = Info::Instructions::PUSH;
-              op.destination = {expr, true};
-              ir.push_back(op);
-            }
-            ir.push_back(cf);
-            // Restore stack pointer at the end
-            if (!fcall.params.empty()) {
-              IROp restoreStack{};
-              restoreStack.opcode = Info::Instructions::ADD_IMM;
-              restoreStack.source2 = {
-                  static_cast<uint32_t>(4 * fcall.params.size()), false};
-              restoreStack.source1 = {Info::Registers::SP, false};
-              restoreStack.destination = {Info::Registers::SP, false};
-              restoreStack.s2type = Immediate;
-              ir.push_back(restoreStack);
-            }
+            emitCall(p, fcall, ir, gt, lt, dest);
           },
           [&](const auto &other) {},
       },
@@ -498,8 +473,12 @@ auto SimpleIRPass::emitIf(const Parser &p, const AST::IfStm &ifStm,
 
 auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
                             IRListing &ir, const GlobalTable &gt,
-                            LocalTable &lt) -> void {
+                            LocalTable &lt, std::optional<TempReg> dest)
+    -> void {
   CallFunc cf;
+  if (dest) {
+    cf.dest = Operand{*dest, true};
+  }
   if (fcall.isIntrinsic == AST::FunctionNature::INTRINSIC) {
     cf.cn = INTRINSIC;
   }

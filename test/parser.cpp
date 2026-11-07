@@ -1,6 +1,7 @@
 #include "ast.hpp"
 #include "lexer.hpp"
 #include <parser.hpp>
+#include <stdexcept>
 #include <testframework/testing.hpp>
 #include <variant>
 
@@ -216,6 +217,26 @@ TEST_CASE("Intrinsic Call - Binds Like A Call Inside An Expression") {
   auto call =
       std::get<Fanta::AST::FunctionCall>(p.getNodeAtIndex(mult.lhsOp).t);
   REQUIRE_SAME(Fanta::AST::INTRINSIC, call.isIntrinsic);
+}
+
+namespace {
+auto failsToParse(const char *source) -> bool {
+  try {
+    Parser p{source};
+    p.fullWalk();
+  } catch (const std::runtime_error &) {
+    return true;
+  }
+  return false;
+}
+} // namespace
+
+TEST_CASE("Malformed Calls Report An Error Instead Of Hanging") {
+  REQUIRE_TRUE(failsToParse("@print(1;"));
+  REQUIRE_TRUE(failsToParse("@print;"));
+  REQUIRE_TRUE(failsToParse("@print(1"));
+  REQUIRE_TRUE(failsToParse("f(1"));
+  REQUIRE_TRUE(failsToParse("f(,)"));
 }
 
 TEST_CASE("Regular Call Is Not Intrinsic") {

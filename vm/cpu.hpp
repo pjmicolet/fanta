@@ -167,7 +167,8 @@ private:
 
 // The default machine: a serial port at the start of the device area, right
 // above the 32MB of RAM.
-using BasicBus = Bus<Mapped<BasicSerial<>, 0x0200'0000>>;
+inline constexpr uint32_t SERIAL_BASE = 0x0200'0000;
+using BasicBus = Bus<Mapped<BasicSerial<>, SERIAL_BASE>>;
 
 // The rest of the codebase (execute.hpp, TUI, tests, tools) uses this name.
 // run_cycle/run_until_halt are explicitly instantiated for it in cpu.cpp.

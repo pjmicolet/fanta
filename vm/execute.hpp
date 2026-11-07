@@ -3,7 +3,6 @@
 #include "../common/cpu_info.hpp"
 #include "../common/hook.hpp"
 #include "cpu.hpp"
-#include <print>
 
 // Execute semantics for each opcode, dispatched from CPU::run_cycle. Kept in
 // their own namespace so Halt/Nop/Ret/Call don't sit beside the encoder
@@ -68,18 +67,16 @@ enum OpType { ARITH_ADD, ARITH_SUB, LOGICAL, LSHIFT };
 using HookFn = auto (*)(CPU &) -> void;
 
 // DEFINE INTRINSICS HERE
-auto intrinPrint(CPU &cpu) -> void {
+inline auto intrinPrint(CPU &cpu) -> void {
   auto val = cpu.ram.read32(cpu.registers[16] + 4);
-  cpu.bus.write(0x0200'0000, val);
+  cpu.bus.write(SERIAL_BASE, val);
 }
 
 inline constexpr std::array<HookFn, Fanta::NUM_HOOKS> callHooks{&intrinPrint};
 
-auto callIntrin(CPU &cpu, uint32_t target) -> void {
-  const auto indx = (target - Fanta::HOOK_BASE) / 4;
-  if (indx < callHooks.size()) {
-    callHooks[indx](cpu);
-  }
+// target is range-checked by Call.
+inline auto callIntrin(CPU &cpu, uint32_t target) -> void {
+  callHooks[(target - Fanta::HOOK_BASE) / 4](cpu);
 }
 
 template <typename DestDecoder, typename S1Decoder, typename OptDecoder,
