@@ -35,9 +35,12 @@ struct VariableDecl {
   NodeIndex defineNode;
 };
 
+enum FunctionNature { UDEF, INTRINSIC };
+
 struct FunctionCall {
   NodeIndex funcNameIdx;
   std::vector<NodeIndex> params;
+  FunctionNature isIntrinsic = UDEF;
 };
 
 struct FunctionDef {

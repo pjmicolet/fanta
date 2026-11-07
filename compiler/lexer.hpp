@@ -52,6 +52,7 @@ struct Lexer {
     Not,
     BitOr,
     BitAnd,
+    Intrinsic,
   };
 
   struct Token {
@@ -248,6 +249,14 @@ private:
     case ':':
       return Token{TokenType::Colon, body_.substr(cursor_, 1), 0, cursor_,
                    cursor_++};
+    case '@':
+      auto start = ++cursor_;
+      while (cursor_ < end_ && allowedCharsInAlpha(body_[cursor_]) &&
+             (body_[cursor_] != ' ' || body_[cursor_] != '\0')) {
+        cursor_++;
+      }
+      return Token{TokenType::Intrinsic, body_.substr(start, cursor_ - start),
+                   0, start, cursor_};
     }
     return std::unexpected(
         LexError{LexErrorType::UnknownToken, 0, cursor_, cursor_++});

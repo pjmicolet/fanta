@@ -104,9 +104,9 @@ TEST_CASE("Precedence - Minus Is Left Associative") {
   auto inner =
       std::get<Fanta::AST::BinaryOperator>(p.getNodeAtIndex(outer.lhsOp).t);
   REQUIRE_SAME(Lexer::TokenType::Minus, inner.type);
-  REQUIRE_SAME("c",
-               std::get<Fanta::AST::Identifier>(p.getNodeAtIndex(outer.rhsOp).t)
-                   .name);
+  REQUIRE_SAME(
+      "c",
+      std::get<Fanta::AST::Identifier>(p.getNodeAtIndex(outer.rhsOp).t).name);
 }
 
 TEST_CASE("Precedence - Comparison Binds Tighter Than && / ||") {
@@ -134,12 +134,12 @@ TEST_CASE("For Loop AST Shape") {
   auto fr = std::get<Fanta::AST::For>(p.getNodeAtIndex(body.expressions[0]).t);
   REQUIRE_TRUE(std::holds_alternative<Fanta::AST::VariableDecl>(
       p.getNodeAtIndex(fr.init).t));
-  REQUIRE_SAME(Lexer::TokenType::Lesser,
-               std::get<Fanta::AST::BinaryOperator>(p.getNodeAtIndex(fr.comp).t)
-                   .type);
-  REQUIRE_SAME(Lexer::TokenType::Equal,
-               std::get<Fanta::AST::BinaryOperator>(p.getNodeAtIndex(fr.incr).t)
-                   .type);
+  REQUIRE_SAME(
+      Lexer::TokenType::Lesser,
+      std::get<Fanta::AST::BinaryOperator>(p.getNodeAtIndex(fr.comp).t).type);
+  REQUIRE_SAME(
+      Lexer::TokenType::Equal,
+      std::get<Fanta::AST::BinaryOperator>(p.getNodeAtIndex(fr.incr).t).type);
 }
 
 // Fails the test (instead of aborting the binary with bad_variant_access)
@@ -175,4 +175,52 @@ TEST_CASE("Precedence - Bitwise Sits Between Comparison And && / ||") {
   REQUIRE_SAME(Lexer::TokenType::BitAnd, bitAnd.type);
   REQUIRE_SAME(Lexer::TokenType::EqualComp, binOpAt(p, bitAnd.lhsOp).type);
   REQUIRE_SAME(Lexer::TokenType::BitOr, binOpAt(p, andOp.rhsOp).type);
+}
+
+TEST_CASE("Intrinsic Call") {
+  Parser p{"@print(a, 12);"};
+  p.walk();
+  auto node = p.getCurrentRoot();
+  REQUIRE_TRUE(std::holds_alternative<Fanta::AST::FunctionCall>(node.t));
+  auto call = std::get<Fanta::AST::FunctionCall>(node.t);
+
+  REQUIRE_SAME(Fanta::AST::INTRINSIC, call.isIntrinsic);
+  REQUIRE_SAME("print", std::get<Fanta::AST::Identifier>(
+                            p.getNodeAtIndex(call.funcNameIdx).t)
+                            .name);
+  REQUIRE_SAME(std::size_t{2}, call.params.size());
+  REQUIRE_SAME(
+      "a", std::get<Fanta::AST::Identifier>(p.getNodeAtIndex(call.params[0]).t)
+               .name);
+  REQUIRE_SAME(
+      12, std::get<Fanta::AST::IntLiteral>(p.getNodeAtIndex(call.params[1]).t)
+              .literal);
+}
+
+TEST_CASE("Intrinsic Call - No Args") {
+  Parser p{"@print();"};
+  p.walk();
+  auto call = std::get<Fanta::AST::FunctionCall>(p.getCurrentRoot().t);
+  REQUIRE_SAME(Fanta::AST::INTRINSIC, call.isIntrinsic);
+  REQUIRE_TRUE(call.params.empty());
+}
+
+TEST_CASE("Intrinsic Call - Binds Like A Call Inside An Expression") {
+  // 1 + @f(2) * 3  must parse as  1 + (@f(2) * 3).
+  Parser p{"1 + @f(2) * 3;"};
+  p.walk();
+  auto sum = std::get<Fanta::AST::BinaryOperator>(p.getCurrentRoot().t);
+  REQUIRE_SAME(Lexer::TokenType::Plus, sum.type);
+  auto mult = binOpAt(p, sum.rhsOp);
+  REQUIRE_SAME(Lexer::TokenType::Mult, mult.type);
+  auto call =
+      std::get<Fanta::AST::FunctionCall>(p.getNodeAtIndex(mult.lhsOp).t);
+  REQUIRE_SAME(Fanta::AST::INTRINSIC, call.isIntrinsic);
+}
+
+TEST_CASE("Regular Call Is Not Intrinsic") {
+  Parser p{"print(a);"};
+  p.walk();
+  auto call = std::get<Fanta::AST::FunctionCall>(p.getCurrentRoot().t);
+  REQUIRE_SAME(Fanta::AST::UDEF, call.isIntrinsic);
 }
