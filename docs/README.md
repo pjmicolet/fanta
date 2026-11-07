@@ -9,6 +9,7 @@ Read only what the task needs.
 | `pratt_parser.md` | Step-by-step traces of expression parsing | Tutorial |
 | `comparisons.md` | How comparisons lower to `CMP` and branches | Describes today |
 | `commenting_standards.md` | Doxygen conventions | Standard |
+| `review_checklist.md` | Project rules to check in code reviews | Standard |
 | `language_design.md` | Planned language, `comptime`, first kernel goal | Draft design |
 | `adaptive_cpu.md` | Self-reconfiguring CPU unit and its contracts | Draft design |
 | `cooperative_interrupts.md` | `CIP`, the user event layer | Agreed spec, not yet implemented |

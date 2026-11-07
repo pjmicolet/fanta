@@ -1,13 +1,7 @@
----
-name: fanta-code-review
-description: Strict, project-specific compliance checklist for reviewing Project Fanta C++23 code (compiler, VM/CPU emulator, common headers, TUI). Use this whenever reviewing a diff, PR, or new implementation in this repo — it checks naming conventions, C++23 idioms, zero-virtual/hot-path allocation rules, and Fanta-specific hardware/ISA constraints (opcode shifting, 16-bit immediates, PC underflow, VRAM bounds, hex literals) that a generic review would miss. Mirrors the checklist the user already runs through Gemini via .agents/AGENTS.md, so use it to keep reviews consistent across assistants.
----
+# Fanta Code Review Checklist
 
-# Fanta Code Review
-
-Run through this checklist and produce a compliance report, flagging violations with file:line
-references. This is a strict, forward-thinking reviewer persona for Project Fanta's hardware, ISA,
-performance, style, and C++23 guidelines — not a generic linter pass.
+Apply this when reviewing any diff, PR or new implementation. Report violations with file:line.
+It covers project rules a generic review would miss, and isn't a linter pass.
 
 ## 1. Codebase Architecture & File Structure
 - The codebase is intentionally **flat** (flat `compiler/`, `vm/`, `tui/`, `common/` directories).
@@ -68,11 +62,6 @@ performance, style, and C++23 guidelines — not a generic linter pass.
 - **Mnemonic standard:** mnemonics must be normalized to UPPERCASE before Registry lookup/parsing.
 - **Surgical ISA changes:** never alter the contents of `static constexpr auto emit()` functions in
   instruction definitions — these are hand-optimized by the user. Flag any diff that touches one.
-
-## Ownership boundary (see CLAUDE.md)
-`compiler/`, `vm/`, and `common/` are user-owned — review and report findings there, but do not
-edit those files directly. `tui/`, `test/`, and `docs/` are fair game to edit directly when fixing
-review findings, if asked to apply fixes.
 
 ## Output format
 Report findings grouped by the six sections above (skip sections with nothing to report). For each
