@@ -1,4 +1,5 @@
 #include "parser.hpp"
+#include "ast.hpp"
 #include "lexer.hpp"
 #include <charconv>
 #include <fanta_utils.hpp>
@@ -341,11 +342,7 @@ auto Parser::walkInfix(Fanta::AST::NodeIndex idx, Lexer::Token t)
     -> Fanta::AST::NodeIndex {
   if (t.t == Lexer::TokenType::OpenParam) {
     std::vector<Fanta::AST::NodeIndex> args;
-    while (currentToken.t != Lexer::TokenType::CloseParam) {
-      auto expr = walkExpression(Precedence::LOWEST);
-      args.push_back(expr);
-      auto c = expect(Lexer::TokenType::Comma);
-    }
+    walkThroughCallArgs(args);
     auto b = expect(Lexer::TokenType::CloseParam);
     Fanta::AST::FunctionCall fc{idx, args};
     asts.push_back({fc, 0});
@@ -355,6 +352,15 @@ auto Parser::walkInfix(Fanta::AST::NodeIndex idx, Lexer::Token t)
     Fanta::AST::BinaryOperator op{idx, rhsExpr, t.t};
     asts.push_back({op, 0});
     return asts.size() - 1;
+  }
+}
+
+auto Parser::walkThroughCallArgs(std::vector<Fanta::AST::NodeIndex> &args)
+    -> void {
+  while (currentToken.t != Lexer::TokenType::CloseParam) {
+    auto expr = walkExpression(Precedence::LOWEST);
+    args.push_back(expr);
+    auto c = expect(Lexer::TokenType::Comma);
   }
 }
 
@@ -373,6 +379,19 @@ auto Parser::walkPrefix() -> Fanta::AST::NodeIndex {
                     rhsLiteral->lexeme.data() + rhsLiteral->lexeme.size(), val);
     Fanta::AST::IntLiteral id{val};
     asts.push_back({id, 0});
+    return asts.size() - 1;
+  }
+  case Lexer::TokenType::Intrinsic: {
+    EXTRACT_TOKEN_TO_VAR_WRET(intrinsicName, Lexer::TokenType::Intrinsic, -1);
+    Fanta::AST::Identifier id{intrinsicName->lexeme};
+    asts.push_back({id, 0});
+    auto idIndx = asts.size() - 1;
+    auto openParam = expect(Lexer::TokenType::OpenParam);
+    std::vector<Fanta::AST::NodeIndex> args;
+    walkThroughCallArgs(args);
+    auto b = expect(Lexer::TokenType::CloseParam);
+    Fanta::AST::FunctionCall fc{idIndx, args, Fanta::AST::INTRINSIC};
+    asts.push_back({fc, 0});
     return asts.size() - 1;
   }
   case Lexer::TokenType::OpenParam: {

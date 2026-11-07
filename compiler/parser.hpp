@@ -51,6 +51,7 @@ private:
   auto walkFor() -> Fanta::AST::NodeIndex;
   auto walkBody() -> Fanta::AST::NodeIndex;
   auto walkIf() -> Fanta::AST::NodeIndex;
+  auto walkThroughCallArgs(std::vector<Fanta::AST::NodeIndex> &args) -> void;
 
   /**
    * @brief Starting point of pratt parser to deal with operand precedence.

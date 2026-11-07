@@ -139,7 +139,7 @@ TEST_CASE("Comparison And Logical Operator Lexing") {
 }
 
 TEST_CASE("Unknown Symbol Reports UnknownToken And Advances") {
-  std::string src = "@ x";
+  std::string src = "` x";
   Lexer lx{src};
   auto res = lx.getToken();
   REQUIRE_TRUE(!res.has_value());
@@ -217,4 +217,12 @@ TEST_CASE("Trailing & / | At End Of Input") {
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::BitOr, t7);
   auto t8 = lx2.getToken();
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Eof, t8);
+}
+
+TEST_CASE("Intrinsic Lexing") {
+  std::string src = "@print";
+  Lexer lx{src};
+  auto t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Intrinsic, t);
+  REQUIRE_SAME("@print", t->lexeme);
 }

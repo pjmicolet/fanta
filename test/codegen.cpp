@@ -600,3 +600,89 @@ TEST_CASE("Bitwise - Mixed With Arithmetic And Comparison") {
                      "}";
   REQUIRE_SAME(1, compileAndRun(code).registers[0]);
 }
+
+// --- Intrinsics -------------------------------------------------------------
+namespace {
+auto serialOf(CPU &cpu) -> const std::string & {
+  return cpu.bus.get<BasicSerial<>>().output;
+}
+} // namespace
+
+TEST_CASE("Intrinsic - @print Sends Its Argument To Serial") {
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "@print(72);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"H"}, serialOf(cpu));
+}
+
+TEST_CASE("Intrinsic - Repeated @print Calls Keep Source Order") {
+  // Each call sits at a different index, so this also covers the link-time
+  // offset being computed per call site rather than once.
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "@print(72);"
+                           "@print(105);"
+                           "@print(10);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"Hi\n"}, serialOf(cpu));
+}
+
+TEST_CASE("Intrinsic - @print Evaluates An Expression Argument") {
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "let a: int = 70;"
+                           "@print(a + 2);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"H"}, serialOf(cpu));
+}
+
+TEST_CASE("Intrinsic - @print Works From A Function Other Than main") {
+  auto cpu = compileAndRun("fn say(c: int) -> int {"
+                           "@print(c);"
+                           "return 0;"
+                           "}"
+                           "fn main() -> int {"
+                           "say(72);"
+                           "@print(105);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"Hi"}, serialOf(cpu));
+}
+
+TEST_CASE("Intrinsic - Execution Resumes After The Call With Locals Intact") {
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "let a: int = 7;"
+                           "@print(72);"
+                           "return a;"
+                           "}");
+  REQUIRE_SAME(7, cpu.registers[0]);
+  REQUIRE_SAME(std::string{"H"}, serialOf(cpu));
+}
+
+TEST_CASE("Intrinsic - Leaves SP Where It Found It") {
+  // The hook reads its argument without popping and the caller cleans up, so
+  // a hook that also popped would leave SP 4 bytes high per call.
+  auto with = compileAndRun("fn main() -> int {"
+                            "@print(72);"
+                            "@print(105);"
+                            "return 0;"
+                            "}");
+  auto without = compileAndRun("fn main() -> int {"
+                               "return 0;"
+                               "}");
+  REQUIRE_SAME(without.registers[16], with.registers[16]);
+}
+
+TEST_CASE("Intrinsic - Unknown Name Is A Link Error") {
+  bool threw = false;
+  try {
+    compileAndRun("fn main() -> int {"
+                  "@nope(1);"
+                  "return 0;"
+                  "}");
+  } catch (const std::runtime_error &) {
+    threw = true;
+  }
+  REQUIRE_TRUE(threw);
+}
