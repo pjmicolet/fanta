@@ -8,7 +8,7 @@ Usage:
 
 A finding's identity is file + check + message + occurrence, so line shifts don't make it
 "new". The baseline is local, in .cache/tidy-baseline.txt. Findings still go to the user for triage:
-see CLAUDE.md §5.
+see CLAUDE.md §6.
 """
 import argparse
 import collections
