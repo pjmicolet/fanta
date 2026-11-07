@@ -36,6 +36,9 @@ The Fanta CPU is a custom 32-bit RISC processor designed for 90s-style execution
 * **VRAM Mapping:** Standard VRAM starts at address `0x800000` (8MB boundary).
   * Resolution: 320x240 @ 32bpp.
   * Pitch: 1280 bytes per row.
+  * Graphics code must stay inside VRAM and off low memory, which holds code and tables.
+* **Control Flow:** Branches and `CALL` are PC-relative, offset from the instruction's own address, which is what allows position-independent code.
+* **Signed Comparisons:** These rely on the N flag (`BPL`/`BMI`).
 * **Devices:** loads and stores at or above `0x02000000` go to the bus. The serial port is mapped there.
 
 ---

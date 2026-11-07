@@ -1,6 +1,6 @@
 ---
 name: fanta-review
-description: Run Project Fanta's three-reviewer pass (performance, design, testing) in parallel and synthesise the results into a dated report under docs/reviews/. Use when the user asks for a review pass, "/fanta-review", or a review of the compiler/VM. Args - "full [paths...]" for a whole-tree pass, otherwise reviews the diff since main (or a given git range).
+description: Run the performance, design and test reviewers in parallel and write a dated report in docs/reviews/. Use for "/fanta-review" or a review pass over the compiler or VM. Args - "full [paths...]", or a git range (default: diff since main).
 ---
 
 # Fanta Review (coordinator)
@@ -23,8 +23,9 @@ Run `tools/run-clang-tidy.sh` restricted to the scope (file regex) and save the 
 
 ## 3. Fan out — one message, three Agent calls in parallel
 `fanta-perf-reviewer`, `fanta-design-reviewer`, `fanta-test-reviewer`. Each prompt includes:
-the scope (paths or range), the absolute path of its own scratch dir, the clang-tidy output path,
-and the previous report path if any. Do not restate the agent's instructions.
+the scope (paths or range), the absolute path of its own scratch dir and the clang-tidy output
+path. Do not restate the agent's instructions. Comparing with the previous report is your job, not
+the reviewers'.
 
 ## 4. Synthesise
 - **Verify before reporting.** Spot-check each high-severity finding against the code; drop or

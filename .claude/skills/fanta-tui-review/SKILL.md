@@ -1,6 +1,6 @@
 ---
 name: fanta-tui-review
-description: Run Project Fanta's periodic TUI design review. A usability reviewer drives the real TUI headlessly, checks it against docs/tui_spec.md, works through docs/tui_friction.md, and looks for things to remove; the coordinator verifies, updates the friction log and spec, and writes docs/reviews/YYYY-MM-DD-tui.md. Use at milestones (a batch of TUI changes landed, or a spec §5 interface landed in vm/compiler), or when the user asks for "/fanta-tui-review" or a TUI usability/design review.
+description: Run the periodic TUI design review against docs/tui_spec.md and docs/tui_friction.md, and write a dated report. Use for "/fanta-tui-review", a TUI usability review, or at milestones (a batch of TUI changes, or a spec §5 interface landed).
 ---
 
 # Fanta TUI Review (coordinator)
