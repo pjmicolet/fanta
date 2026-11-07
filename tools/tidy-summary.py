@@ -19,7 +19,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASELINE = os.path.join(ROOT, ".cache", "tidy-baseline.txt")
-FINDING = re.compile(r"^(/?[^\s:][^:]*):(\d+):\d+: (warning|error): (.*) \[([^\]]+)\]$")
+FINDING = re.compile(r"^(/?[^\s:][^:]*):(\d+):(\d+): (warning|error): (.*) \[([^\]]+)\]$")
 MAX_NEW = 40
 
 
@@ -34,8 +34,8 @@ def parse(log):
         m = FINDING.match(line)
         if not m:
             continue
-        path, number, _, message, check = m.groups()
-        location = (relative(path), number, check, message)
+        path, number, column, _, message, check = m.groups()
+        location = (relative(path), number, column, check, message)
         if location in locations:
             continue
         locations.add(location)
