@@ -51,6 +51,9 @@ CheckOptions:
   # Only enforce trailing commas where we chose them. Append would also
   # reflow every Token{...} and overloaded{...} that wraps at 80 columns.
   readability-trailing-comma.MultiLineCommaPolicy: Ignore
+  # Dispatchers (:commands, per-IR-node printers) are long and flat by
+  # nature; 50 still flags a function that has really grown out of hand.
+  readability-function-cognitive-complexity.Threshold: 50
 
 WarningsAsErrors: ''
 
