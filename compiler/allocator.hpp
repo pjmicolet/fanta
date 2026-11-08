@@ -15,7 +15,7 @@ struct Allocator {
 private:
   auto reset() -> void {
     next = 1;
-    for (int i = 0; i < usedRegisters.size(); i++)
+    for (std::size_t i = 0; i < usedRegisters.size(); i++)
       usedRegisters[i] = false;
     virtToReg.clear();
     regToVirt.clear();

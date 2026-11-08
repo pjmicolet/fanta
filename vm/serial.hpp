@@ -42,7 +42,7 @@ template <uint32_t Size = 8, uint64_t CyclesPerChar = 1> struct BasicSerial {
     ready_at_cycle = now + cycles_per_char;
   }
 
-  auto read(uint32_t offset, uint64_t now) const -> uint32_t {
+  [[nodiscard]] auto read(uint32_t offset, uint64_t now) const -> uint32_t {
     if (offset == 0)
       return 0; // nothing is ever received yet
     return now >= ready_at_cycle ? TX_READY : 0;

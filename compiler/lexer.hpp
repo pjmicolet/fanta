@@ -269,7 +269,7 @@ private:
     Symbol,
   };
 
-  auto getType(char c) const -> CharType {
+  [[nodiscard]] auto getType(char c) const -> CharType {
     if (::isalpha(c) || c == '_')
       return CharType::Alpha;
     if (::isdigit(c))
@@ -279,7 +279,7 @@ private:
     return CharType::Symbol;
   }
 
-  auto peek() const -> char {
+  [[nodiscard]] auto peek() const -> char {
     if (cursor_ + 1 < end_)
       return body_.at(cursor_ + 1);
     return '\0';

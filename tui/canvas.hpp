@@ -18,9 +18,9 @@ class Canvas {
 public:
   explicit Canvas(Layout::Rect r) : r_(r) {}
 
-  auto width() const -> int { return r_.w; }
-  auto height() const -> int { return r_.h; }
-  auto rect() const -> Layout::Rect { return r_; }
+  [[nodiscard]] auto width() const -> int { return r_.w; }
+  [[nodiscard]] auto height() const -> int { return r_.h; }
+  [[nodiscard]] auto rect() const -> Layout::Rect { return r_; }
 
   /// Blank the whole area (so nothing from a previous frame shows through).
   auto clear() const -> void {
@@ -56,7 +56,7 @@ public:
   }
 
   /// Border with a title in the top edge; returns the inner canvas.
-  auto frame(std::string_view title, attr_t attrs = A_NORMAL) const
+  [[nodiscard]] auto frame(std::string_view title, attr_t attrs = A_NORMAL) const
       -> Canvas {
     if (r_.w < 2 || r_.h < 2)
       return Canvas{{r_.x, r_.y, 0, 0}};

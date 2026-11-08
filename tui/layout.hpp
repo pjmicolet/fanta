@@ -21,16 +21,16 @@ struct Rect {
   int w = 0;
   int h = 0;
 
-  auto empty() const -> bool { return w <= 0 || h <= 0; }
-  auto right() const -> int { return x + w; }  // one past the last column
-  auto bottom() const -> int { return y + h; } // one past the last row
+  [[nodiscard]] auto empty() const -> bool { return w <= 0 || h <= 0; }
+  [[nodiscard]] auto right() const -> int { return x + w; }  // one past the last column
+  [[nodiscard]] auto bottom() const -> int { return y + h; } // one past the last row
   /// The area inside a one-character border.
-  auto inner() const -> Rect { return {x + 1, y + 1, w - 2, h - 2}; }
-  auto overlaps(const Rect &o) const -> bool {
+  [[nodiscard]] auto inner() const -> Rect { return {x + 1, y + 1, w - 2, h - 2}; }
+  [[nodiscard]] auto overlaps(const Rect &o) const -> bool {
     return !empty() && !o.empty() && x < o.right() && o.x < right() &&
            y < o.bottom() && o.y < bottom();
   }
-  auto inside(int cols, int rows) const -> bool {
+  [[nodiscard]] auto inside(int cols, int rows) const -> bool {
     return x >= 0 && y >= 0 && right() <= cols && bottom() <= rows;
   }
 };
@@ -57,7 +57,7 @@ struct Layout {
   std::optional<Rect> output_secondary; // a second tab, side by side (wide)
 
   /// Every pane that is present, for overlap checks.
-  auto panes() const -> std::array<std::optional<Rect>, 8> {
+  [[nodiscard]] auto panes() const -> std::array<std::optional<Rect>, 8> {
     return {status, hint,  code,   derived,
             registers, stack, output, output_secondary};
   }

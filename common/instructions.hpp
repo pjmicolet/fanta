@@ -113,15 +113,15 @@ struct Decode {
   uint32_t raw;
   constexpr Decode(uint32_t d) : raw(d) {}
 
-  constexpr auto getOpcode() const -> uint8_t { return (raw >> 26) & 0x3F; }
+  [[nodiscard]] constexpr auto getOpcode() const -> uint8_t { return (raw >> 26) & 0x3F; }
 
-  constexpr auto getDestSrc() const -> uint8_t { return (raw >> 21) & 0x1F; }
+  [[nodiscard]] constexpr auto getDestSrc() const -> uint8_t { return (raw >> 21) & 0x1F; }
 
-  constexpr auto getS1() const -> uint8_t { return (raw >> 16) & 0x1F; }
+  [[nodiscard]] constexpr auto getS1() const -> uint8_t { return (raw >> 16) & 0x1F; }
 
-  constexpr auto getS2() const -> uint8_t { return (raw >> 11) & 0x1F; }
+  [[nodiscard]] constexpr auto getS2() const -> uint8_t { return (raw >> 11) & 0x1F; }
 
-  constexpr auto getImm() const -> uint16_t { return raw & (0xFFFF); }
+  [[nodiscard]] constexpr auto getImm() const -> uint16_t { return raw & (0xFFFF); }
 };
 
 // constexpr assembler

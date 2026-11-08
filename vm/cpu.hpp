@@ -20,7 +20,7 @@ struct Memory {
 
   auto from(std::size_t base_addr) -> uint8_t * { return &memory[base_addr]; }
 
-  auto getSize() const -> std::size_t { return memory.size(); }
+  [[nodiscard]] auto getSize() const -> std::size_t { return memory.size(); }
 
 private:
   std::vector<std::uint8_t> memory; // 32MB
@@ -99,9 +99,9 @@ struct BaseCPU {
     }
   }
 
-  auto get_pc() const -> uint32_t { return PC; }
+  [[nodiscard]] auto get_pc() const -> uint32_t { return PC; }
 
-  auto get_sp() const -> uint32_t { return registers[16]; }
+  [[nodiscard]] auto get_sp() const -> uint32_t { return registers[16]; }
 
   auto set_pc(uint32_t pc_val) -> void { PC = pc_val; }
 

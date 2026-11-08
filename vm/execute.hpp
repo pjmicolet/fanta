@@ -82,7 +82,7 @@ inline auto intrinPrintu32(CPU &cpu) -> void {
   auto [end, _] =
       std::to_chars(buffer.data(), buffer.data() + buffer.size(), val);
 
-  for (const char *p = buffer.data(); p != end; *p++) {
+  for (const char *p = buffer.data(); p != end; ++p) {
     cpu.stall(cpu.bus.get<Serial>().cycles_until_ready(cpu.cycles()));
     cpu.store(SERIAL_BASE, *p);
   }

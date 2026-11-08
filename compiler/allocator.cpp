@@ -79,7 +79,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
   auto adjustment =
       offset + spillSize + 4; // Account for the R15 save later in the code
 
-  for (auto i = 0; i < std::min(fir.calleeRegs.size(), fir.insts.size()); i++) {
+  for (std::size_t i = 0; i < std::min(fir.calleeRegs.size(), fir.insts.size()); i++) {
     std::visit(overloaded{[&](IROp &op) {
                             if (op.opcode == Info::Instructions::LOAD &&
                                 op.source1.val == Info::Registers::FP &&
