@@ -530,7 +530,6 @@ auto SimpleIRPass::emitVariableIR(const Parser &p,
                                   const AST::VariableDecl &vdec, IRListing &ir,
                                   const GlobalTable &gt, LocalTable &lt)
     -> void {
-  auto type = vdec.type;
   auto varTReg = lt.allocateNamed(vdec.name, vdec.type);
 
   const auto &defineNode = p.getNodeAtIndex(vdec.defineNode);

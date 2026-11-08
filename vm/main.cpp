@@ -8,8 +8,6 @@
 #include <fstream>
 #include <string>
 
-constexpr int FPS = 60;
-constexpr int TIMING = 1000 / FPS;
 constexpr int VM_WIDTH = 320;
 constexpr int VM_HEIGHT = 240;
 constexpr int WINDOW_SCALE = 3;
