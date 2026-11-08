@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "lexer.hpp"
+#include <cstdint>
 
 namespace Fanta {
 namespace AST {
@@ -35,7 +36,7 @@ struct VariableDecl {
   NodeIndex defineNode;
 };
 
-enum FunctionNature { UDEF, INTRINSIC };
+enum FunctionNature : std::uint8_t { UDEF, INTRINSIC };
 
 struct FunctionCall {
   NodeIndex funcNameIdx;

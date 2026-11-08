@@ -2,6 +2,7 @@
 
 #include <ir.hpp>
 #include <vector>
+#include <cstdint>
 
 namespace Fanta {
 
@@ -23,7 +24,7 @@ private:
     offset = 0;
   }
 
-  enum SpillMechanism {
+  enum SpillMechanism : std::uint8_t {
     Store,        // For when you need to assign the register to a destination
     StoreAndLoad, // For when you are assigning sources and need to dump
   };

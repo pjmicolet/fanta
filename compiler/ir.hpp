@@ -13,7 +13,7 @@ struct Operand {
   bool isVirtual;
 };
 
-enum Source2Type { Register, Immediate };
+enum Source2Type : std::uint8_t { Register, Immediate };
 
 struct IROp {
   InstOp opcode;
@@ -32,7 +32,7 @@ struct FuncParam {
   std::uint32_t frameOffset;
 };
 
-enum CallNature { INTRINSIC, USER };
+enum CallNature : std::uint8_t { INTRINSIC, USER };
 
 struct CallFunc {
   std::vector<FuncParam> args;

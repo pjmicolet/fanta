@@ -4,6 +4,7 @@
 #include "../common/hook.hpp"
 #include "../common/instructions.hpp"
 #include "cpu.hpp"
+#include <cstdint>
 
 // Execute semantics for each opcode, dispatched from CPU::run_cycle. Kept in
 // their own namespace so Halt/Nop/Ret/Call don't sit beside the encoder
@@ -63,7 +64,7 @@ struct DecodeLoadSource {
   }
 };
 
-enum OpType { ARITH_ADD, ARITH_SUB, LOGICAL, LSHIFT };
+enum OpType : std::uint8_t { ARITH_ADD, ARITH_SUB, LOGICAL, LSHIFT };
 
 using HookFn = auto (*)(CPU &) -> void;
 

@@ -1,10 +1,11 @@
 #pragma once
 #include <expected>
 #include <string_view>
+#include <cstdint>
 
 using namespace std::literals;
 
-enum class LexErrorType { UnterminatedString, UnknownToken, MalformedToken };
+enum class LexErrorType : std::uint8_t { UnterminatedString, UnknownToken, MalformedToken };
 
 struct LexError {
   LexErrorType t;
@@ -17,7 +18,7 @@ struct Lexer {
 
   Lexer(std::string_view body) : body_(body), end_{body.size()} {}
 
-  enum class TokenType {
+  enum class TokenType : std::uint8_t {
     IntLiteral,
     Eof,
     KeywordLet,
@@ -262,7 +263,7 @@ private:
         LexError{LexErrorType::UnknownToken, 0, cursor_, cursor_++});
   }
 
-  enum class CharType {
+  enum class CharType : std::uint8_t {
     Whitespace,
     Alpha,
     Num,

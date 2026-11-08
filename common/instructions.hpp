@@ -7,7 +7,7 @@
 
 namespace Instructions {
 
-enum InstFormat {
+enum InstFormat : std::uint8_t {
   THREE_OP,
   TWO_OP,
   MEM,
