@@ -45,6 +45,9 @@ CheckOptions:
   # int<->bool mixing in assignments and returns.
   readability-implicit-bool-conversion.AllowIntegerConditions: true
   readability-implicit-bool-conversion.AllowPointerConditions: true
+  # Only enforce trailing commas where we chose them. Append would also
+  # reflow every Token{...} and overloaded{...} that wraps at 80 columns.
+  readability-trailing-comma.MultiLineCommaPolicy: Ignore
 
 WarningsAsErrors: ''
 
