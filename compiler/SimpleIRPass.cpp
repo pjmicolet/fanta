@@ -21,7 +21,7 @@ auto SimpleIRPass::outputIR(Parser &p, GlobalTable &gt) -> IR {
                           [&](const AST::FunctionDef &fdef) {
                             emitFunctionDef(p, fdef, ir, gt);
                           },
-                          [&](const auto &other) {}},
+                          [&](const auto &) {}},
                cr.t);
   }
   ir.functions.insert(ir.functions.begin(), initFunc);
@@ -118,7 +118,7 @@ auto SimpleIRPass::emitStatement(const Parser &p, const AST::AstNode &node,
           },
           [&](const AST::IfStm &ifStm) { emitIf(p, ifStm, ir, gt, lt); },
           [&](const AST::For &forStm) { emitFor(p, forStm, ir, gt, lt); },
-          [&](const auto &other) {}},
+          [&](const auto &) {}},
       node.t);
 }
 
@@ -225,7 +225,7 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
           [&](const AST::FunctionCall &fcall) {
             emitCall(p, fcall, ir, gt, lt, dest);
           },
-          [&](const auto &other) {},
+          [&](const auto &) {},
       },
       node.t);
 }
@@ -404,7 +404,7 @@ auto SimpleIRPass::emitCondTrue(const Parser &p, const AST::AstNode &node,
                                                              ttype, trueLabel);
                           }
                         },
-                        [&](const auto &other) {}},
+                        [&](const auto &) {}},
              node.t);
 };
 
@@ -425,7 +425,7 @@ auto SimpleIRPass::emitCondFalse(const Parser &p, const AST::AstNode &node,
                             needsLabel = true;
                           }
                         },
-                        [&](const auto &other) {}},
+                        [&](const auto &) {}},
              node.t);
   if (needsLabel)
     ir.push_back(IRLabel{trueLabel});
@@ -537,7 +537,7 @@ auto SimpleIRPass::emitVariableIR(const Parser &p,
   emitExpression(p, defineNode, ir, gt, lt, varTReg);
 }
 
-auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &gt,
+auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &/*gt*/,
                                       LocalTable &lt) -> TempReg {
   LocalGlobalBase lgb{};
   lgb.dest = {lt.allocateAnonymous(), true};

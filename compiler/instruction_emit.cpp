@@ -103,7 +103,7 @@ auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                      globalBaseMovs.push_back(
                          static_cast<uint32_t>(il.size() - 1));
                    },
-                   [](const auto &other) {}},
+                   [](const auto &) {}},
         ir);
   }
 
@@ -159,7 +159,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
               missingLinks.push_back(
                   {static_cast<uint32_t>(il.size() - 1), bop.label});
             },
-            [&](const Return &ret) { emitEpilogue(fir, maxOffset, il); },
+            [&](const Return &) { emitEpilogue(fir, maxOffset, il); },
             [&](const LocalGlobalBase &lgb) {
               auto movGlobal = Instructions::Emitter::two_op_imm(
                   Info::Instructions::MOV_IMM, lgb.dest.val, 0);
@@ -169,7 +169,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
             [&](const IRLabel &label) {
               resolvedAddresses[label.name] = il.size();
             },
-            [](const auto &other) {}},
+            [](const auto &) {}},
         ir);
   }
 
@@ -199,7 +199,7 @@ auto InstructionEmitter::emitEpilogue(const FunctionIR &fir, uint32_t maxOffset,
   il.push_back(Instructions::Emitter::single_inst(Info::Instructions::RET, 0));
 }
 
-auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,
+auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &/*gt*/,
                                   InstructionList &il) -> void {
 #define THREE_REG(num)                                                         \
   case num: {                                                                  \

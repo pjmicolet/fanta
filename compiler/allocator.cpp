@@ -63,7 +63,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
             [&](const Branch &bop) { fir.insts.push_back(bop); },
             [&](const Return &ret) { fir.insts.push_back(ret); },
             [&](const IRLabel &irlabel) { fir.insts.push_back(irlabel); },
-            [](const auto &other) {}},
+            [](const auto &) {}},
         ir);
   }
 
@@ -87,7 +87,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
                               op.source2.val += adjustment;
                             }
                           },
-                          [](const auto &other) {}},
+                          [](const auto &) {}},
                fir.insts[i]);
   }
 

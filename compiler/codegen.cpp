@@ -25,7 +25,7 @@ auto Codegen::extractGlobalNames(const Parser &p) -> void {
                             }
                             globalNameSpace[d.name] = gni;
                           },
-                          [&](const auto &other) {}},
+                          [&](const auto &) {}},
                node.t);
   }
   return;

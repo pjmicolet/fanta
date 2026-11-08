@@ -116,8 +116,8 @@ auto printIR(const IR &irlisting) -> void {
                 std::println("    {} {}", getopName(branch.opcode),
                              branch.label);
               },
-              [&](const Return &ret) { std::println("    RET"); },
-              [&](const LocalGlobalBase &base) {},
+              [&](const Return &) { std::println("    RET"); },
+              [&](const LocalGlobalBase &) {},
           },
           ir);
     }

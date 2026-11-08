@@ -43,7 +43,7 @@ struct DecodeSource2 {
 };
 
 struct DecodeImm {
-  static auto decode(CPU &cpu, std::uint32_t inst) -> std::uint32_t {
+  static auto decode(CPU &/*cpu*/, std::uint32_t inst) -> std::uint32_t {
     return inst & 0xFFFF;
   }
 };
@@ -171,11 +171,11 @@ struct Jrel {
 };
 
 struct Halt {
-  static auto exec(CPU &cpu, uint32_t inst) { cpu.halted = true; }
+  static auto exec(CPU &cpu, uint32_t /*inst*/) { cpu.halted = true; }
 };
 
 struct Nop {
-  static auto exec(CPU &cpu, uint32_t inst) {}
+  static auto exec(CPU &/*cpu*/, uint32_t /*inst*/) {}
 };
 
 template <typename DestDecoder, typename OptDecoder> struct OpCmp {
@@ -198,7 +198,7 @@ template <typename DestDecoder, typename OptDecoder> struct OpCmp {
 };
 
 struct Ret {
-  static auto exec(CPU &cpu, uint32_t inst) {
+  static auto exec(CPU &cpu, uint32_t /*inst*/) {
     auto pc = cpu.pop_stack();
     cpu.set_pc(pc);
   }

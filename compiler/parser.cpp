@@ -185,7 +185,7 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                           std::println("{}body:", pad);
                           printAST(forStm.body, indent + 2);
                         },
-                        [](const auto &id) {}},
+                        [](const auto &) {}},
              node.t);
 }
 

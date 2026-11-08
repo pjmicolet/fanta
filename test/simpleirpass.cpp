@@ -102,7 +102,7 @@ TEST_CASE("Register Allocation - Basic Reuse and Operand Update") {
         REQUIRE_TRUE(!op.source1.isVirtual);
         REQUIRE_TRUE(!op.source2.isVirtual);
       },
-      [&](const auto &other) {}
+      [&](const auto &) {}
     }, inst);
   }
 
@@ -166,7 +166,7 @@ TEST_CASE("Register Spilling - Specific Store and Load Verification") {
           REQUIRE_TRUE(!op.source1.isVirtual);
         }
       },
-      [&](const auto &other) {}
+      [&](const auto &) {}
     }, inst);
   }
 
