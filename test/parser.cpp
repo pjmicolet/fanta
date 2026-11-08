@@ -57,11 +57,13 @@ TEST_CASE("Basic Function Expression") {
 }
 
 TEST_CASE("Basic Function Expression With Return") {
-  Parser pExpr{"fn hello(a : int, b : int) -> int { \
+  Parser pExpr{
+      "fn hello(a : int, b : int) -> int { \
     let d : int = 10; \
     d = d + 1;\
     return d; \
-  } "};
+  } ",
+  };
   pExpr.walk();
   auto exprNode = pExpr.getCurrentRoot();
   auto func = std::get<Fanta::AST::FunctionDef>(exprNode.t);
@@ -126,8 +128,10 @@ TEST_CASE("Precedence - Comparison Binds Tighter Than && / ||") {
 }
 
 TEST_CASE("For Loop AST Shape") {
-  Parser p{"fn main() -> int { for (let i: int = 0; i < 5; i = i + 1) { x = 1; "
-           "} }"};
+  Parser p{
+      "fn main() -> int { for (let i: int = 0; i < 5; i = i + 1) { x = 1; "
+      "} }",
+  };
   p.fullWalk();
   auto fn = std::get<Fanta::AST::FunctionDef>(p.getCurrentRoot().t);
   auto body = std::get<Fanta::AST::FunctionBody>(p.getNodeAtIndex(fn.body).t);

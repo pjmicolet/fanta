@@ -89,7 +89,9 @@ inline auto intrinPrintu32(CPU &cpu) -> void {
 }
 
 inline constexpr std::array<HookFn, Fanta::NUM_HOOKS> callHooks{
-    &intrinPrint, &intrinPrintu32};
+    &intrinPrint,
+    &intrinPrintu32,
+};
 
 // target is range-checked by Call.
 inline auto callIntrin(CPU &cpu, uint32_t target) -> void {

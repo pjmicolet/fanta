@@ -16,7 +16,7 @@ enum InstFormat {
   HALT,
   RET,
   STACK_INST,
-  NOP
+  NOP,
 };
 
 struct InstMetadata {
@@ -201,33 +201,35 @@ struct Ret {
 // types, not runtime metadata. No dynamic initialization, no heap
 // allocation, no unspecified init order: this table exists fully formed
 // before main() runs.
-inline constexpr std::array<InstEntry, 25> kInstructionTable{{
-    {"HALT", {InstFormat::HALT, 0, 0}},
-    {"NOP", {InstFormat::NOP, 0x14, 0}},
-    {"ADD", {InstFormat::THREE_OP, 0x1, 0x2}},
-    {"MOV", {InstFormat::TWO_OP, 0x3, 0x4}},
-    {"SUB", {InstFormat::THREE_OP, 0x5, 0x6}},
-    {"JMP", {InstFormat::JUMP, 0x7, 0}},
-    {"JREL", {InstFormat::BRANCH, 0x13, 0}},
-    {"STORE", {InstFormat::MEM, 0x8, 0}},
-    {"LOAD", {InstFormat::MEM, 0x9, 0}},
-    {"BEQ", {InstFormat::BRANCH, 0xA, 0}},
-    {"BNE", {InstFormat::BRANCH, 0xB, 0}},
-    {"BEC", {InstFormat::BRANCH, 0x10, 0}},
-    {"BNC", {InstFormat::BRANCH, 0x20, 0}},
-    {"LSH", {InstFormat::THREE_OP, 0xC, 0xD}},
-    {"CMP", {InstFormat::TWO_OP, 0xE, 0xF}},
-    {"BMI", {InstFormat::BRANCH, 0x11, 0}},
-    {"BPL", {InstFormat::BRANCH, 0x12, 0}},
-    {"CALL", {InstFormat::BRANCH, 0x15, 0}},
-    {"RET", {InstFormat::RET, 0x16, 0}},
-    {"AND", {InstFormat::THREE_OP, 0x17, 0x18}},
-    {"OR", {InstFormat::THREE_OP, 0x19, 0x1A}},
-    {"XOR", {InstFormat::THREE_OP, 0x1B, 0x1C}},
-    {"PUSH", {InstFormat::STACK_INST, 0x1D, 0}},
-    {"POP", {InstFormat::STACK_INST, 0x1E, 0}},
-    {"CIP", {InstFormat::JUMP, 0x1F, 0}},
-}};
+inline constexpr std::array<InstEntry, 25> kInstructionTable{
+    {
+        {"HALT", {InstFormat::HALT, 0, 0}},
+        {"NOP", {InstFormat::NOP, 0x14, 0}},
+        {"ADD", {InstFormat::THREE_OP, 0x1, 0x2}},
+        {"MOV", {InstFormat::TWO_OP, 0x3, 0x4}},
+        {"SUB", {InstFormat::THREE_OP, 0x5, 0x6}},
+        {"JMP", {InstFormat::JUMP, 0x7, 0}},
+        {"JREL", {InstFormat::BRANCH, 0x13, 0}},
+        {"STORE", {InstFormat::MEM, 0x8, 0}},
+        {"LOAD", {InstFormat::MEM, 0x9, 0}},
+        {"BEQ", {InstFormat::BRANCH, 0xA, 0}},
+        {"BNE", {InstFormat::BRANCH, 0xB, 0}},
+        {"BEC", {InstFormat::BRANCH, 0x10, 0}},
+        {"BNC", {InstFormat::BRANCH, 0x20, 0}},
+        {"LSH", {InstFormat::THREE_OP, 0xC, 0xD}},
+        {"CMP", {InstFormat::TWO_OP, 0xE, 0xF}},
+        {"BMI", {InstFormat::BRANCH, 0x11, 0}},
+        {"BPL", {InstFormat::BRANCH, 0x12, 0}},
+        {"CALL", {InstFormat::BRANCH, 0x15, 0}},
+        {"RET", {InstFormat::RET, 0x16, 0}},
+        {"AND", {InstFormat::THREE_OP, 0x17, 0x18}},
+        {"OR", {InstFormat::THREE_OP, 0x19, 0x1A}},
+        {"XOR", {InstFormat::THREE_OP, 0x1B, 0x1C}},
+        {"PUSH", {InstFormat::STACK_INST, 0x1D, 0}},
+        {"POP", {InstFormat::STACK_INST, 0x1E, 0}},
+        {"CIP", {InstFormat::JUMP, 0x1F, 0}},
+    },
+};
 
 struct Registry {
   static constexpr auto &get() { return kInstructionTable; }

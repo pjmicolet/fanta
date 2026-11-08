@@ -252,8 +252,10 @@ auto Parser::walkFn() -> void {
 
 auto Parser::walkReturn() -> Fanta::AST::NodeIndex {
   auto index = walkExpression(Precedence::ASSIGN_OR_RET);
-  Fanta::AST::ReturnVal var{"unknown",
-                            index}; // we don't know the return type yet
+  Fanta::AST::ReturnVal var{
+      "unknown",
+      index,
+  }; // we don't know the return type yet
   asts.push_back({var, 0});
   return asts.size() - 1;
 }

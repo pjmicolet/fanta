@@ -497,8 +497,10 @@ auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
   if (!fcall.params.empty()) {
     IROp restoreStack{};
     restoreStack.opcode = Info::Instructions::ADD_IMM;
-    restoreStack.source2 = {static_cast<uint32_t>(4 * fcall.params.size()),
-                            false};
+    restoreStack.source2 = {
+        static_cast<uint32_t>(4 * fcall.params.size()),
+        false,
+    };
     restoreStack.source1 = {Info::Registers::SP, false};
     restoreStack.destination = {Info::Registers::SP, false};
     restoreStack.s2type = Immediate;

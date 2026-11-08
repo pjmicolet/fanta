@@ -24,8 +24,8 @@ private:
   }
 
   enum SpillMechanism {
-    Store,       // For when you need to assign the register to a destination
-    StoreAndLoad // For when you are assigning sources and need to dump
+    Store,        // For when you need to assign the register to a destination
+    StoreAndLoad, // For when you are assigning sources and need to dump
   };
 
   auto emitStore(FunctionIR &func, uint32_t vreg, uint32_t preg) -> void;

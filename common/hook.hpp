@@ -19,7 +19,9 @@ struct Hook {
 // of range from low RAM. Keep this close to the top, as it sets that limit.
 constexpr static uint32_t HOOK_BASE = 0xFFFF'FF00;
 constexpr static std::array<Hook, 2> hooks = {
-    Hook{"@print", 1, HOOK_BASE}, Hook{"@printu32", 1, HOOK_BASE + 4}};
+    Hook{"@print", 1, HOOK_BASE},
+    Hook{"@printu32", 1, HOOK_BASE + 4},
+};
 constexpr static size_t NUM_HOOKS = hooks.size();
 constexpr static uint32_t HOOK_END = HOOK_BASE + ((NUM_HOOKS - 1) * 4);
 } // namespace Fanta

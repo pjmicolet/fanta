@@ -455,7 +455,7 @@ using Fanta::Layout::Kind;
 
 constexpr std::pair<int, int> kSizes[] = {
     {80, 24},  {80, 31},  {80, 32},  {99, 30},  {100, 30}, {120, 40},
-    {159, 50}, {160, 50}, {200, 60}, {300, 90}, {60, 15} /* clamped */};
+    {159, 50}, {160, 50}, {200, 60}, {300, 90}, {60, 15},  /* clamped */};
 constexpr Kind kKinds[] = {Kind::SOURCE, Kind::ASM, Kind::BINARY};
 } // namespace
 

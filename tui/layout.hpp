@@ -112,8 +112,12 @@ inline auto compute(int cols, int rows, Kind kind, Options opts = {})
     if (full_strip) {
       int regs_w = std::min(cols, 66);
       bool with_stack = cols - regs_w >= 24;
-      l.registers = Rect{0, bottom - kStripH, with_stack ? regs_w : cols,
-                         kStripH};
+      l.registers = Rect{
+          0,
+          bottom - kStripH,
+          with_stack ? regs_w : cols,
+          kStripH,
+      };
       l.register_form = RegisterForm::FOUR_COLUMNS;
       if (with_stack)
         l.stack = Rect{regs_w, bottom - kStripH, cols - regs_w, kStripH};
@@ -146,8 +150,12 @@ inline auto compute(int cols, int rows, Kind kind, Options opts = {})
     l.registers = Rect{col_x, top, kColumnW, kTwoColRegsH};
     l.register_form = RegisterForm::TWO_COLUMNS;
     if (bottom - top - kTwoColRegsH >= 4)
-      l.stack = Rect{col_x, top + kTwoColRegsH, kColumnW,
-                     bottom - top - kTwoColRegsH};
+      l.stack = Rect{
+          col_x,
+          top + kTwoColRegsH,
+          kColumnW,
+          bottom - top - kTwoColRegsH,
+      };
   } else {
     l.registers = Rect{0, bottom - 3, cols, 3};
     l.register_form = RegisterForm::COMPACT;

@@ -131,7 +131,8 @@ TEST_CASE("Comparison And Logical Operator Lexing") {
       Lexer::TokenType::Lesser,    Lexer::TokenType::Greater,
       Lexer::TokenType::And,       Lexer::TokenType::Or,
       Lexer::TokenType::Not,       Lexer::TokenType::Equal,
-      Lexer::TokenType::Eof};
+      Lexer::TokenType::Eof,
+  };
   for (auto t : expected) {
     auto res = lx.getToken();
     REQUIRE_TOKEN_TYPE(t, res);
@@ -196,7 +197,8 @@ TEST_CASE("Single And Double & / | Are Distinguished Without Spaces") {
       Lexer::TokenType::BitAnd,     Lexer::TokenType::Identifier,
       Lexer::TokenType::Or,         Lexer::TokenType::BitOr,
       Lexer::TokenType::Identifier, Lexer::TokenType::BitAnd,
-      Lexer::TokenType::Identifier, Lexer::TokenType::Eof};
+      Lexer::TokenType::Identifier, Lexer::TokenType::Eof,
+  };
   for (auto t : expected) {
     auto res = lx.getToken();
     REQUIRE_TOKEN_TYPE(t, res);

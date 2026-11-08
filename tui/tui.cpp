@@ -1258,8 +1258,11 @@ void TUI::run_command(const std::string &cmd) {
   } else if (cmd.starts_with("out")) {
     std::string which = arg_of(3);
     static constexpr std::pair<std::string_view, OutputTab> tabs[] = {
-        {"serial", OutputTab::SERIAL}, {"vram", OutputTab::VRAM},
-        {"memory", OutputTab::MEMORY}, {"log", OutputTab::LOG}};
+        {"serial", OutputTab::SERIAL},
+        {"vram", OutputTab::VRAM},
+        {"memory", OutputTab::MEMORY},
+        {"log", OutputTab::LOG},
+    };
     auto it = std::ranges::find(tabs, std::string_view{which},
                                 [](auto &t) { return t.first; });
     if (it == std::end(tabs)) {
