@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) try {
         for (int i = 0; i < 4; ++i) {
             if (cpu.status_reg[i] != prev_flags[i]) {
                 print_header();
-                std::println("  Flag {}: {} -> {}", flag_names[i], (int)prev_flags[i], (int)cpu.status_reg[i]);
+                std::println("  Flag {}: {} -> {}", flag_names[i], static_cast<int>(prev_flags[i]), static_cast<int>(cpu.status_reg[i]));
                 prev_flags[i] = cpu.status_reg[i];
             }
         }

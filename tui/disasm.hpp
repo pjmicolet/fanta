@@ -98,7 +98,7 @@ inline auto disassemble(uint32_t raw, uint32_t addr = 0,
   auto name = detail::opcodeNames()[opcode];
   if (name.empty()) {
     std::stringstream ss;
-    ss << "UNKNOWN (0x" << std::hex << (int)opcode << ")";
+    ss << "UNKNOWN (0x" << std::hex << static_cast<int>(opcode) << ")";
     return ss.str();
   }
 

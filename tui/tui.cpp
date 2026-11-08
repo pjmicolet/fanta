@@ -352,9 +352,9 @@ void TUI::dump_state(const std::string &filename) {
 
   out << "--- TUI DUMP ---" << "\n";
   out << "PC: 0x" << std::hex << cpu.get_pc() << " SP: 0x" << cpu.get_sp()
-      << std::dec << " FLAGS: Z:" << (int)cpu.status_reg[0]
-      << " N:" << (int)cpu.status_reg[1] << " V:" << (int)cpu.status_reg[2]
-      << " C:" << (int)cpu.status_reg[3] << "\n";
+      << std::dec << " FLAGS: Z:" << static_cast<int>(cpu.status_reg[0])
+      << " N:" << static_cast<int>(cpu.status_reg[1]) << " V:" << static_cast<int>(cpu.status_reg[2])
+      << " C:" << static_cast<int>(cpu.status_reg[3]) << "\n";
   out << "SOURCE: "
       << (source == Source::ASM      ? "ASM"
           : source == Source::FANTA ? "FANTA"
@@ -391,7 +391,7 @@ void TUI::dump_state(const std::string &filename) {
     bool bad = std::ranges::any_of(
         asm_errors, [i](const auto &e) { return e.line == i; });
     out << std::setw(2) << std::setfill(' ') << i << (bad ? "!" : "|") << " "
-        << lines[i] << (i == (size_t)editor.y() ? " <--" : "") << "\n";
+        << lines[i] << (i == static_cast<size_t>(editor.y()) ? " <--" : "") << "\n";
   }
 
   out << "\n" << "[SERIAL]" << "\n";
@@ -1209,7 +1209,7 @@ void TUI::handle_command_mode(int ch) {
     mode = Mode::NORMAL;
     run_command(cmd);
   } else if (isprint(ch)) {
-    command_buffer += (char)ch;
+    command_buffer += static_cast<char>(ch);
   }
 }
 

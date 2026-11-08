@@ -150,30 +150,32 @@ struct Nop {
 };
 
 struct Emitter {
+  // Unsigned masks (0x1FU) keep every operand unsigned, so no casts or
+  // signed shifts are needed; only the opcode is widened before shifting.
   static constexpr uint32_t three_op(uint8_t op, uint8_t d, uint8_t s1,
                                      uint8_t s2) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 |
-           uint32_t(s1 & 0x1F) << 16 | uint32_t(s2 & 0x1F) << 11;
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           ((s1 & 0x1FU) << 16) | ((s2 & 0x1FU) << 11);
   }
 
   static constexpr uint32_t three_op_imm(uint8_t op, uint8_t d, uint8_t s1,
                                          uint16_t imm) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1f) << 21 |
-           uint32_t(s1 & 0x1f) << 16 | uint32_t(imm & 0xffff);
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           ((s1 & 0x1FU) << 16) | (imm & 0xFFFFU);
   }
 
   static constexpr uint32_t single_inst(uint8_t op, uint32_t dest) {
-    return (uint32_t(op) << 26) | (dest & 0x3FFFFFF);
+    return (static_cast<uint32_t>(op) << 26) | (dest & 0x3FFFFFFU);
   }
 
   static constexpr uint32_t two_op(uint8_t op, uint8_t d, uint8_t s1) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 |
-           uint32_t(s1 & 0x1F) << 16;
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           ((s1 & 0x1FU) << 16);
   }
 
   static constexpr uint32_t two_op_imm(uint8_t op, uint8_t d, uint16_t s1) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 |
-           uint32_t(s1 & 0xFFFF);
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           (s1 & 0xFFFFU);
   }
 };
 

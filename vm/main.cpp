@@ -98,7 +98,7 @@ int main(int argc, char* argv[]) try {
             assem.scan_for_labels(full_code);
             for (size_t i = 0; i < lines.size(); ++i) {
                 uint32_t instr = assem.assemble(lines[i], static_cast<int>(i * 4));
-                cpu.store(i * 4, (instr != (uint32_t)-1) ? instr : (0x14 << 26)); // Fallback to NOP if assembly fails
+                cpu.store(i * 4, (instr != static_cast<uint32_t>(-1)) ? instr : (0x14 << 26)); // Fallback to NOP if assembly fails
             }
             std::cout << "Loaded assembly " << filename << " (" << lines.size() << " lines)\n";
         }
