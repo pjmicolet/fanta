@@ -24,7 +24,8 @@ Checks: >
   -modernize-use-trailing-return-type,
   -modernize-use-designated-initializers,
   -modernize-use-emplace,
-  -modernize-use-integer-sign-comparison
+  -modernize-use-integer-sign-comparison,
+  -bugprone-easily-swappable-parameters
 
 # Disabled after the 2026-10-17 review (262 of 682 findings, all style noise):
 # - modernize-use-trailing-return-type fires on every non-trailing
@@ -39,6 +40,8 @@ Checks: >
 #   constructor can silently pick the wrong alternative.
 # - modernize-use-integer-sign-comparison: every hit already had an explicit
 #   cast; -Wsign-compare still catches uncast mixed comparisons.
+# - bugprone-easily-swappable-parameters: only fixable with strong Addr/Reg
+#   types; tracked in docs/plans.md.
 
 CheckOptions:
   # Masks and shifts like `(raw >> 26) & 0x3F` use positive int literals and
