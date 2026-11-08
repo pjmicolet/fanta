@@ -59,6 +59,10 @@ CheckOptions:
   # Dispatchers (:commands, per-IR-node printers) are long and flat by
   # nature; 50 still flags a function that has really grown out of hand.
   readability-function-cognitive-complexity.Threshold: 50
+  # optional::value() throws when empty, so it is a checked access.
+  bugprone-unchecked-optional-access.IgnoreValueCalls: true
+  # from_chars takes [first, last), so a string_view's data() is fine there.
+  bugprone-suspicious-stringview-data-usage.AllowedCallees: '::std::from_chars'
 
 WarningsAsErrors: ''
 
