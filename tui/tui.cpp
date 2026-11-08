@@ -1579,6 +1579,9 @@ bool TUI::screenshot(const std::string &filename, int cols, int rows,
   set_term(screen);
   configure_ncurses();
   resizeterm(rows, cols);
+  // Key handlers (F10, :out) lay out against term_w/term_h before the first
+  // update() would set them.
+  getmaxyx(stdscr, term_h, term_w);
   ascii_vram = true; // colour blocks would read back as blank cells
 
   for (int key : parse_keys(keys)) {
