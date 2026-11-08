@@ -9,24 +9,28 @@ lands, mark its friction entry `fixed` and delete the item here. Git keeps the h
 1. **Headless `--size` for F10 and `:out`.** `term_w`/`term_h` are only set in `update()`, so
    screenshots of the output panel are taken at 80x24. Do this early: every later item is checked
    with `--screen`. Friction 2026-10-31 "headless screenshots".
-2. **80x24 batch:** status line drops messages and cuts PC, flags cut off, pane titles truncated
+2. **More vim INSERT entries:** `a` (insert after the cursor), `o`/`O` (open a line below/above,
+   then INSERT). The owner uses them daily. Add them to spec §4.2 and the help overlay. In a
+   running ASM session `o`/`O` insert a line, so they go STALE like any inserted line (§2.1).
+   Friction 2026-11-08 "only `i` enters INSERT".
+3. **80x24 batch:** status line drops messages and cuts PC, flags cut off, pane titles truncated
    without `~`, help overlay loses its last 3 lines. One layout pass. Four 2026-10-31 entries.
-3. **Status line noise batch:** "Loaded ..." never expires (spec §6.2), STALE shown three times,
+4. **Status line noise batch:** "Loaded ..." never expires (spec §6.2), STALE shown three times,
    hint bar says "F5 run" while RUNNING, "Line 25 added" is 0-based. Four 2026-10-31 entries.
-4. **Build pane honesty:** after a failed build the pane says build #2 but shows build #1; a new
+5. **Build pane honesty:** after a failed build the pane says build #2 but shows build #1; a new
    `.fn` shows build #0 full of HALTs. Two 2026-10-31 entries.
-5. **BINARY session:** j/k do nothing and the hint bar offers `i edit` and `F9 build`.
-6. **Memory tab follows something** (SP, or the last address written). Needs a decision on what
+6. **BINARY session:** j/k do nothing and the hint bar offers `i edit` and `F9 build`.
+7. **Memory tab follows something** (SP, or the last address written). Needs a decision on what
    it follows: ask the owner first.
-7. **Serial timing in the Serial tab** (once PR #18 is merged): title shows `TX busy` while a
+8. **Serial timing in the Serial tab** (once PR #18 is merged): title shows `TX busy` while a
    byte is going out and `N dropped` when `Serial::dropped > 0`, so a program that skips the
    STATUS poll fails visibly. Log the friction first: run a program that doesn't poll.
-8. **Cycle count instead of IPS:** show `CPU::cycles()` (and the nominal clock from
+9. **Cycle count instead of IPS:** show `CPU::cycles()` (and the nominal clock from
    `CPU::spec`) in the registers pane or status line. Replaces the IPS figure that was dropped.
    Needs a friction entry, e.g. "can't tell how long a @print waited".
-9. **Fix `test/serial_hello.asm`:** since PR #18 it prints only `H`, because it doesn't poll
+10. **Fix `test/serial_hello.asm`:** since PR #18 it prints only `H`, because it doesn't poll
    STATUS, and it still mentions `o`. It's untracked, so tests can't rely on it.
-10. **Check and close if already fixed:** VRAM program opens on the Serial tab (owner decided the
+11. **Check and close if already fixed:** VRAM program opens on the Serial tab (owner decided the
    panel follows the last device written); STALE gutter addresses (owner decided: dim the gutter);
    the help overlay's `o` mention.
 
