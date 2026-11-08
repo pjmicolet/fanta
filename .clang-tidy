@@ -31,6 +31,11 @@ Checks: >
 #   aggregate inits ({fmt, reg, imm}, Token{...}) used throughout the ISA
 #   tables and lexer.
 
+CheckOptions:
+  # Masks and shifts like `(raw >> 26) & 0x3F` use positive int literals and
+  # are well-defined; keep flagging bitwise ops on signed variables.
+  bugprone-signed-bitwise.IgnorePositiveIntegerLiterals: true
+
 WarningsAsErrors: ''
 
 HeaderFilterRegex: '.*/(compiler|vm|common|tui|test)/.*\.(hpp|h)$'
