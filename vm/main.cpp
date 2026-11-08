@@ -8,13 +8,11 @@
 #include <fstream>
 #include <string>
 
-constexpr int FPS = 60;
-constexpr int TIMING = 1000 / FPS;
 constexpr int VM_WIDTH = 320;
 constexpr int VM_HEIGHT = 240;
 constexpr int WINDOW_SCALE = 3;
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) try {
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << "\n";
@@ -99,8 +97,8 @@ int main(int argc, char* argv[]) {
             Assembler assem;
             assem.scan_for_labels(full_code);
             for (size_t i = 0; i < lines.size(); ++i) {
-                uint32_t instr = assem.assemble(lines[i], i * 4);
-                cpu.store(i * 4, (instr != (uint32_t)-1) ? instr : (0x14 << 26)); // Fallback to NOP if assembly fails
+                uint32_t instr = assem.assemble(lines[i], static_cast<int>(i * 4));
+                cpu.store(i * 4, (instr != static_cast<uint32_t>(-1)) ? instr : (0x14 << 26)); // Fallback to NOP if assembly fails
             }
             std::cout << "Loaded assembly " << filename << " (" << lines.size() << " lines)\n";
         }
@@ -139,4 +137,8 @@ int main(int argc, char* argv[]) {
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
+} catch (const std::exception &e) {
+    std::cerr << "fanta: error: " << e.what() << "\n";
+    SDL_Quit();
+    return 1;
 }

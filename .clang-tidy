@@ -22,7 +22,12 @@ Checks: >
   -readability-braces-around-statements,
   -readability-convert-member-functions-to-static,
   -modernize-use-trailing-return-type,
-  -modernize-use-designated-initializers
+  -modernize-use-designated-initializers,
+  -modernize-use-emplace,
+  -modernize-use-integer-sign-comparison,
+  -bugprone-easily-swappable-parameters,
+  -readability-math-missing-parentheses,
+  -readability-avoid-nested-conditional-operator
 
 # Disabled after the 2026-10-17 review (262 of 682 findings, all style noise):
 # - modernize-use-trailing-return-type fires on every non-trailing
@@ -30,6 +35,37 @@ Checks: >
 # - modernize-use-designated-initializers fires on short positional
 #   aggregate inits ({fmt, reg, imm}, Token{...}) used throughout the ISA
 #   tables and lexer.
+
+# Disabled in the 2026-11-08 triage:
+# - modernize-use-emplace: the IR vectors hold std::variants, where
+#   emplace_back gains nothing and passing raw args to the converting
+#   constructor can silently pick the wrong alternative.
+# - modernize-use-integer-sign-comparison: every hit already had an explicit
+#   cast; -Wsign-compare still catches uncast mixed comparisons.
+# - bugprone-easily-swappable-parameters: only fixable with strong Addr/Reg
+#   types; tracked in docs/plans.md.
+# - readability-math-missing-parentheses: fires on plain `a + b * 4`.
+# - readability-avoid-nested-conditional-operator: the few uses are short
+#   prefix pickers (`v_`/`R`/`#`) that read fine inline.
+
+CheckOptions:
+  # Masks and shifts like `(raw >> 26) & 0x3F` use positive int literals and
+  # are well-defined; keep flagging bitwise ops on signed variables.
+  bugprone-signed-bitwise.IgnorePositiveIntegerLiterals: true
+  # `if (::isalpha(c))` and `if (!window)` are idiomatic; keep flagging
+  # int<->bool mixing in assignments and returns.
+  readability-implicit-bool-conversion.AllowIntegerConditions: true
+  readability-implicit-bool-conversion.AllowPointerConditions: true
+  # Only enforce trailing commas where we chose them. Append would also
+  # reflow every Token{...} and overloaded{...} that wraps at 80 columns.
+  readability-trailing-comma.MultiLineCommaPolicy: Ignore
+  # Dispatchers (:commands, per-IR-node printers) are long and flat by
+  # nature; 50 still flags a function that has really grown out of hand.
+  readability-function-cognitive-complexity.Threshold: 50
+  # optional::value() throws when empty, so it is a checked access.
+  bugprone-unchecked-optional-access.IgnoreValueCalls: true
+  # from_chars takes [first, last), so a string_view's data() is fine there.
+  bugprone-suspicious-stringview-data-usage.AllowedCallees: '::std::from_chars'
 
 WarningsAsErrors: ''
 

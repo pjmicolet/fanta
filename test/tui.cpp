@@ -1,3 +1,4 @@
+#include <array>
 #include "build.hpp"
 #include "disasm.hpp"
 #include "editor.hpp"
@@ -158,9 +159,9 @@ TEST_CASE("Read Lines Strips CRLF And Trailing Spaces") {
   }
   auto lines = Fanta::Program::readLines(path);
   REQUIRE_TRUE(lines.has_value());
-  REQUIRE_SAME(2, lines->size());
-  REQUIRE_SAME(std::string{"MOV R1, #1"}, (*lines)[0]);
-  REQUIRE_SAME(std::string{"RET"}, (*lines)[1]);
+  REQUIRE_SAME(2, lines.value().size());
+  REQUIRE_SAME(std::string{"MOV R1, #1"}, lines.value()[0]);
+  REQUIRE_SAME(std::string{"RET"}, lines.value()[1]);
   std::filesystem::remove(path);
 }
 
@@ -453,10 +454,10 @@ TEST_CASE("Screenshot Feeds Keys Before Rendering") {
 namespace {
 using Fanta::Layout::Kind;
 
-constexpr std::pair<int, int> kSizes[] = {
+constexpr auto kSizes = std::to_array<std::pair<int, int>>({
     {80, 24},  {80, 31},  {80, 32},  {99, 30},  {100, 30}, {120, 40},
-    {159, 50}, {160, 50}, {200, 60}, {300, 90}, {60, 15} /* clamped */};
-constexpr Kind kKinds[] = {Kind::SOURCE, Kind::ASM, Kind::BINARY};
+    {159, 50}, {160, 50}, {200, 60}, {300, 90}, {60, 15},  /* clamped */});
+constexpr std::array kKinds = {Kind::SOURCE, Kind::ASM, Kind::BINARY};
 } // namespace
 
 TEST_CASE("Layout Panes Never Overlap And Stay On Screen") {
@@ -503,7 +504,7 @@ TEST_CASE("Layout Drops The Output Panel First On Short Terminals") {
 TEST_CASE("Layout SOURCE Keeps Source And Derived ASM Side By Side At 80x24") {
   auto l = Fanta::Layout::compute(80, 24, Kind::SOURCE);
   REQUIRE_TRUE(l.derived.has_value());
-  REQUIRE_SAME(l.code.y, l.derived->y);
+  REQUIRE_SAME(l.code.y, l.derived.value().y);
   REQUIRE_TRUE(l.register_form == Fanta::Layout::RegisterForm::COMPACT);
 }
 

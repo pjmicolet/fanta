@@ -7,7 +7,7 @@
 
 namespace Instructions {
 
-enum InstFormat {
+enum InstFormat : std::uint8_t {
   THREE_OP,
   TWO_OP,
   MEM,
@@ -16,7 +16,7 @@ enum InstFormat {
   HALT,
   RET,
   STACK_INST,
-  NOP
+  NOP,
 };
 
 struct InstMetadata {
@@ -101,6 +101,18 @@ struct InstEntry {
 
 #define RET_INST(class_name, mnemonic, op)
 
+/// Sign-extends the 26-bit offset field (bits 0-25) of a branch, JREL or CALL
+/// word. Uses only unsigned arithmetic, so there's no signed shift to reason
+/// about.
+constexpr auto sign_extend26(uint32_t word) -> int32_t {
+  constexpr uint32_t kSignBit = 1U << 25;
+  return static_cast<int32_t>(((word & 0x3FFFFFFU) ^ kSignBit) - kSignBit);
+}
+static_assert(sign_extend26(0x3FFFFF8) == -8);
+static_assert(sign_extend26(0x0000008) == 8);
+static_assert(sign_extend26(0xFC000000 | 0x1FFFFFF) == 0x1FFFFFF);
+static_assert(sign_extend26(0x2000000) == -0x2000000);
+
 struct Decode {
   // Instruction format is as follows:
   // [opcode:6bit][dest:5bit][src1:5bit]
@@ -113,15 +125,15 @@ struct Decode {
   uint32_t raw;
   constexpr Decode(uint32_t d) : raw(d) {}
 
-  constexpr auto getOpcode() const -> uint8_t { return (raw >> 26) & 0x3F; }
+  [[nodiscard]] constexpr auto getOpcode() const -> uint8_t { return (raw >> 26) & 0x3F; }
 
-  constexpr auto getDestSrc() const -> uint8_t { return (raw >> 21) & 0x1F; }
+  [[nodiscard]] constexpr auto getDestSrc() const -> uint8_t { return (raw >> 21) & 0x1F; }
 
-  constexpr auto getS1() const -> uint8_t { return (raw >> 16) & 0x1F; }
+  [[nodiscard]] constexpr auto getS1() const -> uint8_t { return (raw >> 16) & 0x1F; }
 
-  constexpr auto getS2() const -> uint8_t { return (raw >> 11) & 0x1F; }
+  [[nodiscard]] constexpr auto getS2() const -> uint8_t { return (raw >> 11) & 0x1F; }
 
-  constexpr auto getImm() const -> uint16_t { return raw & (0xFFFF); }
+  [[nodiscard]] constexpr auto getImm() const -> uint16_t { return raw & 0xFFFF; }
 };
 
 // constexpr assembler
@@ -138,30 +150,32 @@ struct Nop {
 };
 
 struct Emitter {
+  // Unsigned masks (0x1FU) keep every operand unsigned, so no casts or
+  // signed shifts are needed; only the opcode is widened before shifting.
   static constexpr uint32_t three_op(uint8_t op, uint8_t d, uint8_t s1,
                                      uint8_t s2) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 |
-           uint32_t(s1 & 0x1F) << 16 | uint32_t(s2 & 0x1F) << 11;
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           ((s1 & 0x1FU) << 16) | ((s2 & 0x1FU) << 11);
   }
 
   static constexpr uint32_t three_op_imm(uint8_t op, uint8_t d, uint8_t s1,
                                          uint16_t imm) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1f) << 21 |
-           uint32_t(s1 & 0x1f) << 16 | uint32_t(imm & 0xffff);
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           ((s1 & 0x1FU) << 16) | (imm & 0xFFFFU);
   }
 
-  static constexpr uint32_t single_inst(uint8_t op, int32_t dest) {
-    return uint32_t(op << 26) | uint32_t(dest & 0x3FFFFFF);
+  static constexpr uint32_t single_inst(uint8_t op, uint32_t dest) {
+    return (static_cast<uint32_t>(op) << 26) | (dest & 0x3FFFFFFU);
   }
 
   static constexpr uint32_t two_op(uint8_t op, uint8_t d, uint8_t s1) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 |
-           uint32_t(s1 & 0x1F) << 16;
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           ((s1 & 0x1FU) << 16);
   }
 
   static constexpr uint32_t two_op_imm(uint8_t op, uint8_t d, uint16_t s1) {
-    return uint32_t(op << 26) | uint32_t(d & 0x1F) << 21 |
-           uint32_t(s1 & 0xFFFF);
+    return (static_cast<uint32_t>(op) << 26) | ((d & 0x1FU) << 21) |
+           (s1 & 0xFFFFU);
   }
 };
 
@@ -201,39 +215,41 @@ struct Ret {
 // types, not runtime metadata. No dynamic initialization, no heap
 // allocation, no unspecified init order: this table exists fully formed
 // before main() runs.
-inline constexpr std::array<InstEntry, 25> kInstructionTable{{
-    {"HALT", {InstFormat::HALT, 0, 0}},
-    {"NOP", {InstFormat::NOP, 0x14, 0}},
-    {"ADD", {InstFormat::THREE_OP, 0x1, 0x2}},
-    {"MOV", {InstFormat::TWO_OP, 0x3, 0x4}},
-    {"SUB", {InstFormat::THREE_OP, 0x5, 0x6}},
-    {"JMP", {InstFormat::JUMP, 0x7, 0}},
-    {"JREL", {InstFormat::BRANCH, 0x13, 0}},
-    {"STORE", {InstFormat::MEM, 0x8, 0}},
-    {"LOAD", {InstFormat::MEM, 0x9, 0}},
-    {"BEQ", {InstFormat::BRANCH, 0xA, 0}},
-    {"BNE", {InstFormat::BRANCH, 0xB, 0}},
-    {"BEC", {InstFormat::BRANCH, 0x10, 0}},
-    {"BNC", {InstFormat::BRANCH, 0x20, 0}},
-    {"LSH", {InstFormat::THREE_OP, 0xC, 0xD}},
-    {"CMP", {InstFormat::TWO_OP, 0xE, 0xF}},
-    {"BMI", {InstFormat::BRANCH, 0x11, 0}},
-    {"BPL", {InstFormat::BRANCH, 0x12, 0}},
-    {"CALL", {InstFormat::BRANCH, 0x15, 0}},
-    {"RET", {InstFormat::RET, 0x16, 0}},
-    {"AND", {InstFormat::THREE_OP, 0x17, 0x18}},
-    {"OR", {InstFormat::THREE_OP, 0x19, 0x1A}},
-    {"XOR", {InstFormat::THREE_OP, 0x1B, 0x1C}},
-    {"PUSH", {InstFormat::STACK_INST, 0x1D, 0}},
-    {"POP", {InstFormat::STACK_INST, 0x1E, 0}},
-    {"CIP", {InstFormat::JUMP, 0x1F, 0}},
-}};
+inline constexpr std::array<InstEntry, 25> kInstructionTable{
+    {
+        {"HALT", {InstFormat::HALT, 0, 0}},
+        {"NOP", {InstFormat::NOP, 0x14, 0}},
+        {"ADD", {InstFormat::THREE_OP, 0x1, 0x2}},
+        {"MOV", {InstFormat::TWO_OP, 0x3, 0x4}},
+        {"SUB", {InstFormat::THREE_OP, 0x5, 0x6}},
+        {"JMP", {InstFormat::JUMP, 0x7, 0}},
+        {"JREL", {InstFormat::BRANCH, 0x13, 0}},
+        {"STORE", {InstFormat::MEM, 0x8, 0}},
+        {"LOAD", {InstFormat::MEM, 0x9, 0}},
+        {"BEQ", {InstFormat::BRANCH, 0xA, 0}},
+        {"BNE", {InstFormat::BRANCH, 0xB, 0}},
+        {"BEC", {InstFormat::BRANCH, 0x10, 0}},
+        {"BNC", {InstFormat::BRANCH, 0x20, 0}},
+        {"LSH", {InstFormat::THREE_OP, 0xC, 0xD}},
+        {"CMP", {InstFormat::TWO_OP, 0xE, 0xF}},
+        {"BMI", {InstFormat::BRANCH, 0x11, 0}},
+        {"BPL", {InstFormat::BRANCH, 0x12, 0}},
+        {"CALL", {InstFormat::BRANCH, 0x15, 0}},
+        {"RET", {InstFormat::RET, 0x16, 0}},
+        {"AND", {InstFormat::THREE_OP, 0x17, 0x18}},
+        {"OR", {InstFormat::THREE_OP, 0x19, 0x1A}},
+        {"XOR", {InstFormat::THREE_OP, 0x1B, 0x1C}},
+        {"PUSH", {InstFormat::STACK_INST, 0x1D, 0}},
+        {"POP", {InstFormat::STACK_INST, 0x1E, 0}},
+        {"CIP", {InstFormat::JUMP, 0x1F, 0}},
+    },
+};
 
 struct Registry {
   static constexpr auto &get() { return kInstructionTable; }
 
   static constexpr auto fetch(std::string_view key) -> const InstMetadata & {
-    for (auto &entry : kInstructionTable) {
+    for (const auto &entry : kInstructionTable) {
       if (entry.mnemonic == key)
         return entry.meta;
     }

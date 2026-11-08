@@ -76,11 +76,11 @@ auto printIR(const IR &irlisting) -> void {
       std::visit(
           overloaded{
               [&](const IROp &irop) {
-                auto dc = irop.destination.isVirtual ? "v_" : "R";
+                const auto *dc = irop.destination.isVirtual ? "v_" : "R";
                 switch (numberOfSources(irop.opcode)) {
                 case 2: {
-                  auto s1c = irop.source1.isVirtual ? "v_" : "R";
-                  auto s2c = irop.s2type == Register
+                  const auto *s1c = irop.source1.isVirtual ? "v_" : "R";
+                  const auto *s2c = irop.s2type == Register
                                  ? irop.source2.isVirtual ? "v_" : "R"
                                  : "#";
                   std::println("    {}{} = {} {}{} {}{}", dc,
@@ -89,7 +89,7 @@ auto printIR(const IR &irlisting) -> void {
                   break;
                 }
                 case 1: {
-                  auto s2c = irop.s2type == Register
+                  const auto *s2c = irop.s2type == Register
                                  ? irop.source2.isVirtual ? "v_" : "R"
                                  : "#";
                   std::println("    {}{} = {} {}{}", dc, irop.destination.val,
@@ -98,6 +98,9 @@ auto printIR(const IR &irlisting) -> void {
                 }
                 case 0:
                   std::println("    {}", getopName(irop.opcode));
+                  break;
+                default:
+                  break;
                 }
               },
               [&](const CallFunc &cfunc) {
@@ -116,8 +119,8 @@ auto printIR(const IR &irlisting) -> void {
                 std::println("    {} {}", getopName(branch.opcode),
                              branch.label);
               },
-              [&](const Return &ret) { std::println("    RET"); },
-              [&](const LocalGlobalBase &base) {},
+              [&](const Return &) { std::println("    RET"); },
+              [&](const LocalGlobalBase &) {},
           },
           ir);
     }

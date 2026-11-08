@@ -2,7 +2,9 @@
 
 #include "../common/cpu_info.hpp"
 #include "../common/hook.hpp"
+#include "../common/instructions.hpp"
 #include "cpu.hpp"
+#include <cstdint>
 
 // Execute semantics for each opcode, dispatched from CPU::run_cycle. Kept in
 // their own namespace so Halt/Nop/Ret/Call don't sit beside the encoder
@@ -43,7 +45,7 @@ struct DecodeSource2 {
 };
 
 struct DecodeImm {
-  static auto decode(CPU &cpu, std::uint32_t inst) -> std::uint32_t {
+  static auto decode(CPU &/*cpu*/, std::uint32_t inst) -> std::uint32_t {
     return inst & 0xFFFF;
   }
 };
@@ -62,7 +64,7 @@ struct DecodeLoadSource {
   }
 };
 
-enum OpType { ARITH_ADD, ARITH_SUB, LOGICAL, LSHIFT };
+enum OpType : std::uint8_t { ARITH_ADD, ARITH_SUB, LOGICAL, LSHIFT };
 
 using HookFn = auto (*)(CPU &) -> void;
 
@@ -82,14 +84,16 @@ inline auto intrinPrintu32(CPU &cpu) -> void {
   auto [end, _] =
       std::to_chars(buffer.data(), buffer.data() + buffer.size(), val);
 
-  for (const char *p = buffer.data(); p != end; *p++) {
+  for (const char *p = buffer.data(); p != end; ++p) {
     cpu.stall(cpu.bus.get<Serial>().cycles_until_ready(cpu.cycles()));
     cpu.store(SERIAL_BASE, *p);
   }
 }
 
 inline constexpr std::array<HookFn, Fanta::NUM_HOOKS> callHooks{
-    &intrinPrint, &intrinPrintu32};
+    &intrinPrint,
+    &intrinPrintu32,
+};
 
 // target is range-checked by Call.
 inline auto callIntrin(CPU &cpu, uint32_t target) -> void {
@@ -142,18 +146,13 @@ struct Jmp {
   static auto exec(CPU &cpu, uint32_t inst) { cpu.set_pc(inst & 0x3FFFFFF); }
 };
 
-inline auto parse_as_signed(uint32_t data) -> std::int32_t {
-  std::int32_t temp = data;
-  temp = temp << 6;
-  return temp >> 6;
-}
 
 template <CPU::FLAG f, bool isNeg> struct Branch {
   static auto exec(CPU &cpu, uint32_t inst) {
     if (cpu.flag_check(f, isNeg)) {
       auto prev = cpu.get_prev_pc();
       auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) +
-                                       parse_as_signed(inst & 0x3FFFFFF));
+                                       Instructions::sign_extend26(inst));
       cpu.set_pc(res);
     }
   }
@@ -163,17 +162,17 @@ struct Jrel {
   static auto exec(CPU &cpu, uint32_t inst) {
     auto prev = cpu.get_prev_pc();
     auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) +
-                                     parse_as_signed(inst & 0x3FFFFFF));
+                                     Instructions::sign_extend26(inst));
     cpu.set_pc(res);
   }
 };
 
 struct Halt {
-  static auto exec(CPU &cpu, uint32_t inst) { cpu.halted = true; }
+  static auto exec(CPU &cpu, uint32_t /*inst*/) { cpu.halted = true; }
 };
 
 struct Nop {
-  static auto exec(CPU &cpu, uint32_t inst) {}
+  static auto exec(CPU &/*cpu*/, uint32_t /*inst*/) {}
 };
 
 template <typename DestDecoder, typename OptDecoder> struct OpCmp {
@@ -196,7 +195,7 @@ template <typename DestDecoder, typename OptDecoder> struct OpCmp {
 };
 
 struct Ret {
-  static auto exec(CPU &cpu, uint32_t inst) {
+  static auto exec(CPU &cpu, uint32_t /*inst*/) {
     auto pc = cpu.pop_stack();
     cpu.set_pc(pc);
   }
@@ -207,7 +206,7 @@ struct Call {
     auto prev = cpu.get_prev_pc();
 
     auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) +
-                                     parse_as_signed(inst & 0x3FFFFFF));
+                                     Instructions::sign_extend26(inst));
     if (res >= Fanta::HOOK_BASE && res <= Fanta::HOOK_END) {
       callIntrin(cpu, res);
       return;
@@ -238,9 +237,7 @@ struct Cip {
     if (cpu.cip_interrupts[checkInt] == 1) {
       cpu.cip_interrupts[checkInt] = 0;
       cpu.push_stack();
-      auto prev = cpu.get_prev_pc();
-      auto res = static_cast<uint32_t>(
-          Fanta::Info::Cpu::INTERRUPT_BASE +
+      auto res = (Fanta::Info::Cpu::INTERRUPT_BASE +
           (4 * checkInt)); // decide where the interrupt table is
       cpu.set_pc(res);
     }

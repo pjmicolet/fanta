@@ -17,7 +17,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
   reset();
   FunctionIR fir = function;
   fir.insts.clear();
-  for (auto &ir : function.insts) {
+  for (const auto &ir : function.insts) {
     std::visit(
         overloaded{
             [&](const IROp &op) {
@@ -63,7 +63,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
             [&](const Branch &bop) { fir.insts.push_back(bop); },
             [&](const Return &ret) { fir.insts.push_back(ret); },
             [&](const IRLabel &irlabel) { fir.insts.push_back(irlabel); },
-            [](const auto &other) {}},
+            [](const auto &) {}},
         ir);
   }
 
@@ -79,7 +79,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
   auto adjustment =
       offset + spillSize + 4; // Account for the R15 save later in the code
 
-  for (auto i = 0; i < std::min(fir.calleeRegs.size(), fir.insts.size()); i++) {
+  for (std::size_t i = 0; i < std::min(fir.calleeRegs.size(), fir.insts.size()); i++) {
     std::visit(overloaded{[&](IROp &op) {
                             if (op.opcode == Info::Instructions::LOAD &&
                                 op.source1.val == Info::Registers::FP &&
@@ -87,7 +87,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
                               op.source2.val += adjustment;
                             }
                           },
-                          [](const auto &other) {}},
+                          [](const auto &) {}},
                fir.insts[i]);
   }
 
@@ -104,9 +104,9 @@ auto Allocator::getNextAvailable(FunctionIR &func, uint32_t reg,
   // We had previously allocated the register
   if (virtToReg.contains(reg)) {
     // It's still assigned
-    if (regToVirt.contains(virtToReg[reg]) && regToVirt[virtToReg[reg]] == reg)
+    if (regToVirt.contains(virtToReg[reg]) && regToVirt[virtToReg[reg]] == reg) {
       return virtToReg[reg];
-    else {
+    } else {
       // It's no longer assgined so we should make sure to store whatever that
       // register is currently and load the vreg
       stashAndLoad(func, reg, smech);

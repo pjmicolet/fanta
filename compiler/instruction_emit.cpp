@@ -5,7 +5,9 @@
 #include "instructions.hpp"
 #include "ir.hpp"
 #include <fanta_utils.hpp>
+#include <format>
 #include <ranges>
+#include <stdexcept>
 #include <string>
 #include <variant>
 
@@ -71,7 +73,7 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
         (opcode == Info::Instructions::BMI) ||
         (opcode == Info::Instructions::JREL) ||
         (opcode == Info::Instructions::JUMP)) {
-      auto newAddr = (resolvedAddresses[linkName] - (idx)) * 4;
+      auto newAddr = (resolvedAddresses[linkName] - idx) * 4;
       auto newFunc = Instructions::Emitter::single_inst(opcode, newAddr);
       il[idx] = newFunc;
     } // it's a call
@@ -81,7 +83,7 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
 auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                                         InstructionList &il) -> void {
 
-  for (auto &ir : fir.insts) {
+  for (const auto &ir : fir.insts) {
     std::visit(
         overloaded{[&](const IROp &op) { emitInst(op, gt, il); },
                    [&](const CallFunc &op) {
@@ -103,7 +105,7 @@ auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                      globalBaseMovs.push_back(
                          static_cast<uint32_t>(il.size() - 1));
                    },
-                   [](const auto &other) {}},
+                   [](const auto &) {}},
         ir);
   }
 
@@ -139,7 +141,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
   il.push_back(Instructions::Emitter::two_op(
       Info::Instructions::MOV_REG, Info::Registers::FP, Info::Registers::SP));
 
-  for (auto &ir : fir.insts) {
+  for (const auto &ir : fir.insts) {
     std::visit(
         overloaded{
             [&](const IROp &op) { emitInst(op, gt, il); },
@@ -159,7 +161,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
               missingLinks.push_back(
                   {static_cast<uint32_t>(il.size() - 1), bop.label});
             },
-            [&](const Return &ret) { emitEpilogue(fir, maxOffset, il); },
+            [&](const Return &) { emitEpilogue(fir, maxOffset, il); },
             [&](const LocalGlobalBase &lgb) {
               auto movGlobal = Instructions::Emitter::two_op_imm(
                   Info::Instructions::MOV_IMM, lgb.dest.val, 0);
@@ -169,7 +171,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
             [&](const IRLabel &label) {
               resolvedAddresses[label.name] = il.size();
             },
-            [](const auto &other) {}},
+            [](const auto &) {}},
         ir);
   }
 
@@ -199,7 +201,7 @@ auto InstructionEmitter::emitEpilogue(const FunctionIR &fir, uint32_t maxOffset,
   il.push_back(Instructions::Emitter::single_inst(Info::Instructions::RET, 0));
 }
 
-auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,
+auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &/*gt*/,
                                   InstructionList &il) -> void {
 #define THREE_REG(num)                                                         \
   case num: {                                                                  \
@@ -232,6 +234,9 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,
         op.opcode, op.destination.val, op.source2.val));                       \
     break;                                                                     \
   }
+  // Same-format cases expand to identical bodies; replacing this switch with
+  // a kInstructionTable format lookup is in docs/plans.md.
+  // NOLINTBEGIN(bugprone-branch-clone)
   switch (op.opcode) {
     SINGLE(Info::Instructions::HALT)
     THREE_REG(Info::Instructions::ADD_REG)
@@ -265,7 +270,11 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &gt,
     SINGLE(Info::Instructions::PUSH)
     SINGLE(Info::Instructions::POP)
     SINGLE(Info::Instructions::BNC)
+  default:
+    throw std::logic_error(
+        std::format("emitInst: no encoding for opcode {:#x}", op.opcode));
   }
+  // NOLINTEND(bugprone-branch-clone)
 }
 
 auto InstructionEmitter::reset() -> void {

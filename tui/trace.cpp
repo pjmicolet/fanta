@@ -6,7 +6,7 @@
 #include "cpu.hpp"
 #include "program.hpp"
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) try {
     if (argc < 2) {
         std::println(std::cerr, "Usage: fanta-trace <filename.asm> [--limit N]");
         return 1;
@@ -71,4 +71,7 @@ int main(int argc, char* argv[]) {
     }
 
     return 0;
+} catch (const std::exception &e) {
+    std::cerr << "fanta-trace: error: " << e.what() << "\n";
+    return 1;
 }

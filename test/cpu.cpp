@@ -228,7 +228,8 @@ TEST_CASE("Immediates - 16-bit Payload Is Zero-Extended") {
   const std::array<uint32_t, 3> code{
       Instructions::parse_two(0x4, 0, 0xFFFF, true),      // MOV R0, #FFFF
       Instructions::parse_three(0x2, 1, 1, 0xFFFF, true), // ADD R1, R1, #FFFF
-      0};
+      0,
+  };
   CPU cpu{};
   cpu.load_rom(code);
   cpu.run_cycle();
@@ -366,13 +367,26 @@ TEST_CASE("Serial Program Output Keeps Byte Order") {
   // The hello-world from the serial spec, run through the real dispatch path.
   // Each byte waits for TX_READY (STATUS bit 1) before it's written.
   CPU cpu{};
-  runSerialProgram(cpu, {"MOV R1, #200", "LSH R1, R1, #10",
-                         "MOV R2, #48", "LOAD R3, 4(R1)", "AND R3, R3, #2",
-                         "BEQ -8", "STORE R2, 0(R1)",
-                         "MOV R2, #69", "LOAD R3, 4(R1)", "AND R3, R3, #2",
-                         "BEQ -8", "STORE R2, 0(R1)",
-                         "MOV R2, #A", "LOAD R3, 4(R1)", "AND R3, R3, #2",
-                         "BEQ -8", "STORE R2, 0(R1)", "HALT"});
+  runSerialProgram(cpu, {
+                            "MOV R1, #200",
+                            "LSH R1, R1, #10",
+                            "MOV R2, #48",
+                            "LOAD R3, 4(R1)",
+                            "AND R3, R3, #2",
+                            "BEQ -8",
+                            "STORE R2, 0(R1)",
+                            "MOV R2, #69",
+                            "LOAD R3, 4(R1)",
+                            "AND R3, R3, #2",
+                            "BEQ -8",
+                            "STORE R2, 0(R1)",
+                            "MOV R2, #A",
+                            "LOAD R3, 4(R1)",
+                            "AND R3, R3, #2",
+                            "BEQ -8",
+                            "STORE R2, 0(R1)",
+                            "HALT",
+                        });
   REQUIRE_SAME(std::string{"Hi\n"}, serialOut(cpu));
   REQUIRE_SAME(0u, cpu.bus.get<Serial>().dropped);
 }
@@ -381,9 +395,17 @@ TEST_CASE("Serial Writes That Don't Poll Are Dropped") {
   // Back-to-back stores: the port is still sending 'H' when 'i' and '\n'
   // arrive, so only the first byte goes out.
   CPU cpu{};
-  runSerialProgram(cpu, {"MOV R1, #200", "LSH R1, R1, #10", "MOV R2, #48",
-                         "STORE R2, 0(R1)", "MOV R2, #69", "STORE R2, 0(R1)",
-                         "MOV R2, #A", "STORE R2, 0(R1)", "HALT"});
+  runSerialProgram(cpu, {
+                            "MOV R1, #200",
+                            "LSH R1, R1, #10",
+                            "MOV R2, #48",
+                            "STORE R2, 0(R1)",
+                            "MOV R2, #69",
+                            "STORE R2, 0(R1)",
+                            "MOV R2, #A",
+                            "STORE R2, 0(R1)",
+                            "HALT",
+                        });
   REQUIRE_SAME(std::string{"H"}, serialOut(cpu));
   REQUIRE_SAME(2u, cpu.bus.get<Serial>().dropped);
 }

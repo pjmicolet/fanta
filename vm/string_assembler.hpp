@@ -10,7 +10,6 @@
 #include <vector>
 
 struct Assembler {
-  static constexpr std::string _LITERAL = "#";
 
   auto scan_for_labels(std::string_view code) -> void {
     labels_.clear();
@@ -18,17 +17,17 @@ struct Assembler {
     uint32_t add = 0;
     for (const auto &line : lines) {
       if (is_label_define(line)) {
-        size_t labelEndDef = line.find(":");
-        size_t cleanLabelStart = line.find_first_not_of(" ");
+        size_t labelEndDef = line.find(':');
+        size_t cleanLabelStart = line.find_first_not_of(' ');
         size_t end = labelEndDef - cleanLabelStart;
         std::string clean_label{line.substr(cleanLabelStart, end)};
-        std::transform(clean_label.begin(), clean_label.end(),
-                       clean_label.begin(), ::toupper);
+        std::ranges::transform(clean_label, clean_label.begin(), ::toupper);
         clean_label.erase(
-            std::remove_if(clean_label.begin(), clean_label.end(),
-                           [](unsigned char x) { return std::isspace(x); }),
+            std::ranges::remove_if(
+                clean_label, [](unsigned char x) { return std::isspace(x); })
+                .begin(),
             clean_label.end());
-        labels_[clean_label] = add;
+        labels_[clean_label] = static_cast<int>(add);
       }
       add += 4;
     }
@@ -44,7 +43,7 @@ struct Assembler {
       return Instructions::Nop::emit();
 
     try {
-      auto &mtdc = Instructions::Registry::fetch(tokens[0]);
+      const auto &mtdc = Instructions::Registry::fetch(tokens[0]);
       switch (mtdc.fmt) {
       case Instructions::THREE_OP:
         return parse_three(tokens, mtdc, address);
@@ -55,7 +54,6 @@ struct Assembler {
       case Instructions::JUMP:
         return parse_one(tokens, mtdc, address, true);
       case Instructions::BRANCH:
-        return parse_one(tokens, mtdc, address);
       case Instructions::STACK_INST:
         return parse_one(tokens, mtdc, address);
       case Instructions::NOP:
@@ -79,7 +77,7 @@ struct Assembler {
     return "";
   }
 
-  auto does_label_exist(std::string label) -> bool {
+  auto does_label_exist(const std::string& label) -> bool {
     return labels_.contains(label);
   }
 
@@ -90,18 +88,18 @@ private:
     auto code = line.substr(0, line.find(';'));
     if (code.empty() || code[0] == ';')
       return false;
-    if (!code.contains(":"))
+    if (!code.contains(':'))
       return false;
 
-    auto colon_pos = code.find(":");
-    if (colon_pos == code.npos)
+    auto colon_pos = code.find(':');
+    if (colon_pos == std::string_view::npos)
       return false;
-    auto label = code.substr(0, code.find(":"));
+    auto label = code.substr(0, code.find(':'));
     auto start = label.find_first_not_of(" \t\r\n");
-    if (start == label.npos)
+    if (start == std::string_view::npos)
       return false;
     auto end = label.find_first_not_of(" \t\r\n");
-    if (end == label.npos)
+    if (end == std::string_view::npos)
       return false;
     auto pureLabel = label.substr(start, end - start + 1);
     return is_label(pureLabel);
@@ -148,8 +146,8 @@ private:
     for (auto &c : last_copy) {
       if (c == '(' || c == ')' || c == ',')
         c = ' ';
-      else if (::isalpha(c))
-        c = ::toupper(c);
+      else if (::isalpha(static_cast<unsigned char>(c)))
+        c = static_cast<char>(::toupper(static_cast<unsigned char>(c)));
     }
 
     return last_copy | std::views::split(' ') |
@@ -193,10 +191,7 @@ private:
     if (token.starts_with("0X")) {
       token.remove_prefix(2);
       forceHex = true;
-    } else if (token.starts_with("$")) {
-      token.remove_prefix(1);
-      forceHex = true;
-    } else if (token.starts_with("#")) {
+    } else if (token.starts_with('$') || token.starts_with('#')) {
       token.remove_prefix(1);
       forceHex = true;
     }

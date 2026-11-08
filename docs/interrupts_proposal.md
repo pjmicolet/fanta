@@ -1,7 +1,7 @@
 # Fanta ISA: Preemptive Interrupts Proposal
 
 **Status:** proposal (rewritten 2026-10-17). This is the **kernel layer**: hardware interrupts
-taken preemptively by the CPU, and later the same entry path for syscalls (`SYS`) and faults.
+taken preemptively by the CPU, and later the same entry path for syscalls (`SYS`) and faults (§8).
 The cooperative model (`CIP`) is a separate **user layer**, specified in
 `docs/cooperative_interrupts.md`. The two layers share only the pending bits (§2). This document
 also fixes the opcode collision in the earlier draft (EI/DI were assigned `0x1F`/`0x20`, which
@@ -162,3 +162,62 @@ lands first, steps 1–3 collapse to one row per instruction.
      with SP balanced.
    - No nesting: a second pending line during the handler waits until `RETI`.
    - The stack never touches VRAM (already covered by the B2 tests).
+
+---
+
+## 8. Faults (proposal, 2026-11-08)
+
+**Why:** `run_cycle()` handles opcodes `0x00`–`0x20`. The other 31 values fall through the
+switch with no matching case, so they run as a silent NOP. A corrupt word, a jump into data, or
+a mis-emitted opcode keeps running on garbage (clang-tidy `bugprone-unhandled-code-paths` at
+`vm/cpu.cpp:22`). PC precedent: the 8086 did something undefined, and the 80186 and later raise
+INT 6 (invalid opcode). Fanta takes the 80186 route through the trap entry from §3.
+
+### Semantics
+
+| Piece | Rule |
+| :--- | :--- |
+| Entry | `trap(cause)`: push the packed flags word (§4), push PC, `MODE = 0`, `IE = 0`, `CAUSE = cause`, `PC = TRAP_VECTOR`. This is the §3 flow, shared with hardware lines and `SYS`. |
+| Masking | Faults ignore `IE`. They're synchronous with the instruction that caused them. |
+| Pushed PC | The **faulting** instruction's address (`PC - 4` after fetch), unlike a hardware line, which pushes the next instruction. A handler can emulate an unimplemented opcode, add 4 to the stacked PC and `RETI`, like 386 FPU emulation. |
+| `CAUSE` | A new special register, read by the handler. Hardware lines are `0..N`; faults are `0x80 + code`. `0x80` = illegal opcode. Later codes: misaligned access, bad address, double fault. |
+| No handler installed | RAM resets to zero and opcode `0x00` is `HALT`, so an empty `TRAP_VECTOR` halts by itself. `CAUSE` and the stacked PC still record what happened, so tools can report "illegal opcode 0x2A at 0x0010". |
+| Fault inside the handler | Double fault: halt immediately, with no second push, and set `CAUSE = 0x8F`. Detect it as "faulted while `MODE = 0` and already in a trap", or with a one-bit `in_fault` latch that `RETI` clears. |
+| Return | `RETI` (§5, `0x23`): pop PC, then pop flags. |
+
+`0x21`–`0x23` are reserved for `EI`/`DI`/`RETI` (§5). They stay illegal until they're implemented.
+
+### Minimal first cut
+
+The only first user is the illegal-opcode fault, so the first cut is:
+
+- `CAUSE` register, `TRAP_VECTOR` constant, `MODE` and `IE` bits in the flags word (§4).
+- `BaseCPU::trap(cause)`, and `RETI`.
+- `default:` in the `run_cycle()` switch calls `trap(0x80)`. Dispatch is a jump table, so the
+  hot loop pays nothing.
+
+Not in this cut: `EI`/`DI`, the `IE`-gated hardware-line check, `SYS`, and migrating `CIP`.
+
+### Open questions
+
+1. **Where is `TRAP_VECTOR`?** Programs load at `0x0`, and `INTERRUPT_BASE` (`0x100`) can already
+   collide with a long program. Options: a fixed low address that the assembler and compiler
+   reserve (like the x86 IVT at `0x0000`); a vector *word* at a fixed address holding the
+   handler's address (one indirection, but programs can install handlers anywhere); or the top
+   of RAM, below the stack.
+2. **`RETI` or `ERET`** (§6 Q2): faults make "return from exception" the better name.
+3. **`CAUSE` access:** a special-register read (needs an instruction or a format), or have entry
+   also put `CAUSE` in a fixed GPR (no new instruction, but it clobbers a register before the
+   handler can save it).
+
+### Checklist
+
+1. `common/cpu_info.hpp`: `TRAP_VECTOR`, the cause codes. `common/instructions.hpp`: `RETI`.
+2. `vm/cpu.hpp`: `CAUSE`, flags packing with `IE`/`MODE`, `trap()`. `vm/cpu.cpp`: `default:`.
+   `vm/execute.hpp`: `Reti`.
+3. Tools: TUI status line and `fanta-diff`/`fanta-trace` show a taken trap and its cause;
+   `tui/disasm.hpp` shows unknown opcodes as `??? 0x2A`.
+4. Tests (`test/cpu.cpp`):
+   - An illegal opcode with an empty vector halts, with `CAUSE = 0x80` and the faulting PC on the stack.
+   - A handler that adds 4 to the stacked PC and does `RETI` resumes at the next instruction, with SP and flags restored.
+   - An illegal opcode inside the handler halts with the double-fault cause.

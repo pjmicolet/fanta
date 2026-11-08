@@ -12,6 +12,7 @@ Crashes and hangs reproduce with `tools/crash.py fanta-compiler c.fn -o c.bin`. 
 |---|---|---|---|---|
 | New | `let b : int = ;` | Crash, or reports OK | Missing initialiser leaves an invalid node index | `SimpleIRPass::emitVariableIR`, via `Parser::getNodeAtIndex` |
 | B11 | `let a : int = -1;` | Crash | Unary minus produces an invalid node index | `Parser::walkPrefix`, via `Parser::getNodeAtIndex` |
+| New | `let a : int = 1 $ 2;` (unknown symbol in an expression) | Compiler hangs until killed (also killed for memory once) | Not investigated; maybe the same loop as B6 | Lexer `UnknownToken` handling in the parser |
 | B7 | A source file containing only `@` | Crash | Dereferences an errored `expected` | `Parser::Parser` |
 | B6 | EOF inside a body; `fn main(1)` | Parser hangs | Parser loops without advancing | `compiler/parser.cpp` |
 | B10 | `for (; i < 3; i = i + 1)` | `bad_variant_access` error | Empty init is read as a `VariableDecl` | `compiler/SimpleIRPass.cpp` |
@@ -21,6 +22,7 @@ Crashes and hangs reproduce with `tools/crash.py fanta-compiler c.fn -o c.bin`. 
 | New | `return qd;` with `qd` undefined | Compiles without error | Undefined variables aren't rejected | Compiler |
 | New | Any compile | Prints `About to get stuck` | Leftover debug output | Compiler |
 | New | Any compiled program | Emits HALT as `0x03FFFFFF`, so `:eject` misreads code | Should emit `Halt::emit()` (`0`) | Compiler |
+| New | Opcode word `0x21`–`0x3F` (corrupt word, jump into data) | Runs as a silent NOP | `run_cycle()` switch has no `default:` | `vm/cpu.cpp`; fix proposed in `docs/interrupts_proposal.md` §8 |
 | B16 | `SP` as a source operand | Encoded as immediate `#16` | Checks the first letter instead of `is_register()` | `parse_two`, `vm/string_assembler.hpp` |
 
 ## Not rechecked since 2026-10-17

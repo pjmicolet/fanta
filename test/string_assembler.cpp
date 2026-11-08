@@ -118,7 +118,7 @@ TEST_CASE("Negative Branch Offset Round Trips Through Decode") {
   a.scan_for_labels("LOOP:\nSUB R1, R1, #1\nBNE LOOP");
   const auto raw = a.assemble("BNE LOOP", 8);
   REQUIRE_SAME(0xB, Instructions::Decode{raw}.getOpcode());
-  const auto off = static_cast<int32_t>((raw & 0x3FFFFFF) << 6) >> 6;
+  const auto off = Instructions::sign_extend26(raw);
   REQUIRE_SAME(-8, off);
 }
 
@@ -127,6 +127,6 @@ TEST_CASE("CALL Encodes A PC-Relative Label Offset") {
   a.scan_for_labels("NOP\nNOP\nCALL SUB\nHALT\nSUB:\nRET");
   const auto raw = a.assemble("CALL SUB", 8);
   REQUIRE_SAME(0x15, Instructions::Decode{raw}.getOpcode());
-  const auto off = static_cast<int32_t>((raw & 0x3FFFFFF) << 6) >> 6;
+  const auto off = Instructions::sign_extend26(raw);
   REQUIRE_SAME(8, off); // SUB at 0x10, CALL at 0x08
 }

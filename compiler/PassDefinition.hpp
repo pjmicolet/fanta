@@ -6,6 +6,7 @@
 #include <concepts>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 
 namespace Fanta {
@@ -36,7 +37,7 @@ struct LocalVarInfo {
 struct LocalTable {
 
   LocalTable(std::string funcName)
-      : funcName(funcName), numberOfTemps(0), labelCount(0) {};
+      : funcName(std::move(funcName)) {};
 
   auto allocateAnonymous() -> TempReg { return numberOfTemps++; }
 
@@ -55,7 +56,7 @@ struct LocalTable {
 private:
   std::string funcName;
   int labelCount = 0;
-  TempReg numberOfTemps;
+  TempReg numberOfTemps = 0;
 };
 
 using GlobalNameInfo = std::variant<GlobalFuncInfo, GlobalVarInfo>;

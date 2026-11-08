@@ -16,17 +16,17 @@ class Editor {
 public:
   Editor() : lines_{""} {}
 
-  auto lines() const -> const std::vector<std::string> & { return lines_; }
-  auto line() const -> const std::string & { return lines_[y_]; }
-  auto x() const -> int { return x_; }
-  auto y() const -> int { return y_; }
-  auto read_only() const -> bool { return read_only_; }
+  [[nodiscard]] auto lines() const -> const std::vector<std::string> & { return lines_; }
+  [[nodiscard]] auto line() const -> const std::string & { return lines_[y_]; }
+  [[nodiscard]] auto x() const -> int { return x_; }
+  [[nodiscard]] auto y() const -> int { return y_; }
+  [[nodiscard]] auto read_only() const -> bool { return read_only_; }
   /// Bumped by every edit (and by set_lines). Comparing against a saved
   /// value tells whether the text changed since then (unsaved, stale build).
-  auto version() const -> uint64_t { return version_; }
+  [[nodiscard]] auto version() const -> uint64_t { return version_; }
   /// Bumped only by edits that add or remove lines (newline, joining lines,
   /// set_lines). In assembly, those are the edits that can move addresses.
-  auto structure_version() const -> uint64_t { return structure_version_; }
+  [[nodiscard]] auto structure_version() const -> uint64_t { return structure_version_; }
 
   auto set_lines(std::vector<std::string> lines, bool read_only = false)
       -> void {
@@ -40,7 +40,7 @@ public:
     ++structure_version_;
   }
 
-  auto text() const -> std::string {
+  [[nodiscard]] auto text() const -> std::string {
     std::string out;
     for (const auto &l : lines_)
       out += l + "\n";
@@ -148,7 +148,7 @@ public:
   }
 
 private:
-  auto len() const -> int { return static_cast<int>(lines_[y_].size()); }
+  [[nodiscard]] auto len() const -> int { return static_cast<int>(lines_[y_].size()); }
   auto clamp_x() -> void { x_ = std::min(x_, len()); }
 
   std::vector<std::string> lines_;

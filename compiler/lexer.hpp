@@ -1,10 +1,11 @@
 #pragma once
 #include <expected>
 #include <string_view>
+#include <cstdint>
 
 using namespace std::literals;
 
-enum class LexErrorType { UnterminatedString, UnknownToken, MalformedToken };
+enum class LexErrorType : std::uint8_t { UnterminatedString, UnknownToken, MalformedToken };
 
 struct LexError {
   LexErrorType t;
@@ -17,7 +18,7 @@ struct Lexer {
 
   Lexer(std::string_view body) : body_(body), end_{body.size()} {}
 
-  enum class TokenType {
+  enum class TokenType : std::uint8_t {
     IntLiteral,
     Eof,
     KeywordLet,
@@ -86,7 +87,9 @@ struct Lexer {
   }
 
 private:
-  auto allowedCharsInAlpha(char c) -> bool { return ::isalnum(c) || c == '_'; }
+  auto allowedCharsInAlpha(char c) -> bool {
+    return (::isalnum(c) != 0) || c == '_';
+  }
 
   auto parseAlpha(std::size_t start) -> std::expected<Token, LexError> {
     while (cursor_ < end_ && allowedCharsInAlpha(body_[cursor_]) &&
@@ -249,27 +252,28 @@ private:
     case ':':
       return Token{TokenType::Colon, body_.substr(cursor_, 1), 0, cursor_,
                    cursor_++};
-    case '@':
+    case '@': {
       auto start = cursor_++;
-      while (cursor_ < end_ && allowedCharsInAlpha(body_[cursor_]) &&
-             (body_[cursor_] != ' ' || body_[cursor_] != '\0')) {
+      while (cursor_ < end_ && allowedCharsInAlpha(body_[cursor_])) {
         cursor_++;
       }
       return Token{TokenType::Intrinsic, body_.substr(start, cursor_ - start),
                    0, start, cursor_};
     }
-    return std::unexpected(
-        LexError{LexErrorType::UnknownToken, 0, cursor_, cursor_++});
+    default:
+      return std::unexpected(
+          LexError{LexErrorType::UnknownToken, 0, cursor_, cursor_++});
+    }
   }
 
-  enum class CharType {
+  enum class CharType : std::uint8_t {
     Whitespace,
     Alpha,
     Num,
     Symbol,
   };
 
-  auto getType(char c) const -> CharType {
+  [[nodiscard]] auto getType(char c) const -> CharType {
     if (::isalpha(c) || c == '_')
       return CharType::Alpha;
     if (::isdigit(c))
@@ -279,7 +283,7 @@ private:
     return CharType::Symbol;
   }
 
-  auto peek() const -> char {
+  [[nodiscard]] auto peek() const -> char {
     if (cursor_ + 1 < end_)
       return body_.at(cursor_ + 1);
     return '\0';

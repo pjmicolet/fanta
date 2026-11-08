@@ -55,9 +55,9 @@ public:
 private:
   void update();
   void configure_ncurses();
-  auto layout_kind() const -> Fanta::Layout::Kind;
+  [[nodiscard]] auto layout_kind() const -> Fanta::Layout::Kind;
   /// PC as shown to the user: on the HALT itself once halted (spec §6.1).
-  auto display_pc() const -> uint32_t;
+  [[nodiscard]] auto display_pc() const -> uint32_t;
 
   // Panes; each draws only inside its canvas.
   void draw_status_line(const Fanta::Canvas &c);
@@ -100,9 +100,9 @@ private:
 
   // Session model (spec §2).
   /// Edited since the last :w / load.
-  auto dirty() const -> bool;
+  [[nodiscard]] auto dirty() const -> bool;
   /// The source changed since the image in memory was built from it.
-  auto stale() const -> bool;
+  [[nodiscard]] auto stale() const -> bool;
   /// After a build or a live patch: memory now matches the editor text.
   void mark_built();
   bool write_file(const std::string &target);

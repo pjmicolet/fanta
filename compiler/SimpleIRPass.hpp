@@ -12,12 +12,12 @@ struct SimpleIRPass {
 private:
   auto emitGlobalVariableIR(const Parser &p, const AST::VariableDecl &decl,
                             FunctionIR &ir, GlobalTable &gt) -> void;
-  auto emitVariableIR(const Parser &p, const AST::VariableDecl &decl,
+  auto emitVariableIR(const Parser &p, const AST::VariableDecl &vdec,
                       IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> void;
-  auto emitReturnIR(const Parser &p, const AST::ReturnVal &decl, IRListing &ir,
+  auto emitReturnIR(const Parser &p, const AST::ReturnVal &vdec, IRListing &ir,
                     const GlobalTable &gt, LocalTable &lt) -> void;
-  auto emitFunctionDef(const Parser &p, const AST::FunctionDef &decl, IR &ir,
+  auto emitFunctionDef(const Parser &p, const AST::FunctionDef &fdef, IR &ir,
                        const GlobalTable &gt) -> void;
   auto emitStatement(const Parser &p, const AST::AstNode &node, IRListing &ir,
                      const GlobalTable &gt, LocalTable &lt) -> void;
@@ -26,12 +26,12 @@ private:
       -> void;
   auto emitGlobalNameBase(IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> TempReg;
-  auto emitFunctionPrelude(const Parser &p, const AST::FunctionDef &decl,
+  auto emitFunctionPrelude(const Parser &p, const AST::FunctionDef &funcDef,
                            FunctionIR &ir, LocalTable &lt) -> void;
   auto emitExpression(const Parser &p, const AST::AstNode &node, IRListing &ir,
-                      const GlobalTable &gt, LocalTable &lt, TempReg tr)
+                      const GlobalTable &gt, LocalTable &lt, TempReg dest)
       -> void;
-  auto emitCall(const Parser &p, const AST::FunctionCall &node, IRListing &ir,
+  auto emitCall(const Parser &p, const AST::FunctionCall &fcall, IRListing &ir,
                 const GlobalTable &gt, LocalTable &lt,
                 std::optional<TempReg> dest = std::nullopt) -> void;
   auto emitIf(const Parser &p, const AST::IfStm &ifStm, IRListing &ir,
@@ -42,8 +42,8 @@ private:
 
   auto handleLogicalCheck(const Parser &p, const AST::BinaryOperator &bop,
                           IRListing &ir, const GlobalTable &gt, LocalTable &lt,
-                          Lexer::TokenType type, std::string falseLabel,
-                          std::string trueLabel) -> void;
+                          Lexer::TokenType type, const std::string& falseLabel,
+                          const std::string& trueLabel) -> void;
 
   /**
    * Nested Logical if statements have a very specific check for and || or
@@ -67,9 +67,9 @@ private:
                                         const AST::BinaryOperator &bop,
                                         IRListing &ir, const GlobalTable &gt,
                                         LocalTable &lt, Lexer::TokenType type,
-                                        std::string trueLabel) -> void;
+                                        const std::string& trueLabel) -> void;
 
-  auto emitComparison(const Parser &p, const AST::BinaryOperator &node,
+  auto emitComparison(const Parser &p, const AST::BinaryOperator &bcall,
                       IRListing &ir, const GlobalTable &gt, LocalTable &lt)
       -> void;
   auto emitCondTrue(const Parser &p, const AST::AstNode &node, IRListing &ir,

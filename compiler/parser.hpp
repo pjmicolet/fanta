@@ -12,9 +12,9 @@ struct Parser {
 
   auto walk() -> void;
   auto fullWalk() -> void;
-  auto getCurrentRoot() const -> Fanta::AST::AstNode;
-  auto getRootIndices() const -> const std::vector<Fanta::AST::NodeIndex> &;
-  auto getNodeAtIndex(Fanta::AST::NodeIndex idx) const -> Fanta::AST::AstNode;
+  [[nodiscard]] auto getCurrentRoot() const -> Fanta::AST::AstNode;
+  [[nodiscard]] auto getRootIndices() const -> const std::vector<Fanta::AST::NodeIndex> &;
+  [[nodiscard]] auto getNodeAtIndex(Fanta::AST::NodeIndex idx) const -> Fanta::AST::AstNode;
   auto tokenTypeToString(Lexer::TokenType t) -> std::string_view;
   auto dumpNodes() -> void;
   auto printAST(Fanta::AST::NodeIndex idx, int indent = 0) -> void;
@@ -41,7 +41,6 @@ private:
   std::vector<Fanta::AST::AstNode> asts;
   std::vector<Fanta::AST::NodeIndex> roots;
 
-  size_t index = 0;
 
   auto nextToken() -> void;
 

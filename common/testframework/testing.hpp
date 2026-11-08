@@ -1,9 +1,12 @@
 #pragma once
 #include "assertions.hpp"
 #include "result_format.hpp"
+#include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #define FUNC_NAME TestCase
@@ -16,7 +19,7 @@
 struct TestCase;
 
 struct TestCase {
-  TestCase(std::string name) : name_(name) {};
+  TestCase(std::string name) : name_(std::move(name)) {};
   virtual auto run() -> void = 0;
   auto report() {
     std::cout << "Running " << name_ << "...\n";
@@ -37,25 +40,35 @@ static std::vector<TestCase *> cases;
 
 #define TEST_CASE(name) GEN_TEST(GEN_CLASS_NAME(FUNC_NAME), name)
 
-int main() {
+int main() try {
   std::vector<std::unique_ptr<Test::Format::Result>> results;
-  bool __failed = 0;
+  bool failed = false;
+  auto recordFailure = [&](const std::string &name, const std::string &why) {
+    failed = true;
+    results.emplace_back(std::make_unique<Test::Format::Failed>(name, why));
+  };
   for (const auto &tCase : cases) {
     try {
       tCase->report();
     } catch (const TestException &e) {
-      __failed = 1;
-      results.emplace_back(static_cast<std::unique_ptr<Test::Format::Result>>(
-          std::make_unique<Test::Format::Failed>(tCase->name_, e.what())));
+      recordFailure(tCase->name_, e.what());
+      continue;
+    } catch (const std::exception &e) {
+      // Anything else would terminate the run and lose every result so far.
+      recordFailure(tCase->name_,
+                    std::string("unexpected exception: ") + e.what());
       continue;
     }
-    results.emplace_back(static_cast<std::unique_ptr<Test::Format::Result>>(
-        std::make_unique<Test::Format::Passed>(tCase->name_)));
+    results.emplace_back(std::make_unique<Test::Format::Passed>(tCase->name_));
   }
 
   const std::string indent = "    ";
   for (const auto &result : results) {
     std::cout << indent << result->to_string() << "\n";
   }
-  return __failed;
+  return failed ? EXIT_FAILURE : EXIT_SUCCESS;
+} catch (...) {
+  // Reporting itself failed (e.g. out of memory); still fail the run.
+  std::cerr << "test runner: internal error while reporting results\n";
+  return EXIT_FAILURE;
 }

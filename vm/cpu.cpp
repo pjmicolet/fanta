@@ -53,6 +53,9 @@ auto BaseCPU<Spec, BType>::run_cycle() -> void {
     EXEC_INST(0x1E, Pop)
     EXEC_INST(0x1F, Cip)
     EXEC_INST(0x20, Bnc)
+  default:
+    break; // Illegal opcode: runs as a NOP until the trap in
+           // docs/interrupts_proposal.md §8 lands.
   }
   inst_count++;
   cycle_count++; // every instruction is one cycle, for now

@@ -5,8 +5,9 @@
 #include <fanta_utils.hpp>
 #include <print>
 #include <stdexcept>
+#include <utility>
 
-Parser::Parser(std::string program) : program_(program), lexer(program_) {
+Parser::Parser(std::string program) : program_(std::move(program)), lexer(program_) {
   currentToken = *lexer.getToken();
   peekToken = *lexer.getToken(); // TODO errors
 }
@@ -117,7 +118,7 @@ auto Parser::dumpNodes() -> void {
 }
 
 auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
-  std::string pad(indent * 2, ' ');
+  std::string pad(static_cast<std::size_t>(indent) * 2, ' ');
 
   const auto &node = asts[idx];
   std::visit(overloaded{[&](const Fanta::AST::IntLiteral &lit) {
@@ -139,14 +140,14 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                         [&](const Fanta::AST::FunctionCall &fc) {
                           std::println("{}FunctionCall()", pad);
                           printAST(fc.funcNameIdx, indent + 1);
-                          for (auto &c : fc.params) {
+                          for (const auto &c : fc.params) {
                             printAST(c, indent + 1);
                           }
                         },
                         [&](const Fanta::AST::FunctionDef &fc) {
                           std::println("{}FunctionDef({} -> {})", pad, fc.name,
                                        fc.retType);
-                          for (auto &p : fc.params) {
+                          for (const auto &p : fc.params) {
                             printAST(p, indent + 1);
                           }
                           printAST(fc.body);
@@ -157,7 +158,7 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                         },
                         [&](const Fanta::AST::FunctionBody &p) {
                           std::println("{}FunctionBody", pad);
-                          for (auto &b : p.expressions) {
+                          for (const auto &b : p.expressions) {
                             printAST(b, indent + 1);
                           }
                         },
@@ -185,7 +186,7 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                           std::println("{}body:", pad);
                           printAST(forStm.body, indent + 2);
                         },
-                        [](const auto &id) {}},
+                        [](const auto &) {}},
              node.t);
 }
 
@@ -252,8 +253,10 @@ auto Parser::walkFn() -> void {
 
 auto Parser::walkReturn() -> Fanta::AST::NodeIndex {
   auto index = walkExpression(Precedence::ASSIGN_OR_RET);
-  Fanta::AST::ReturnVal var{"unknown",
-                            index}; // we don't know the return type yet
+  Fanta::AST::ReturnVal var{
+      "unknown",
+      index,
+  }; // we don't know the return type yet
   asts.push_back({var, 0});
   return asts.size() - 1;
 }
@@ -421,9 +424,7 @@ auto Parser::walkPrefix() -> Fanta::AST::NodeIndex {
 auto Parser::getPrecedence(Lexer::TokenType t) -> Precedence {
   switch (t) {
   case Lexer::TokenType::KeywordLet:
-    return Precedence::ASSIGN_OR_RET;
   case Lexer::TokenType::Equal:
-    return Precedence::ASSIGN_OR_RET;
   case Lexer::TokenType::Return:
     return Precedence::ASSIGN_OR_RET;
   case Lexer::TokenType::OpenParam:
@@ -435,7 +436,6 @@ auto Parser::getPrecedence(Lexer::TokenType t) -> Precedence {
   case Lexer::TokenType::Plus:
     return Precedence::SUM;
   case Lexer::TokenType::SemiColon:
-    return Precedence::LOWEST;
   case Lexer::TokenType::CloseParam:
     return Precedence::LOWEST;
   case Lexer::TokenType::Slash:

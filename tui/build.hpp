@@ -37,7 +37,7 @@ inline auto compile(std::string source,
 
   auto promise = std::make_shared<std::promise<Result>>();
   auto future = promise->get_future();
-  std::thread([promise, src = std::move(source)]() mutable {
+  std::thread([promise, src = std::move(source)] mutable {
     try {
       promise->set_value(DefaultCompiler{}.compile(std::move(src)));
     } catch (const std::exception &e) {

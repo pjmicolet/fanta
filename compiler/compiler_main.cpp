@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-auto main(int argc, char *argv[]) -> int {
+auto main(int argc, char *argv[]) -> int try {
   if (argc < 2) {
     std::println(
         std::cerr,
@@ -34,8 +34,9 @@ auto main(int argc, char *argv[]) -> int {
       dumpAST = true;
     } else if (arg == "--dump-ir") {
       dumpIR = true;
-    } else if (arg == "--disasm")
+    } else if (arg == "--disasm") {
       disasm = true;
+}
   }
 
   std::ifstream in(inputFile);
@@ -101,7 +102,7 @@ auto main(int argc, char *argv[]) -> int {
       return 1;
     }
     out.write(reinterpret_cast<const char *>(insts.data()),
-              insts.size() * sizeof(uint32_t));
+              static_cast<std::streamsize>(insts.size() * sizeof(uint32_t)));
 
     std::println("Successfully compiled: {} -> {} ({} instructions, {} bytes)",
                  inputFile, outputFile, insts.size(),
@@ -113,4 +114,7 @@ auto main(int argc, char *argv[]) -> int {
   }
 
   return 0;
+} catch (const std::exception &e) {
+  std::cerr << "fanta-compiler: error: " << e.what() << "\n";
+  return 1;
 }

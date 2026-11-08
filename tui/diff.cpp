@@ -18,7 +18,7 @@
  *   Mem [Addr]: 0xOLD -> 0xNEW
  */
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) try {
     if (argc < 2) {
         std::println(std::cerr, "Usage: fanta-diff <filename.asm> [--limit N]");
         return 1;
@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
         cycle++;
 
         bool header_printed = false;
-        auto print_header = [&]() {
+        auto print_header = [&] {
             if (!header_printed) {
                 std::println("Cycle {:<5} | PC: 0x{:04X} -> 0x{:04X}", cycle-1, current_pc, cpu.get_pc());
                 header_printed = true;
@@ -78,11 +78,11 @@ int main(int argc, char* argv[]) {
         }
 
         // Diff Flags
-        static const char* flag_names[] = {"Z", "N", "V", "C"};
+        static constexpr std::array flag_names = {"Z", "N", "V", "C"};
         for (int i = 0; i < 4; ++i) {
             if (cpu.status_reg[i] != prev_flags[i]) {
                 print_header();
-                std::println("  Flag {}: {} -> {}", flag_names[i], (int)prev_flags[i], (int)cpu.status_reg[i]);
+                std::println("  Flag {}: {} -> {}", flag_names[i], static_cast<int>(prev_flags[i]), static_cast<int>(cpu.status_reg[i]));
                 prev_flags[i] = cpu.status_reg[i];
             }
         }
@@ -94,4 +94,7 @@ int main(int argc, char* argv[]) {
 
     if (cpu.halted) std::println("CPU HALTED at cycle {}", cycle);
     return 0;
+} catch (const std::exception &e) {
+    std::cerr << "fanta-diff: error: " << e.what() << "\n";
+    return 1;
 }

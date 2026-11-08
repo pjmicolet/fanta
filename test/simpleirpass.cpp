@@ -102,12 +102,12 @@ TEST_CASE("Register Allocation - Basic Reuse and Operand Update") {
         REQUIRE_TRUE(!op.source1.isVirtual);
         REQUIRE_TRUE(!op.source2.isVirtual);
       },
-      [&](const auto &other) {}
+      [&](const auto &) {}
     }, inst);
   }
 
   // Check that calleeRegs has the used physical registers and they are all physical
-  REQUIRE_TRUE(allocatedFunc.calleeRegs.size() > 0);
+  REQUIRE_TRUE(!allocatedFunc.calleeRegs.empty());
   for (const auto &reg : allocatedFunc.calleeRegs) {
     REQUIRE_TRUE(!reg.isVirtual);
     REQUIRE_TRUE(reg.val < 15);
@@ -166,7 +166,7 @@ TEST_CASE("Register Spilling - Specific Store and Load Verification") {
           REQUIRE_TRUE(!op.source1.isVirtual);
         }
       },
-      [&](const auto &other) {}
+      [&](const auto &) {}
     }, inst);
   }
 

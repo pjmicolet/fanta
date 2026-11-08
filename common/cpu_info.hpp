@@ -1,8 +1,7 @@
 #pragma once
 #include <cstdint>
 
-namespace Fanta {
-namespace Info {
+namespace Fanta::Info {
 
 namespace Instructions {
 constexpr static uint32_t HALT = 0x0;
@@ -48,7 +47,7 @@ constexpr static uint32_t SP = 16;
 
 namespace Cpu {
 constexpr static uint32_t INTERRUPT_BASE = 0x100;
+constexpr static uint32_t RAM_SIZE = 32U * 1024 * 1024;
 };
 
-} // namespace Info
-} // namespace Fanta
+} // namespace Fanta::Info

@@ -1,0 +1,5 @@
+# Test registration macros build static objects whose constructors can throw.
+# A throw there aborts the test binary before main(), which is a loud failure
+# and acceptable in tests, so this check is off for test/ only.
+InheritParentConfig: true
+Checks: '-bugprone-throwing-static-initialization'

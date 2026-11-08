@@ -3,6 +3,7 @@
 #include "cpu_info.hpp"
 #include "ir.hpp"
 #include <fanta_utils.hpp>
+#include <ranges>
 #include <variant>
 
 namespace Fanta {
@@ -21,7 +22,7 @@ auto SimpleIRPass::outputIR(Parser &p, GlobalTable &gt) -> IR {
                           [&](const AST::FunctionDef &fdef) {
                             emitFunctionDef(p, fdef, ir, gt);
                           },
-                          [&](const auto &other) {}},
+                          [&](const auto &) {}},
                cr.t);
   }
   ir.functions.insert(ir.functions.begin(), initFunc);
@@ -32,7 +33,7 @@ auto SimpleIRPass::emitGlobalVariableIR(const Parser &p,
                                         const AST::VariableDecl &decl,
                                         FunctionIR &ir, GlobalTable &gt)
     -> void {
-  auto &varName = decl.name;
+  const auto &varName = decl.name;
   GlobalVarInfo info{};
   LocalTable lt{std::string(varName)};
   auto dest = lt.allocateAnonymous();
@@ -118,7 +119,7 @@ auto SimpleIRPass::emitStatement(const Parser &p, const AST::AstNode &node,
           },
           [&](const AST::IfStm &ifStm) { emitIf(p, ifStm, ir, gt, lt); },
           [&](const AST::For &forStm) { emitFor(p, forStm, ir, gt, lt); },
-          [&](const auto &other) {}},
+          [&](const auto &) {}},
       node.t);
 }
 
@@ -225,7 +226,7 @@ auto SimpleIRPass::emitExpression(const Parser &p, const AST::AstNode &node,
           [&](const AST::FunctionCall &fcall) {
             emitCall(p, fcall, ir, gt, lt, dest);
           },
-          [&](const auto &other) {},
+          [&](const auto &) {},
       },
       node.t);
 }
@@ -347,8 +348,8 @@ auto SimpleIRPass::handleLogicalCheck(const Parser &p,
                                       const AST::BinaryOperator &bop,
                                       IRListing &ir, const GlobalTable &gt,
                                       LocalTable &lt, Lexer::TokenType type,
-                                      std::string falseLabel,
-                                      std::string trueLabel) -> void {
+                                      const std::string& falseLabel,
+                                      const std::string& trueLabel) -> void {
   switch (type) {
   case Lexer::TokenType::And: {
     emitCondFalse(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, falseLabel);
@@ -372,7 +373,7 @@ auto SimpleIRPass::handleLogicalCheck(const Parser &p,
 auto SimpleIRPass::handleNestedCondTrueLogicalCheck(
     const Parser &p, const AST::BinaryOperator &bop, IRListing &ir,
     const GlobalTable &gt, LocalTable &lt, Lexer::TokenType type,
-    std::string trueLabel) -> void {
+    const std::string& trueLabel) -> void {
   switch (type) {
   case Lexer::TokenType::And: {
     auto falseLabel = lt.generateNewLabel();
@@ -404,7 +405,7 @@ auto SimpleIRPass::emitCondTrue(const Parser &p, const AST::AstNode &node,
                                                              ttype, trueLabel);
                           }
                         },
-                        [&](const auto &other) {}},
+                        [&](const auto &) {}},
              node.t);
 };
 
@@ -425,7 +426,7 @@ auto SimpleIRPass::emitCondFalse(const Parser &p, const AST::AstNode &node,
                             needsLabel = true;
                           }
                         },
-                        [&](const auto &other) {}},
+                        [&](const auto &) {}},
              node.t);
   if (needsLabel)
     ir.push_back(IRLabel{trueLabel});
@@ -484,9 +485,9 @@ auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
   }
   cf.name =
       std::get<AST::Identifier>(p.getNodeAtIndex(fcall.funcNameIdx).t).name;
-  for (auto it = fcall.params.rbegin(); it != fcall.params.rend(); ++it) {
+  for (unsigned long param : std::views::reverse(fcall.params)) {
     auto expr = lt.allocateAnonymous();
-    emitExpression(p, p.getNodeAtIndex(*it), ir, gt, lt, expr);
+    emitExpression(p, p.getNodeAtIndex(param), ir, gt, lt, expr);
     IROp op{};
     op.opcode = Info::Instructions::PUSH;
     op.destination = {expr, true};
@@ -497,8 +498,10 @@ auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
   if (!fcall.params.empty()) {
     IROp restoreStack{};
     restoreStack.opcode = Info::Instructions::ADD_IMM;
-    restoreStack.source2 = {static_cast<uint32_t>(4 * fcall.params.size()),
-                            false};
+    restoreStack.source2 = {
+        static_cast<uint32_t>(4 * fcall.params.size()),
+        false,
+    };
     restoreStack.source1 = {Info::Registers::SP, false};
     restoreStack.destination = {Info::Registers::SP, false};
     restoreStack.s2type = Immediate;
@@ -528,14 +531,13 @@ auto SimpleIRPass::emitVariableIR(const Parser &p,
                                   const AST::VariableDecl &vdec, IRListing &ir,
                                   const GlobalTable &gt, LocalTable &lt)
     -> void {
-  auto type = vdec.type;
   auto varTReg = lt.allocateNamed(vdec.name, vdec.type);
 
   const auto &defineNode = p.getNodeAtIndex(vdec.defineNode);
   emitExpression(p, defineNode, ir, gt, lt, varTReg);
 }
 
-auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &gt,
+auto SimpleIRPass::emitGlobalNameBase(IRListing &ir, const GlobalTable &/*gt*/,
                                       LocalTable &lt) -> TempReg {
   LocalGlobalBase lgb{};
   lgb.dest = {lt.allocateAnonymous(), true};
