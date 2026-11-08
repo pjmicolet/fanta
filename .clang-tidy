@@ -26,7 +26,8 @@ Checks: >
   -modernize-use-emplace,
   -modernize-use-integer-sign-comparison,
   -bugprone-easily-swappable-parameters,
-  -readability-math-missing-parentheses
+  -readability-math-missing-parentheses,
+  -readability-avoid-nested-conditional-operator
 
 # Disabled after the 2026-10-17 review (262 of 682 findings, all style noise):
 # - modernize-use-trailing-return-type fires on every non-trailing
@@ -44,6 +45,8 @@ Checks: >
 # - bugprone-easily-swappable-parameters: only fixable with strong Addr/Reg
 #   types; tracked in docs/plans.md.
 # - readability-math-missing-parentheses: fires on plain `a + b * 4`.
+# - readability-avoid-nested-conditional-operator: the few uses are short
+#   prefix pickers (`v_`/`R`/`#`) that read fine inline.
 
 CheckOptions:
   # Masks and shifts like `(raw >> 26) & 0x3F` use positive int literals and

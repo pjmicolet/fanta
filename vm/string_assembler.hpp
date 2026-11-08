@@ -17,15 +17,15 @@ struct Assembler {
     uint32_t add = 0;
     for (const auto &line : lines) {
       if (is_label_define(line)) {
-        size_t labelEndDef = line.find(":");
-        size_t cleanLabelStart = line.find_first_not_of(" ");
+        size_t labelEndDef = line.find(':');
+        size_t cleanLabelStart = line.find_first_not_of(' ');
         size_t end = labelEndDef - cleanLabelStart;
         std::string clean_label{line.substr(cleanLabelStart, end)};
-        std::transform(clean_label.begin(), clean_label.end(),
-                       clean_label.begin(), ::toupper);
+        std::ranges::transform(clean_label, clean_label.begin(), ::toupper);
         clean_label.erase(
-            std::remove_if(clean_label.begin(), clean_label.end(),
-                           [](unsigned char x) { return std::isspace(x); }),
+            std::ranges::remove_if(
+                clean_label, [](unsigned char x) { return std::isspace(x); })
+                .begin(),
             clean_label.end());
         labels_[clean_label] = static_cast<int>(add);
       }
@@ -43,7 +43,7 @@ struct Assembler {
       return Instructions::Nop::emit();
 
     try {
-      auto &mtdc = Instructions::Registry::fetch(tokens[0]);
+      const auto &mtdc = Instructions::Registry::fetch(tokens[0]);
       switch (mtdc.fmt) {
       case Instructions::THREE_OP:
         return parse_three(tokens, mtdc, address);
@@ -88,18 +88,18 @@ private:
     auto code = line.substr(0, line.find(';'));
     if (code.empty() || code[0] == ';')
       return false;
-    if (!code.contains(":"))
+    if (!code.contains(':'))
       return false;
 
-    auto colon_pos = code.find(":");
-    if (colon_pos == code.npos)
+    auto colon_pos = code.find(':');
+    if (colon_pos == std::string_view::npos)
       return false;
-    auto label = code.substr(0, code.find(":"));
+    auto label = code.substr(0, code.find(':'));
     auto start = label.find_first_not_of(" \t\r\n");
-    if (start == label.npos)
+    if (start == std::string_view::npos)
       return false;
     auto end = label.find_first_not_of(" \t\r\n");
-    if (end == label.npos)
+    if (end == std::string_view::npos)
       return false;
     auto pureLabel = label.substr(start, end - start + 1);
     return is_label(pureLabel);

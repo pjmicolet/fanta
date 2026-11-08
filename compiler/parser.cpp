@@ -140,14 +140,14 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                         [&](const Fanta::AST::FunctionCall &fc) {
                           std::println("{}FunctionCall()", pad);
                           printAST(fc.funcNameIdx, indent + 1);
-                          for (auto &c : fc.params) {
+                          for (const auto &c : fc.params) {
                             printAST(c, indent + 1);
                           }
                         },
                         [&](const Fanta::AST::FunctionDef &fc) {
                           std::println("{}FunctionDef({} -> {})", pad, fc.name,
                                        fc.retType);
-                          for (auto &p : fc.params) {
+                          for (const auto &p : fc.params) {
                             printAST(p, indent + 1);
                           }
                           printAST(fc.body);
@@ -158,7 +158,7 @@ auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
                         },
                         [&](const Fanta::AST::FunctionBody &p) {
                           std::println("{}FunctionBody", pad);
-                          for (auto &b : p.expressions) {
+                          for (const auto &b : p.expressions) {
                             printAST(b, indent + 1);
                           }
                         },

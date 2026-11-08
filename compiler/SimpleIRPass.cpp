@@ -3,6 +3,7 @@
 #include "cpu_info.hpp"
 #include "ir.hpp"
 #include <fanta_utils.hpp>
+#include <ranges>
 #include <variant>
 
 namespace Fanta {
@@ -32,7 +33,7 @@ auto SimpleIRPass::emitGlobalVariableIR(const Parser &p,
                                         const AST::VariableDecl &decl,
                                         FunctionIR &ir, GlobalTable &gt)
     -> void {
-  auto &varName = decl.name;
+  const auto &varName = decl.name;
   GlobalVarInfo info{};
   LocalTable lt{std::string(varName)};
   auto dest = lt.allocateAnonymous();
@@ -484,9 +485,9 @@ auto SimpleIRPass::emitCall(const Parser &p, const AST::FunctionCall &fcall,
   }
   cf.name =
       std::get<AST::Identifier>(p.getNodeAtIndex(fcall.funcNameIdx).t).name;
-  for (auto it = fcall.params.rbegin(); it != fcall.params.rend(); ++it) {
+  for (unsigned long param : std::views::reverse(fcall.params)) {
     auto expr = lt.allocateAnonymous();
-    emitExpression(p, p.getNodeAtIndex(*it), ir, gt, lt, expr);
+    emitExpression(p, p.getNodeAtIndex(param), ir, gt, lt, expr);
     IROp op{};
     op.opcode = Info::Instructions::PUSH;
     op.destination = {expr, true};

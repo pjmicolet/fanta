@@ -13,7 +13,7 @@ template <OutputsIR IRPass, OutputsRegAlloc RegAllocator,
           OutputsInstructions InstEmit>
 struct CompilerDef {
 
-  CompilerDef() {};
+  CompilerDef() = default;
 
   auto compile(std::string program) {
     Parser p(std::move(program));

@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) try {
         cycle++;
 
         bool header_printed = false;
-        auto print_header = [&]() {
+        auto print_header = [&] {
             if (!header_printed) {
                 std::println("Cycle {:<5} | PC: 0x{:04X} -> 0x{:04X}", cycle-1, current_pc, cpu.get_pc());
                 header_printed = true;
@@ -78,7 +78,7 @@ int main(int argc, char* argv[]) try {
         }
 
         // Diff Flags
-        static const char* flag_names[] = {"Z", "N", "V", "C"};
+        static constexpr std::array flag_names = {"Z", "N", "V", "C"};
         for (int i = 0; i < 4; ++i) {
             if (cpu.status_reg[i] != prev_flags[i]) {
                 print_header();

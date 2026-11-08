@@ -25,11 +25,11 @@ inline auto require_true(const std::string& statement, const int line,
 
 template <typename T, typename R>
 inline auto compare(const T& rhs, const R& lhs) -> bool {
-  if constexpr(std::is_same<T, R>::value) {
+  if constexpr(std::is_same_v<T, R>) {
     return rhs == lhs;
   } 
   // There's some signedness we need to check
-  if constexpr(std::is_integral<T>::value && std::is_integral<R>::value) {
+  if constexpr(std::is_integral_v<T> && std::is_integral_v<R>) {
     return std::cmp_equal(rhs,lhs);
   }
   else  {
@@ -38,13 +38,13 @@ inline auto compare(const T& rhs, const R& lhs) -> bool {
 }
 
 template <typename T, typename R>
-inline auto require_same(const int line, const T &expected, const R &got, const std::function<std::string()>& onDump = [](){ return "";})
+inline auto require_same(const int line, const T &expected, const R &got, const std::function<std::string()>& onDump = []{ return "";})
     -> void {
   if (!compare(expected,got)) {
     std::string expectedS;
     std::string gotS;
 
-    if constexpr(std::is_integral<T>::value) {
+    if constexpr(std::is_integral_v<T>) {
       expectedS = std::to_string(expected);
     } else if constexpr(std::is_enum_v<T>) {
       expectedS = std::to_string(static_cast<std::underlying_type_t<T>>(expected));
@@ -53,7 +53,7 @@ inline auto require_same(const int line, const T &expected, const R &got, const 
       expectedS = std::string(expected);
     }
 
-    if constexpr(std::is_integral<R>::value) {
+    if constexpr(std::is_integral_v<R>) {
       gotS = std::to_string(got);
     } else if constexpr(std::is_enum_v<R>) {
       gotS = std::to_string(static_cast<std::underlying_type_t<R>>(got));

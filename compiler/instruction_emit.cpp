@@ -73,7 +73,7 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
         (opcode == Info::Instructions::BMI) ||
         (opcode == Info::Instructions::JREL) ||
         (opcode == Info::Instructions::JUMP)) {
-      auto newAddr = (resolvedAddresses[linkName] - (idx)) * 4;
+      auto newAddr = (resolvedAddresses[linkName] - idx) * 4;
       auto newFunc = Instructions::Emitter::single_inst(opcode, newAddr);
       il[idx] = newFunc;
     } // it's a call
@@ -83,7 +83,7 @@ auto InstructionEmitter::link(InstructionList &il) -> void {
 auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
                                         InstructionList &il) -> void {
 
-  for (auto &ir : fir.insts) {
+  for (const auto &ir : fir.insts) {
     std::visit(
         overloaded{[&](const IROp &op) { emitInst(op, gt, il); },
                    [&](const CallFunc &op) {
@@ -141,7 +141,7 @@ auto InstructionEmitter::outputInstructionsForFunc(const FunctionIR &fir,
   il.push_back(Instructions::Emitter::two_op(
       Info::Instructions::MOV_REG, Info::Registers::FP, Info::Registers::SP));
 
-  for (auto &ir : fir.insts) {
+  for (const auto &ir : fir.insts) {
     std::visit(
         overloaded{
             [&](const IROp &op) { emitInst(op, gt, il); },

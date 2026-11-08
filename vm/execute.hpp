@@ -237,8 +237,7 @@ struct Cip {
     if (cpu.cip_interrupts[checkInt] == 1) {
       cpu.cip_interrupts[checkInt] = 0;
       cpu.push_stack();
-      auto res = static_cast<uint32_t>(
-          Fanta::Info::Cpu::INTERRUPT_BASE +
+      auto res = (Fanta::Info::Cpu::INTERRUPT_BASE +
           (4 * checkInt)); // decide where the interrupt table is
       cpu.set_pc(res);
     }

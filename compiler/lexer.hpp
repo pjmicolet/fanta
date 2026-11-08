@@ -87,7 +87,9 @@ struct Lexer {
   }
 
 private:
-  auto allowedCharsInAlpha(char c) -> bool { return ::isalnum(c) || c == '_'; }
+  auto allowedCharsInAlpha(char c) -> bool {
+    return (::isalnum(c) != 0) || c == '_';
+  }
 
   auto parseAlpha(std::size_t start) -> std::expected<Token, LexError> {
     while (cursor_ < end_ && allowedCharsInAlpha(body_[cursor_]) &&

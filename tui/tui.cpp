@@ -5,6 +5,7 @@
 #include "instructions.hpp"
 #include "terminal.hpp"
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <filesystem>
 #include <format>
@@ -642,7 +643,7 @@ void TUI::draw_hint_bar(const Fanta::Canvas &c) {
 }
 
 void TUI::draw_help(const Fanta::Canvas &c) {
-  static constexpr std::string_view lines[] = {
+  static constexpr auto lines = std::to_array<std::string_view>({
       "Execution: F-keys, in any mode (also as : commands)",
       "  F5   run / pause                       :run  :pause",
       "  F6   restart the loaded image          :reset",
@@ -665,8 +666,9 @@ void TUI::draw_help(const Fanta::Canvas &c) {
       "  :w FILE  save    z  zoom VRAM    [ ]  scroll the Memory tab",
       "  ?  this help     q  quit         ESC  close the output overlay",
       "",
-      "F-keys not reaching the TUI (macOS Terminal)? Hold fn, or use the : commands.",
-  };
+      "F-keys not reaching the TUI (macOS Terminal)? Hold fn, or use the : "
+      "commands.",
+  });
   c.clear();
   auto inner = c.frame("HELP  (any key closes)", A_BOLD);
   int row = 0;
@@ -1265,13 +1267,14 @@ void TUI::run_command(const std::string &cmd) {
     message = "Restarted (F9 rebuilds)";
   } else if (cmd.starts_with("out")) {
     std::string which = arg_of(3);
-    static constexpr std::pair<std::string_view, OutputTab> tabs[] = {
-        {"serial", OutputTab::SERIAL},
-        {"vram", OutputTab::VRAM},
-        {"memory", OutputTab::MEMORY},
-        {"log", OutputTab::LOG},
-    };
-    auto it = std::ranges::find(tabs, std::string_view{which},
+    static constexpr auto tabs =
+        std::to_array<std::pair<std::string_view, OutputTab>>({
+            {"serial", OutputTab::SERIAL},
+            {"vram", OutputTab::VRAM},
+            {"memory", OutputTab::MEMORY},
+            {"log", OutputTab::LOG},
+        });
+    const auto *it = std::ranges::find(tabs, std::string_view{which},
                                 [](auto &t) { return t.first; });
     if (it == std::end(tabs)) {
       message = "Usage: :out serial|vram|memory|log";
@@ -1351,6 +1354,7 @@ void TUI::eject(bool force) {
   // One line per word, so addresses stay put. The note rides on line 0 as a
   // comment: an extra line would shift every address by 4.
   std::vector<std::string> lines;
+  lines.reserve(binary_image.size());
   for (size_t i = 0; i < binary_image.size(); ++i)
     lines.push_back(
         Fanta::disassemble(binary_image[i], static_cast<uint32_t>(i * 4)));
@@ -1438,6 +1442,7 @@ bool TUI::load_file(const std::string &filename) {
     // be assembled back into the same program (branch offsets, labels), so
     // the image stays the source of truth.
     std::vector<std::string> view;
+    view.reserve(binary_image.size());
     for (size_t i = 0; i < binary_image.size(); ++i) {
       view.push_back(Fanta::disassemble(binary_image[i],
                                         static_cast<uint32_t>(i * 4)));
@@ -1507,19 +1512,27 @@ namespace {
 /// <DOWN> <LEFT> <RIGHT> <FRAME> (<FRAME> = let one UI frame pass, which runs
 /// a batch of cycles in continuous mode). Returns -1 for <FRAME>.
 auto parse_keys(std::string_view script) -> std::vector<int> {
-  static const std::pair<std::string_view, int> names[] = {
-      {"ESC", 27},          {"C-c", 3},            {"CR", '\n'},
-      {"TAB", '\t'},
-      {"BS", KEY_BACKSPACE}, {"UP", KEY_UP},       {"DOWN", KEY_DOWN},
-      {"LEFT", KEY_LEFT},   {"RIGHT", KEY_RIGHT}, {"FRAME", -1},
-  };
+  static constexpr auto names =
+      std::to_array<std::pair<std::string_view, int>>({
+          {"ESC", 27},
+          {"C-c", 3},
+          {"CR", '\n'},
+          {"TAB", '\t'},
+          {"BS", KEY_BACKSPACE},
+          {"UP", KEY_UP},
+          {"DOWN", KEY_DOWN},
+          {"LEFT", KEY_LEFT},
+          {"RIGHT", KEY_RIGHT},
+          {"FRAME", -1},
+      });
   std::vector<int> keys;
   for (size_t i = 0; i < script.size(); ++i) {
     if (script[i] == '<') {
       auto close = script.find('>', i);
       if (close != std::string_view::npos) {
         auto name = script.substr(i + 1, close - i - 1);
-        auto it = std::ranges::find(names, name, [](auto &p) { return p.first; });
+        const auto *it =
+            std::ranges::find(names, name, [](auto &p) { return p.first; });
         if (it != std::end(names)) {
           keys.push_back(it->second);
           i = close;
@@ -1553,7 +1566,8 @@ bool TUI::screenshot(const std::string &filename, int cols, int rows,
   // in the terminal, and we read the cells back from stdscr.
   FILE *sink = std::fopen("/dev/null", "w");
   FILE *source = std::fopen("/dev/null", "r");
-  char term_name[] = "xterm-256color"; // newterm takes a non-const char*
+  // newterm takes a non-const char*.
+  char term_name[] = "xterm-256color"; // NOLINT(modernize-avoid-c-arrays)
   SCREEN *screen = (sink && source) ? newterm(term_name, sink, source) : nullptr;
   if (screen == nullptr) {
     if (sink)

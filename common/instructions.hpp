@@ -249,7 +249,7 @@ struct Registry {
   static constexpr auto &get() { return kInstructionTable; }
 
   static constexpr auto fetch(std::string_view key) -> const InstMetadata & {
-    for (auto &entry : kInstructionTable) {
+    for (const auto &entry : kInstructionTable) {
       if (entry.mnemonic == key)
         return entry.meta;
     }

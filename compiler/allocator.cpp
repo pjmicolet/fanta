@@ -17,7 +17,7 @@ auto Allocator::assignFunc(const FunctionIR &function) -> FunctionIR {
   reset();
   FunctionIR fir = function;
   fir.insts.clear();
-  for (auto &ir : function.insts) {
+  for (const auto &ir : function.insts) {
     std::visit(
         overloaded{
             [&](const IROp &op) {
@@ -104,9 +104,9 @@ auto Allocator::getNextAvailable(FunctionIR &func, uint32_t reg,
   // We had previously allocated the register
   if (virtToReg.contains(reg)) {
     // It's still assigned
-    if (regToVirt.contains(virtToReg[reg]) && regToVirt[virtToReg[reg]] == reg)
+    if (regToVirt.contains(virtToReg[reg]) && regToVirt[virtToReg[reg]] == reg) {
       return virtToReg[reg];
-    else {
+    } else {
       // It's no longer assgined so we should make sure to store whatever that
       // register is currently and load the vreg
       stashAndLoad(func, reg, smech);

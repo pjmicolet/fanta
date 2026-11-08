@@ -6,7 +6,7 @@ namespace Fanta {
 
 auto Codegen::extractGlobalNames(const Parser &p) -> void {
   uint32_t globalOffsets = 0;
-  for (auto &ridx : p.getRootIndices()) {
+  for (const auto &ridx : p.getRootIndices()) {
     const auto &node = p.getNodeAtIndex(ridx);
 
     std::visit(overloaded{[&](const Fanta::AST::VariableDecl &d) {
@@ -28,6 +28,5 @@ auto Codegen::extractGlobalNames(const Parser &p) -> void {
                           [&](const auto &) {}},
                node.t);
   }
-  return;
-}
+  }
 } // namespace Fanta

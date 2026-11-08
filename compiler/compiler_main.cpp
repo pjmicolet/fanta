@@ -34,8 +34,9 @@ auto main(int argc, char *argv[]) -> int try {
       dumpAST = true;
     } else if (arg == "--dump-ir") {
       dumpIR = true;
-    } else if (arg == "--disasm")
+    } else if (arg == "--disasm") {
       disasm = true;
+}
   }
 
   std::ifstream in(inputFile);

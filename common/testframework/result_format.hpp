@@ -6,7 +6,7 @@ namespace Test {
 namespace Format {
     struct Result {
         virtual auto to_string() -> std::string = 0;
-        virtual ~Result() {};
+        virtual ~Result() = default;
     };
 
     struct Passed : public Result {

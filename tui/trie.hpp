@@ -19,7 +19,7 @@ public:
     void insert(const std::string& word) {
         TrieNode* curr = root.get();
         for (char c : word) {
-            if (curr->children.find(c) == curr->children.end()) {
+            if (!curr->children.contains(c)) {
                 curr->children[c] = std::make_unique<TrieNode>();
             }
             curr = curr->children[c].get();
@@ -34,7 +34,7 @@ public:
         for (char c : prefix) {
             char upperC = static_cast<char>(
                 std::toupper(static_cast<unsigned char>(c)));
-            if (curr->children.find(upperC) == curr->children.end()) {
+            if (!curr->children.contains(upperC)) {
                 return "";
             }
             curr = curr->children[upperC].get();

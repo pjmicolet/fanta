@@ -59,7 +59,7 @@ TEST_CASE("Instruction Emitter & Execution Test") {
   std::println("=== Compiled Program Disassembly ===");
   std::print("{}", Fanta::disassembleProgram(insts));
 
-  REQUIRE_TRUE(insts.size() > 0);
+  REQUIRE_TRUE(!insts.empty());
 
   CPU cpu{};
   for (size_t i = 0; i < insts.size(); i++) {

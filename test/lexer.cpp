@@ -1,3 +1,4 @@
+#include <array>
 #include <lexer.hpp>
 #include <testframework/testing.hpp>
 
@@ -125,7 +126,7 @@ TEST_CASE("Tokenize Assignment") {
 TEST_CASE("Comparison And Logical Operator Lexing") {
   std::string src = "== != <= >= < > && || ! =";
   Lexer lx{src};
-  const Lexer::TokenType expected[] = {
+  const std::array expected = {
       Lexer::TokenType::EqualComp, Lexer::TokenType::NotEq,
       Lexer::TokenType::LesserEq,  Lexer::TokenType::GreaterEq,
       Lexer::TokenType::Lesser,    Lexer::TokenType::Greater,
@@ -192,7 +193,7 @@ TEST_CASE("Single And Double & / | Are Distinguished Without Spaces") {
   // "&&&" must lex as "&&" then "&"; "|||" as "||" then "|".
   std::string src = "a&&&b|||c&d";
   Lexer lx{src};
-  const Lexer::TokenType expected[] = {
+  const std::array expected = {
       Lexer::TokenType::Identifier, Lexer::TokenType::And,
       Lexer::TokenType::BitAnd,     Lexer::TokenType::Identifier,
       Lexer::TokenType::Or,         Lexer::TokenType::BitOr,
