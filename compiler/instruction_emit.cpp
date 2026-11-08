@@ -232,6 +232,9 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &/*gt*/,
         op.opcode, op.destination.val, op.source2.val));                       \
     break;                                                                     \
   }
+  // Same-format cases expand to identical bodies; replacing this switch with
+  // a kInstructionTable format lookup is in docs/plans.md.
+  // NOLINTBEGIN(bugprone-branch-clone)
   switch (op.opcode) {
     SINGLE(Info::Instructions::HALT)
     THREE_REG(Info::Instructions::ADD_REG)
@@ -266,6 +269,7 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &/*gt*/,
     SINGLE(Info::Instructions::POP)
     SINGLE(Info::Instructions::BNC)
   }
+  // NOLINTEND(bugprone-branch-clone)
 }
 
 auto InstructionEmitter::reset() -> void {

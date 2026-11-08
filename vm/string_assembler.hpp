@@ -55,7 +55,6 @@ struct Assembler {
       case Instructions::JUMP:
         return parse_one(tokens, mtdc, address, true);
       case Instructions::BRANCH:
-        return parse_one(tokens, mtdc, address);
       case Instructions::STACK_INST:
         return parse_one(tokens, mtdc, address);
       case Instructions::NOP:
@@ -193,10 +192,7 @@ private:
     if (token.starts_with("0X")) {
       token.remove_prefix(2);
       forceHex = true;
-    } else if (token.starts_with("$")) {
-      token.remove_prefix(1);
-      forceHex = true;
-    } else if (token.starts_with("#")) {
+    } else if (token.starts_with('$') || token.starts_with('#')) {
       token.remove_prefix(1);
       forceHex = true;
     }

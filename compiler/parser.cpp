@@ -423,9 +423,7 @@ auto Parser::walkPrefix() -> Fanta::AST::NodeIndex {
 auto Parser::getPrecedence(Lexer::TokenType t) -> Precedence {
   switch (t) {
   case Lexer::TokenType::KeywordLet:
-    return Precedence::ASSIGN_OR_RET;
   case Lexer::TokenType::Equal:
-    return Precedence::ASSIGN_OR_RET;
   case Lexer::TokenType::Return:
     return Precedence::ASSIGN_OR_RET;
   case Lexer::TokenType::OpenParam:
@@ -437,7 +435,6 @@ auto Parser::getPrecedence(Lexer::TokenType t) -> Precedence {
   case Lexer::TokenType::Plus:
     return Precedence::SUM;
   case Lexer::TokenType::SemiColon:
-    return Precedence::LOWEST;
   case Lexer::TokenType::CloseParam:
     return Precedence::LOWEST;
   case Lexer::TokenType::Slash:
