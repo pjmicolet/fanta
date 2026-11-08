@@ -2,35 +2,35 @@
 
 This is where TUI changes come from. Anyone who uses the TUI (the owner `pj`, or Claude `cc`) adds a line whenever something gets in the way. Write down **what hurt, not the fix**. `/fanta-tui-review` reads this log, and a change to the TUI should point to the entry it resolves (see the fit test in `docs/tui_spec.md` §0).
 
-Format: `date  who  what got in the way  [status]`. Status is blank while an entry is open, `→ spec §x` once a planned change covers it, `fixed <commit>` when done, and `wontfix: reason` if it's declined. Keep the entries; don't delete them. The history shows which parts of the design keep causing pain.
+Format: `date  who  what got in the way  [status]`. Status is blank while an entry is open, `→ #N` once a GitHub issue covers it (or `→ spec §x` for a spec-only change), `fixed <commit>` when done, and `wontfix: reason` if it's declined. Keep the entries; don't delete them. The history shows which parts of the design keep causing pain.
 
 ## Open
 
 Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `docs/tui_spec.md` §9). Entries move to *Resolved* as the rewrite lands, milestone by milestone.
 
 ```
-2026-10-31  cc  stepping a .fn program, nothing shows which source line is executing                                → spec §7 (needs line table)
-2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           → spec §5 (diagnostics)
+2026-10-31  cc  stepping a .fn program, nothing shows which source line is executing                                → spec §7 (needs line table), #36
+2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           → spec §5 (diagnostics), #37
 2026-10-31  cc  `return qd;` with qd undefined compiled without complaint                                          (compiler bug, not TUI)
-2026-10-31  cc  memory pane is fixed at 0x0000 and 32 bytes, so it never shows what I'm looking at   [partly tui/layout: Memory tab fills the panel, [ ] scrolls; still doesn't follow anything]
-2026-10-31  cc  "Loaded ..." message stays up long after it means anything                                        → spec §6.2
-2026-10-31  cc  after inserting a line in a running .asm (STALE), the gutter and > show the edited text's addresses, not memory's: >0x000064 sits on a blank line while memory at 0x64 is still JMP MAIN_LOOP   (review #1, Q3)
-2026-10-31  cc  "Line 25 added/removed" is a 0-based line number, but the ASM gutter only shows addresses, so I couldn't find line 25
-2026-10-31  cc  at 80x24 the status line drops messages entirely and cuts the PC; a compile error is only visible via F10 > Build log
-2026-10-31  cc  at 80x24 the flags are cut off in every session ("R11 00000000 F~")
-2026-10-31  cc  at 80x24 the pane titles lose "(source of truth)" / "(derived ...)" with no "~": "(source -", ":ej-"
-2026-10-31  cc  after a failed build the derived pane is titled "build #2" but shows build #1's code
+2026-10-31  cc  memory pane is fixed at 0x0000 and 32 bytes, so it never shows what I'm looking at   [partly tui/layout: Memory tab fills the panel, [ ] scrolls; still doesn't follow anything]   → #30
+2026-10-31  cc  "Loaded ..." message stays up long after it means anything                                        → spec §6.2, #27
+2026-10-31  cc  after inserting a line in a running .asm (STALE), the gutter and > show the edited text's addresses, not memory's: >0x000064 sits on a blank line while memory at 0x64 is still JMP MAIN_LOOP   (review #1, Q3)   → #34
+2026-10-31  cc  "Line 25 added/removed" is a 0-based line number, but the ASM gutter only shows addresses, so I couldn't find line 25   → #27
+2026-10-31  cc  at 80x24 the status line drops messages entirely and cuts the PC; a compile error is only visible via F10 > Build log   → #26
+2026-10-31  cc  at 80x24 the flags are cut off in every session ("R11 00000000 F~")   → #26
+2026-10-31  cc  at 80x24 the pane titles lose "(source of truth)" / "(derived ...)" with no "~": "(source -", ":ej-"   → #26
+2026-10-31  cc  after a failed build the derived pane is titled "build #2" but shows build #1's code   → #28
 2026-10-31  cc  pressing i, : or z pauses a running program; "edit while it runs" means edit while paused, then F5 again   (review #1, Q1)
-2026-10-31  cc  a VRAM program at 120x40 opens on the Serial tab showing "(no serial output)"; I had to F10 to see the ball   (review #1, Q5)
-2026-10-31  cc  editing a .fn shows STALE three times (badge, pane title, "Edited: STALE until F9" message)
-2026-10-31  cc  in a BINARY session j/k do nothing visible and there's no way to look at code away from PC; the hint bar still offers "i edit" and "F9 build"
-2026-10-31  cc  the hint bar says "F5 run" while the program is RUNNING
-2026-10-31  cc  at 80x24 the help overlay silently loses its last 3 lines (q quit, ESC closes the overlay, the macOS fn note)
-2026-10-31  cc  a new .fn shows "ASM build #0 (derived ...)" full of HALTs from empty memory
-2026-10-31  cc  test/serial_hello.asm still says "Press 'o' in the TUI to see it"; o does nothing now
-2026-11-07  cc  building `let b : int = ;` can crash the TUI, or report OK when it doesn't                           (compiler bug, not TUI: out-of-bounds read in emitVariableIR)
-2026-11-07  cc  `@print(300)` shows `,` in the Serial tab; there's no way to see the 32-bit value that was written
-2026-11-08  pj  only `i` enters INSERT: no `a` (append after the cursor) or `o`/`O` (open a line below/above), which I use all the time in vim
+2026-10-31  cc  a VRAM program at 120x40 opens on the Serial tab showing "(no serial output)"; I had to F10 to see the ball   (review #1, Q5)   → #34
+2026-10-31  cc  editing a .fn shows STALE three times (badge, pane title, "Edited: STALE until F9" message)   → #27
+2026-10-31  cc  in a BINARY session j/k do nothing visible and there's no way to look at code away from PC; the hint bar still offers "i edit" and "F9 build"   → #29
+2026-10-31  cc  the hint bar says "F5 run" while the program is RUNNING   → #27
+2026-10-31  cc  at 80x24 the help overlay silently loses its last 3 lines (q quit, ESC closes the overlay, the macOS fn note)   → #26
+2026-10-31  cc  a new .fn shows "ASM build #0 (derived ...)" full of HALTs from empty memory   → #28
+2026-10-31  cc  test/serial_hello.asm still says "Press 'o' in the TUI to see it"; o does nothing now   → #33
+2026-11-07  cc  building `let b : int = ;` can crash the TUI, or report OK when it doesn't                           (compiler bug, not TUI: out-of-bounds read in emitVariableIR)   → #40
+2026-11-07  cc  `@print(300)` shows `,` in the Serial tab; there's no way to see the 32-bit value that was written   → #35
+2026-11-08  pj  only `i` enters INSERT: no `a` (append after the cursor) or `o`/`O` (open a line below/above), which I use all the time in vim   → #25
 ```
 
 ## Parked ideas
@@ -38,10 +38,10 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 Ideas that don't come from friction. They wait here until an entry in the log gives them a reason.
 
 ```
-2026-10-31  cc  breakpoints (TUI address set vs BRK instruction; undecided, spec §6.3)
-2026-10-31  cc  run to cursor
-2026-10-31  cc  editing registers and memory from the TUI
-2026-10-31  cc  step back / reverse execution
+2026-10-31  cc  breakpoints (TUI address set vs BRK instruction; undecided, spec §6.3)   → #44
+2026-10-31  cc  run to cursor   → #43
+2026-10-31  cc  editing registers and memory from the TUI   → #44
+2026-10-31  cc  step back / reverse execution   → #44
 ```
 
 ## Resolved

@@ -2,7 +2,8 @@
 
 Features the toolchain doesn't have yet, so nobody mistakes a gap for a bug or forgets it exists.
 Crashes and wrong results with a known cause go in `known_bugs.md` instead. When a feature lands,
-delete its row; git keeps the history.
+delete its row; git keeps the history. This file holds the facts; the work lives in a GitHub
+issue, so link it (`#N`) in the row when one exists.
 
 To re-validate a row, run its check and update **Last checked**. Rows that compile can be checked
 with `./build/fanta-compiler c.fn -o c.bin`. A row that no longer holds should be deleted, or moved

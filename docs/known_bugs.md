@@ -1,7 +1,8 @@
 # Known Bugs
 
 Check here before debugging a crash or wrong result. When you find a new root cause, add it. When
-a bug is fixed, delete its row; git keeps the history.
+a bug is fixed, delete its row; git keeps the history. This file holds the facts; the work lives in a GitHub
+issue, so link it (`#N`) in the row when one exists.
 
 ## Reproduced on `main` at `9e351a1` (2026-11-07)
 
