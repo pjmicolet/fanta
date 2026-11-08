@@ -1,5 +1,6 @@
 #pragma once
 #include "cpu_info.hpp"
+#include "hook.hpp"
 #include "instructions.hpp"
 #include <array>
 #include <cstdint>
@@ -57,6 +58,14 @@ inline auto hexAddr(uint32_t v) -> std::string {
   return ss.str();
 }
 
+/// Name of the hook at `addr` (e.g. "@print"), or the hex address otherwise.
+inline auto targetName(uint32_t addr) -> std::string {
+  for (const auto &hook : hooks)
+    if (hook.addr == addr)
+      return std::string{hook.name};
+  return hexAddr(addr);
+}
+
 } // namespace detail
 
 /// Default label lookup: no labels known.
@@ -73,7 +82,8 @@ struct NoLabels {
  * assembler can express it: immediates are '#'-prefixed hex, memory operands
  * are `#off(Rn)`, and branches print their PC-relative offset (or the target
  * label when `labels` knows one). The absolute target of a branch goes in a
- * trailing ';' comment, which the assembler ignores.
+ * trailing ';' comment, which the assembler ignores. A target that is a
+ * hook (`common/hook.hpp`) is named there instead, e.g. `; -> @print`.
  *
  * @param raw: instruction word.
  * @param addr: address the word lives at, used to resolve branch targets.
@@ -137,7 +147,7 @@ inline auto disassemble(uint32_t raw, uint32_t addr = 0,
       ss << " " << *label << " ; " << detail::hexAddr(target);
     } else {
       ss << " " << detail::hexImm(absolute ? static_cast<int32_t>(field) : offset)
-         << " ; -> " << detail::hexAddr(target);
+         << " ; -> " << detail::targetName(target);
     }
     break;
   }
