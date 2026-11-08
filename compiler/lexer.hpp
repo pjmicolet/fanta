@@ -1,4 +1,5 @@
 #pragma once
+#include <cctype>
 #include <expected>
 #include <string_view>
 #include <cstdint>
@@ -65,8 +66,6 @@ struct Lexer {
   };
 
   auto getToken() -> std::expected<Token, LexError> {
-    Token t{};
-    t.char_start = cursor_;
     std::string_view tString = body_.substr(cursor_, 0);
 
     while (cursor_ != end_) {
