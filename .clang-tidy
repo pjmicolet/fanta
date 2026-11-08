@@ -41,6 +41,10 @@ CheckOptions:
   # Masks and shifts like `(raw >> 26) & 0x3F` use positive int literals and
   # are well-defined; keep flagging bitwise ops on signed variables.
   bugprone-signed-bitwise.IgnorePositiveIntegerLiterals: true
+  # `if (::isalpha(c))` and `if (!window)` are idiomatic; keep flagging
+  # int<->bool mixing in assignments and returns.
+  readability-implicit-bool-conversion.AllowIntegerConditions: true
+  readability-implicit-bool-conversion.AllowPointerConditions: true
 
 WarningsAsErrors: ''
 
