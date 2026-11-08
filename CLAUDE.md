@@ -20,7 +20,8 @@ A custom 32-bit RISC CPU, compiler, VM and TUI debugger for a 90s-style PC. Docs
   lines into issues and empty it next time the network is up. PRs say `Fixes #N`.
 - **Reviews:** apply `docs/review_checklist.md` when reviewing any change.
 - **TUI changes:** `docs/tui_spec.md` is the agreed design. Each change must pass its §0 fit test
-  and point to the `docs/tui_friction.md` entry it resolves. Before calling one done, check the
+  and point to the `docs/tui_friction.md` entry it resolves (entries link their issue as `→ #N`;
+  when the issue closes, mark the entry `fixed <commit>`). Before calling one done, check the
   affected layouts with `--screen` at 80x24, 120x40 and 200x60, and log anything awkward as a
   friction entry (author `cc`), phrased as the problem. Run `/fanta-tui-review` after a batch of
   TUI changes or when a spec §5 interface lands.

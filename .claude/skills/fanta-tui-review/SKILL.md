@@ -43,6 +43,10 @@ Don't restate the agent's own instructions.
 - **Friction log** (`docs/` is an allowed domain):
   - Move resolved entries to *Resolved* with `fixed <commit>`.
   - Paste the verified new entries into *Open*.
+  - A new entry that needs TUI work gets an issue (labels `tui,friction`, plus `blocked` if it
+    waits on compiler or VM code). Check for a duplicate first with `gh issue list --search`.
+    Mark the entry `→ #N`.
+  - An entry whose issue has closed moves to *Resolved* with `fixed <commit>`.
   - Never delete entries.
 - **Spec drift:** if the code is right and the spec is behind, update `docs/tui_spec.md` and say
   so. If the spec is right, the drift becomes a friction entry or a task.

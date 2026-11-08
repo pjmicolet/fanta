@@ -1,0 +1,11 @@
+name: Idea
+description: Log an idea so it isn't lost. One line is enough.
+labels: [idea]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What, and where it came up. Triage adds area labels and a milestone later.
+    validations:
+      required: true

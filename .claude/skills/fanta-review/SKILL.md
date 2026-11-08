@@ -50,5 +50,12 @@ Write `docs/reviews/YYYY-MM-DD-<scope>.md`:
 5. Tests added (file, names, ctest result) and tests proposed but not applied.
 6. Status of findings from the previous report.
 
+File the actionable items as GitHub issues, after the report is written:
+- Each verified probable bug: labels `bug` plus `compiler` or `vm`.
+- Each top-3 action that isn't a bug: `enhancement`, or `idea,needs-decision` if the owner must
+  choose (most perf-vs-design conflicts).
+- Check for a duplicate first (`gh issue list --search "<key words>" --json number,title`); if one
+  exists, comment on it instead. Put the report path in the issue body and the `#N` in the report.
+
 Then reply to the user with the summary, the bug list, the conflicts and the report path — not the
 whole report.

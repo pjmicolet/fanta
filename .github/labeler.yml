@@ -1,0 +1,13 @@
+# Labels PRs by the paths they touch (actions/labeler v5). Release notes group by these labels.
+tui:
+  - changed-files:
+      - any-glob-to-any-file: ['tui/**']
+compiler:
+  - changed-files:
+      - any-glob-to-any-file: ['compiler/**', 'lang/**']
+vm:
+  - changed-files:
+      - any-glob-to-any-file: ['vm/**']
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ['docs/**', '**/*.md']
