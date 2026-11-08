@@ -1,0 +1,15 @@
+# Groups merged PRs into sections in auto-generated release notes, by label.
+changelog:
+  exclude:
+    labels: [duplicate, invalid, wontfix]
+  categories:
+    - title: TUI
+      labels: [tui]
+    - title: Compiler
+      labels: [compiler]
+    - title: VM
+      labels: [vm]
+    - title: Docs
+      labels: [documentation]
+    - title: Other
+      labels: ["*"]

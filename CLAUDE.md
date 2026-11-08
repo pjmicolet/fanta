@@ -13,8 +13,11 @@ A custom 32-bit RISC CPU, compiler, VM and TUI debugger for a 90s-style PC. Docs
 - **Permission overrides this, for what was granted only:** edit the real files directly, without
   re-confirming per file or trying it in a scratch copy first. Git is the safety net.
 - **Ask first** when a request is vague or has real architectural trade-offs.
-- **Deferred work:** when we decide something and leave it for later, add a row to
-  `docs/plans.md`. Check it at the start of related work.
+- **Work tracking:** GitHub issues on `pjmicolet/fanta`, ordered on the `Fanta` project board;
+  milestones are releases. Deferred work and ideas become issues (labels: `tui`, `compiler`,
+  `vm`, `idea`, `friction`, `blocked`, `needs-decision`). Query narrowly
+  (`gh issue list -l tui --json number,title`). Offline, append to `docs/inbox.md`; move its
+  lines into issues and empty it next time the network is up. PRs say `Fixes #N`.
 - **Reviews:** apply `docs/review_checklist.md` when reviewing any change.
 - **TUI changes:** `docs/tui_spec.md` is the agreed design. Each change must pass its §0 fit test
   and point to the `docs/tui_friction.md` entry it resolves. Before calling one done, check the
