@@ -39,7 +39,7 @@ static std::vector<TestCase *> cases;
 
 #define TEST_CASE(name) GEN_TEST(GEN_CLASS_NAME(FUNC_NAME), name)
 
-int main() {
+int main() try {
   std::vector<std::unique_ptr<Test::Format::Result>> results;
   bool failed = false;
   auto recordFailure = [&](const std::string &name, const std::string &why) {
@@ -66,4 +66,8 @@ int main() {
     std::cout << indent << result->to_string() << "\n";
   }
   return failed ? EXIT_FAILURE : EXIT_SUCCESS;
+} catch (...) {
+  // Reporting itself failed (e.g. out of memory); still fail the run.
+  std::cerr << "test runner: internal error while reporting results\n";
+  return EXIT_FAILURE;
 }

@@ -95,6 +95,6 @@ int main(int argc, char* argv[]) try {
     if (cpu.halted) std::println("CPU HALTED at cycle {}", cycle);
     return 0;
 } catch (const std::exception &e) {
-    std::println(std::cerr, "fanta-diff: error: {}", e.what());
+    std::cerr << "fanta-diff: error: " << e.what() << "\n";
     return 1;
 }

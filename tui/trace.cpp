@@ -72,6 +72,6 @@ int main(int argc, char* argv[]) try {
 
     return 0;
 } catch (const std::exception &e) {
-    std::println(std::cerr, "fanta-trace: error: {}", e.what());
+    std::cerr << "fanta-trace: error: " << e.what() << "\n";
     return 1;
 }

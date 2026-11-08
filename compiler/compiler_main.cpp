@@ -114,6 +114,6 @@ auto main(int argc, char *argv[]) -> int try {
 
   return 0;
 } catch (const std::exception &e) {
-  std::println(std::cerr, "fanta-compiler: error: {}", e.what());
+  std::cerr << "fanta-compiler: error: " << e.what() << "\n";
   return 1;
 }
