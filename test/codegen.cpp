@@ -1,5 +1,6 @@
 #include "../tui/disasm.hpp"
 #include <codegen.hpp>
+#include <print>
 #include <testframework/testing.hpp>
 
 TEST_CASE("Global Namespace") {
