@@ -1,5 +1,6 @@
 #pragma once
 #include "bus.hpp"
+#include "../common/cpu_info.hpp"
 #include "machine_spec.hpp"
 #include <array>
 #include <cstdint>
@@ -40,7 +41,7 @@ struct BaseCPU {
 
   enum FLAG : uint8_t { ZERO, NEGATIVE, OVFL, CARRY };
 
-  BaseCPU() : ram(32 * 1024 * 1024) {
+  BaseCPU() : ram(Fanta::Info::Cpu::RAM_SIZE) {
     registers.fill(0);
     registers[16] = 0x7FFFFC; // word aligned
   }

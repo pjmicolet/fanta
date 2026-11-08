@@ -376,7 +376,7 @@ void TUI::dump_state(const std::string &filename) {
   out << "\n" << "[DISASSEMBLY]" << "\n";
   int64_t pc = cpu.get_pc();
   for (int i = -5; i <= 5; ++i) {
-    int64_t addr = pc + (i * 4);
+    int64_t addr = pc + (int64_t{i} * 4);
     if (addr < 0 || addr > static_cast<int64_t>(cpu.ram.getSize()) - 4)
       continue; // PC underflow / past end of RAM
     out << (i == 0 ? "> " : "  ") << "0x" << std::hex << addr << std::dec
@@ -741,7 +741,7 @@ void TUI::draw_disasm_view(const Fanta::Canvas &c, std::string_view title,
   int rows = inner.height();
   // Keep PC a third of the way down, but never start before address 0
   // (no blank rows above the program).
-  int64_t start = int64_t{pc} - (rows / 3) * 4;
+  int64_t start = int64_t{pc} - (int64_t{rows / 3} * 4);
   start = std::max<int64_t>(start, 0);
   auto ram = static_cast<int64_t>(cpu.ram.getSize());
   for (int row = 0; row < rows; ++row) {

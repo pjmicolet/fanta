@@ -117,7 +117,7 @@ auto Parser::dumpNodes() -> void {
 }
 
 auto Parser::printAST(Fanta::AST::NodeIndex idx, int indent) -> void {
-  std::string pad(indent * 2, ' ');
+  std::string pad(static_cast<std::size_t>(indent) * 2, ' ');
 
   const auto &node = asts[idx];
   std::visit(overloaded{[&](const Fanta::AST::IntLiteral &lit) {
