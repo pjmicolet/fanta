@@ -13,7 +13,7 @@
  *           --keys feeds keystrokes first, e.g. "c<FRAME><FRAME>o" or
  *           ":run<CR>"; see parse_keys in tui.cpp.
  */
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[]) try {
   CPU cpu{};
 
   std::string dump_file;
@@ -60,4 +60,8 @@ int main(int argc, char *argv[]) {
   tui.init_ncurses();
   tui.run();
   return 0;
+} catch (const std::exception &e) {
+  // tui was destroyed during unwinding, so ncurses has already been ended.
+  std::cerr << "fanta-tui: error: " << e.what() << "\n";
+  return 1;
 }

@@ -18,7 +18,7 @@
  *   Mem [Addr]: 0xOLD -> 0xNEW
  */
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) try {
     if (argc < 2) {
         std::println(std::cerr, "Usage: fanta-diff <filename.asm> [--limit N]");
         return 1;
@@ -94,4 +94,7 @@ int main(int argc, char* argv[]) {
 
     if (cpu.halted) std::println("CPU HALTED at cycle {}", cycle);
     return 0;
+} catch (const std::exception &e) {
+    std::println(std::cerr, "fanta-diff: error: {}", e.what());
+    return 1;
 }

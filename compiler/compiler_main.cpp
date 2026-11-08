@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-auto main(int argc, char *argv[]) -> int {
+auto main(int argc, char *argv[]) -> int try {
   if (argc < 2) {
     std::println(
         std::cerr,
@@ -113,4 +113,7 @@ auto main(int argc, char *argv[]) -> int {
   }
 
   return 0;
+} catch (const std::exception &e) {
+  std::println(std::cerr, "fanta-compiler: error: {}", e.what());
+  return 1;
 }

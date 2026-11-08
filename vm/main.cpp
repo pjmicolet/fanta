@@ -14,7 +14,7 @@ constexpr int VM_WIDTH = 320;
 constexpr int VM_HEIGHT = 240;
 constexpr int WINDOW_SCALE = 3;
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) try {
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         std::cerr << "SDL_Init Error: " << SDL_GetError() << "\n";
@@ -139,4 +139,8 @@ int main(int argc, char* argv[]) {
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 0;
+} catch (const std::exception &e) {
+    std::cerr << "fanta: error: " << e.what() << "\n";
+    SDL_Quit();
+    return 1;
 }
