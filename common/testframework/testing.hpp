@@ -6,6 +6,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #define FUNC_NAME TestCase
@@ -18,7 +19,7 @@
 struct TestCase;
 
 struct TestCase {
-  TestCase(std::string name) : name_(name) {};
+  TestCase(std::string name) : name_(std::move(name)) {};
   virtual auto run() -> void = 0;
   auto report() {
     std::cout << "Running " << name_ << "...\n";

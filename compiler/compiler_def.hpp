@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "PassDefinition.hpp"
 #include "SimpleIRPass.hpp"
 #include "codegen.hpp"
@@ -14,7 +16,7 @@ struct CompilerDef {
   CompilerDef() {};
 
   auto compile(std::string program) {
-    Parser p(program);
+    Parser p(std::move(program));
     p.fullWalk();
     Codegen cg{};
     cg.extractGlobalNames(p);

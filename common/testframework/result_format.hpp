@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <utility>
 
 namespace Test {
 namespace Format {
@@ -9,7 +10,7 @@ namespace Format {
     };
 
     struct Passed : public Result {
-        Passed(const std::string& testName) : testName_(testName) {};
+        Passed(std::string testName) : testName_(std::move(testName)) {};
         auto to_string() -> std::string override {
             return "\033[1;32m" + testName_ + " PASSED \033[0m";
         }
@@ -18,8 +19,8 @@ namespace Format {
     };
 
     struct Failed : public Result {
-        Failed(const std::string& testName, const std::string& reason) : testName_(testName),
-            reason_(reason) {};
+        Failed(std::string testName, std::string reason) : testName_(std::move(testName)),
+            reason_(std::move(reason)) {};
         auto to_string() -> std::string override {
             return "\033[1;31m" + testName_ + " FAILED due to " + reason_+ "\033[0m"   ;
         }

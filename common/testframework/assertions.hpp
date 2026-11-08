@@ -9,12 +9,12 @@ class TestException : public std::runtime_error {
   std::string exception_;
 
 public:
-  TestException(std::string reason) : std::runtime_error(reason) {};
+  TestException(const std::string& reason) : std::runtime_error(reason) {};
 };
 
 namespace Test {
 namespace Exceptions {
-inline auto require_true(const std::string statement, const int line,
+inline auto require_true(const std::string& statement, const int line,
                          const bool result) -> void {
   if (!result) {
     std::string issue = ": Failed assertion \"" + statement + "\" at line " +
@@ -38,7 +38,7 @@ inline auto compare(const T& rhs, const R& lhs) -> bool {
 }
 
 template <typename T, typename R>
-inline auto require_same(const int line, const T &expected, const R &got, std::function<std::string()> onDump = [](){ return "";})
+inline auto require_same(const int line, const T &expected, const R &got, const std::function<std::string()>& onDump = [](){ return "";})
     -> void {
   if (!compare(expected,got)) {
     std::string expectedS;

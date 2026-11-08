@@ -78,7 +78,7 @@ struct Assembler {
     return "";
   }
 
-  auto does_label_exist(std::string label) -> bool {
+  auto does_label_exist(const std::string& label) -> bool {
     return labels_.contains(label);
   }
 

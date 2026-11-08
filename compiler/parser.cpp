@@ -5,8 +5,9 @@
 #include <fanta_utils.hpp>
 #include <print>
 #include <stdexcept>
+#include <utility>
 
-Parser::Parser(std::string program) : program_(program), lexer(program_) {
+Parser::Parser(std::string program) : program_(std::move(program)), lexer(program_) {
   currentToken = *lexer.getToken();
   peekToken = *lexer.getToken(); // TODO errors
 }

@@ -347,8 +347,8 @@ auto SimpleIRPass::handleLogicalCheck(const Parser &p,
                                       const AST::BinaryOperator &bop,
                                       IRListing &ir, const GlobalTable &gt,
                                       LocalTable &lt, Lexer::TokenType type,
-                                      std::string falseLabel,
-                                      std::string trueLabel) -> void {
+                                      const std::string& falseLabel,
+                                      const std::string& trueLabel) -> void {
   switch (type) {
   case Lexer::TokenType::And: {
     emitCondFalse(p, p.getNodeAtIndex(bop.lhsOp), ir, gt, lt, falseLabel);
@@ -372,7 +372,7 @@ auto SimpleIRPass::handleLogicalCheck(const Parser &p,
 auto SimpleIRPass::handleNestedCondTrueLogicalCheck(
     const Parser &p, const AST::BinaryOperator &bop, IRListing &ir,
     const GlobalTable &gt, LocalTable &lt, Lexer::TokenType type,
-    std::string trueLabel) -> void {
+    const std::string& trueLabel) -> void {
   switch (type) {
   case Lexer::TokenType::And: {
     auto falseLabel = lt.generateNewLabel();
