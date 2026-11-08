@@ -140,7 +140,7 @@ inline auto disassemble(uint32_t raw, uint32_t addr = 0,
     // JMP is absolute; everything else (branches, JREL, CALL) is PC-relative
     // to the instruction's own address.
     bool absolute = opcode == Info::Instructions::JUMP;
-    int32_t offset = static_cast<int32_t>(field << 6) >> 6; // sign-extend 26
+    int32_t offset = Instructions::sign_extend26(field);
     uint32_t target = absolute ? field : addr + offset;
 
     if (auto label = labels(target)) {

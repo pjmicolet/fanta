@@ -101,6 +101,18 @@ struct InstEntry {
 
 #define RET_INST(class_name, mnemonic, op)
 
+/// Sign-extends the 26-bit offset field (bits 0-25) of a branch, JREL or CALL
+/// word. Uses only unsigned arithmetic, so there's no signed shift to reason
+/// about.
+constexpr auto sign_extend26(uint32_t word) -> int32_t {
+  constexpr uint32_t kSignBit = 1U << 25;
+  return static_cast<int32_t>(((word & 0x3FFFFFFU) ^ kSignBit) - kSignBit);
+}
+static_assert(sign_extend26(0x3FFFFF8) == -8);
+static_assert(sign_extend26(0x0000008) == 8);
+static_assert(sign_extend26(0xFC000000 | 0x1FFFFFF) == 0x1FFFFFF);
+static_assert(sign_extend26(0x2000000) == -0x2000000);
+
 struct Decode {
   // Instruction format is as follows:
   // [opcode:6bit][dest:5bit][src1:5bit]
@@ -121,7 +133,7 @@ struct Decode {
 
   [[nodiscard]] constexpr auto getS2() const -> uint8_t { return (raw >> 11) & 0x1F; }
 
-  [[nodiscard]] constexpr auto getImm() const -> uint16_t { return raw & (0xFFFF); }
+  [[nodiscard]] constexpr auto getImm() const -> uint16_t { return raw & 0xFFFF; }
 };
 
 // constexpr assembler
@@ -151,7 +163,7 @@ struct Emitter {
   }
 
   static constexpr uint32_t single_inst(uint8_t op, int32_t dest) {
-    return uint32_t(op << 26) | uint32_t(dest & 0x3FFFFFF);
+    return (uint32_t(op) << 26) | (uint32_t(dest) & 0x3FFFFFF);
   }
 
   static constexpr uint32_t two_op(uint8_t op, uint8_t d, uint8_t s1) {

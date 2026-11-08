@@ -2,6 +2,7 @@
 
 #include "../common/cpu_info.hpp"
 #include "../common/hook.hpp"
+#include "../common/instructions.hpp"
 #include "cpu.hpp"
 
 // Execute semantics for each opcode, dispatched from CPU::run_cycle. Kept in
@@ -144,18 +145,13 @@ struct Jmp {
   static auto exec(CPU &cpu, uint32_t inst) { cpu.set_pc(inst & 0x3FFFFFF); }
 };
 
-inline auto parse_as_signed(uint32_t data) -> std::int32_t {
-  std::int32_t temp = data;
-  temp = temp << 6;
-  return temp >> 6;
-}
 
 template <CPU::FLAG f, bool isNeg> struct Branch {
   static auto exec(CPU &cpu, uint32_t inst) {
     if (cpu.flag_check(f, isNeg)) {
       auto prev = cpu.get_prev_pc();
       auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) +
-                                       parse_as_signed(inst & 0x3FFFFFF));
+                                       Instructions::sign_extend26(inst));
       cpu.set_pc(res);
     }
   }
@@ -165,7 +161,7 @@ struct Jrel {
   static auto exec(CPU &cpu, uint32_t inst) {
     auto prev = cpu.get_prev_pc();
     auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) +
-                                     parse_as_signed(inst & 0x3FFFFFF));
+                                     Instructions::sign_extend26(inst));
     cpu.set_pc(res);
   }
 };
@@ -209,7 +205,7 @@ struct Call {
     auto prev = cpu.get_prev_pc();
 
     auto res = static_cast<uint32_t>(static_cast<int32_t>(prev) +
-                                     parse_as_signed(inst & 0x3FFFFFF));
+                                     Instructions::sign_extend26(inst));
     if (res >= Fanta::HOOK_BASE && res <= Fanta::HOOK_END) {
       callIntrin(cpu, res);
       return;
