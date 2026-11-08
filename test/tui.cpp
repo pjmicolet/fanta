@@ -449,6 +449,20 @@ TEST_CASE("Screenshot Feeds Keys Before Rendering") {
   std::filesystem::remove(path);
 }
 
+TEST_CASE("Screenshot Keys See The Requested Size, Not 80x24") {
+  // At 80x24 the first F10 opens the panel as an overlay on [Serial]; at
+  // 120x40 the panel is already on screen, so F10 cycles to VRAM.
+  auto path = tempPath("fanta_tui_screen_size.txt");
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.screenshot(path, 120, 40, "<F10>"));
+  std::ifstream in(path);
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  REQUIRE_TRUE(screen.contains("Serial  [VRAM]"));
+  std::filesystem::remove(path);
+}
+
 // --- Layout (spec §3.3): checked for every kind at many sizes ---------------
 
 namespace {
