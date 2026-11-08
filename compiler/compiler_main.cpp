@@ -101,7 +101,7 @@ auto main(int argc, char *argv[]) -> int try {
       return 1;
     }
     out.write(reinterpret_cast<const char *>(insts.data()),
-              insts.size() * sizeof(uint32_t));
+              static_cast<std::streamsize>(insts.size() * sizeof(uint32_t)));
 
     std::println("Successfully compiled: {} -> {} ({} instructions, {} bytes)",
                  inputFile, outputFile, insts.size(),

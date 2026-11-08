@@ -96,8 +96,9 @@ void TUI::configure_ncurses() {
           for (int b = 0; b < 6; ++b) {
             int color_idx = 16 + (r * 36) + (g * 6) + b;
             int pair_idx = 10 + (r * 36) + (g * 6) + b;
-            init_pair(pair_idx, color_idx,
-                      color_idx); // Same fg/bg for solid block
+            init_pair(
+                static_cast<short>(pair_idx), static_cast<short>(color_idx),
+                static_cast<short>(color_idx)); // Same fg/bg for solid block
           }
         }
       }
@@ -120,7 +121,8 @@ void TUI::run() {
                        now - last_ips_time)
                        .count();
     if (elapsed >= 1000) {
-      current_ips = (total_cycles * 1000.0) / elapsed;
+      current_ips = (static_cast<double>(total_cycles) * 1000.0) /
+                    static_cast<double>(elapsed);
       total_cycles = 0;
       last_ips_time = now;
     }

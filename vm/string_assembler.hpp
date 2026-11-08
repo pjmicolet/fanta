@@ -28,7 +28,7 @@ struct Assembler {
             std::remove_if(clean_label.begin(), clean_label.end(),
                            [](unsigned char x) { return std::isspace(x); }),
             clean_label.end());
-        labels_[clean_label] = add;
+        labels_[clean_label] = static_cast<int>(add);
       }
       add += 4;
     }
@@ -148,8 +148,8 @@ private:
     for (auto &c : last_copy) {
       if (c == '(' || c == ')' || c == ',')
         c = ' ';
-      else if (::isalpha(c))
-        c = ::toupper(c);
+      else if (::isalpha(static_cast<unsigned char>(c)))
+        c = static_cast<char>(::toupper(static_cast<unsigned char>(c)));
     }
 
     return last_copy | std::views::split(' ') |

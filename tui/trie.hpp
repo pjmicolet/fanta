@@ -32,7 +32,8 @@ public:
         if (prefix.empty()) return "";
         TrieNode* curr = root.get();
         for (char c : prefix) {
-            char upperC = std::toupper(c);
+            char upperC = static_cast<char>(
+                std::toupper(static_cast<unsigned char>(c)));
             if (curr->children.find(upperC) == curr->children.end()) {
                 return "";
             }

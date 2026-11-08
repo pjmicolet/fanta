@@ -162,8 +162,8 @@ struct Emitter {
            uint32_t(s1 & 0x1f) << 16 | uint32_t(imm & 0xffff);
   }
 
-  static constexpr uint32_t single_inst(uint8_t op, int32_t dest) {
-    return (uint32_t(op) << 26) | (uint32_t(dest) & 0x3FFFFFF);
+  static constexpr uint32_t single_inst(uint8_t op, uint32_t dest) {
+    return (uint32_t(op) << 26) | (dest & 0x3FFFFFF);
   }
 
   static constexpr uint32_t two_op(uint8_t op, uint8_t d, uint8_t s1) {
