@@ -658,6 +658,34 @@ TEST_CASE("Intrinsic - @print Works From A Function Other Than main") {
   REQUIRE_SAME(std::string{"Hi"}, serialOf(cpu));
 }
 
+TEST_CASE("Intrinsic - @printu32 Sends Decimal Digits To Serial") {
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "@printu32(1234);"
+                           "@printu32(0);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"12340"}, serialOf(cpu));
+}
+
+TEST_CASE("Intrinsic - @printu32 Treats Its Argument As Unsigned") {
+  // 0 - 1 wraps to 0xFFFFFFFF: the widest value, all ten digits.
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "let a: int = 0 - 1;"
+                           "@printu32(a);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"4294967295"}, serialOf(cpu));
+}
+
+TEST_CASE("Intrinsic - @printu32 And @print Interleave In Order") {
+  auto cpu = compileAndRun("fn main() -> int {"
+                           "@printu32(42);"
+                           "@print(10);"
+                           "return 0;"
+                           "}");
+  REQUIRE_SAME(std::string{"42\n"}, serialOf(cpu));
+}
+
 TEST_CASE("Intrinsic - Execution Resumes After The Call With Locals Intact") {
   auto cpu = compileAndRun("fn main() -> int {"
                            "let a: int = 7;"
