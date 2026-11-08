@@ -4,6 +4,7 @@
 #include "../common/hook.hpp"
 #include "../common/instructions.hpp"
 #include "cpu.hpp"
+#include <charconv>
 #include <cstdint>
 
 // Execute semantics for each opcode, dispatched from CPU::run_cycle. Kept in

@@ -1,5 +1,6 @@
 #include <SimpleIRPass.hpp>
 #include <allocator.hpp>
+#include <print>
 #include <testframework/testing.hpp>
 #include <fanta_utils.hpp>
 

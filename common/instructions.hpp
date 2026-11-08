@@ -40,7 +40,7 @@ struct InstEntry {
     }                                                                          \
   };                                                                           \
                                                                                \
-  template <uint8_t Dest, uint8_t Reg1, uint16_t Imm>                          \
+  template <uint8_t Dest, uint8_t Reg1, int16_t Imm>                           \
   struct class_name<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {                      \
     static constexpr auto emit() {                                             \
       return Emitter::three_op_imm(imm_op, Dest, Reg1, Imm);                   \
@@ -57,7 +57,7 @@ struct InstEntry {
     }                                                                          \
   };                                                                           \
                                                                                \
-  template <uint8_t Dest, uint16_t Imm>                                        \
+  template <uint8_t Dest, int16_t Imm>                                         \
   struct class_name<Reg<Dest>, Literal<Imm>> {                                 \
     static constexpr auto emit() {                                             \
       return Emitter::two_op_imm(imm_op, Dest, Imm);                           \
@@ -89,7 +89,7 @@ struct InstEntry {
   template <typename SrcVal, typename DestMem, typename Offset>                \
   struct class_name {};                                                        \
                                                                                \
-  template <uint8_t Dest, uint8_t Reg1, uint16_t Imm>                          \
+  template <uint8_t Dest, uint8_t Reg1, int16_t Imm>                           \
   struct class_name<Reg<Dest>, Reg<Reg1>, Literal<Imm>> {                      \
     static constexpr auto emit() {                                             \
       return Emitter::three_op_imm(op, Dest, Reg1, Imm);                       \
