@@ -98,6 +98,9 @@ auto printIR(const IR &irlisting) -> void {
                 }
                 case 0:
                   std::println("    {}", getopName(irop.opcode));
+                  break;
+                default:
+                  break;
                 }
               },
               [&](const CallFunc &cfunc) {

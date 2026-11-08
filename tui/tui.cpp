@@ -257,6 +257,8 @@ bool TUI::handle_fkey(int ch) {
   case 10:
     cycle_output();
     break;
+  default:
+    break;
   }
   return true;
 }
@@ -1051,6 +1053,8 @@ void TUI::handle_zoom_mode(int ch) {
   case KEY_DOWN:
     zoom_cy = std::min(zoom_cy + 4.0, 240.0);
     break;
+  default:
+    break;
   }
 }
 
@@ -1109,6 +1113,8 @@ void TUI::handle_normal_mode(int ch) {
     break;
   case 'x': // Delete character
     editor.erase_at_cursor();
+    break;
+  default:
     break;
   }
 }

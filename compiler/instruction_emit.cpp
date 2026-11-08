@@ -5,7 +5,9 @@
 #include "instructions.hpp"
 #include "ir.hpp"
 #include <fanta_utils.hpp>
+#include <format>
 #include <ranges>
+#include <stdexcept>
 #include <string>
 #include <variant>
 
@@ -268,6 +270,9 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &/*gt*/,
     SINGLE(Info::Instructions::PUSH)
     SINGLE(Info::Instructions::POP)
     SINGLE(Info::Instructions::BNC)
+  default:
+    throw std::logic_error(
+        std::format("emitInst: no encoding for opcode {:#x}", op.opcode));
   }
   // NOLINTEND(bugprone-branch-clone)
 }

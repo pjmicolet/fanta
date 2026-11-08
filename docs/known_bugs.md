@@ -12,6 +12,7 @@ Crashes and hangs reproduce with `tools/crash.py fanta-compiler c.fn -o c.bin`. 
 |---|---|---|---|---|
 | New | `let b : int = ;` | Crash, or reports OK | Missing initialiser leaves an invalid node index | `SimpleIRPass::emitVariableIR`, via `Parser::getNodeAtIndex` |
 | B11 | `let a : int = -1;` | Crash | Unary minus produces an invalid node index | `Parser::walkPrefix`, via `Parser::getNodeAtIndex` |
+| New | `let a : int = 1 $ 2;` (unknown symbol in an expression) | Compiler hangs until killed (also killed for memory once) | Not investigated; maybe the same loop as B6 | Lexer `UnknownToken` handling in the parser |
 | B7 | A source file containing only `@` | Crash | Dereferences an errored `expected` | `Parser::Parser` |
 | B6 | EOF inside a body; `fn main(1)` | Parser hangs | Parser loops without advancing | `compiler/parser.cpp` |
 | B10 | `for (; i < 3; i = i + 1)` | `bad_variant_access` error | Empty init is read as a `VariableDecl` | `compiler/SimpleIRPass.cpp` |
