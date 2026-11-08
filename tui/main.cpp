@@ -1,6 +1,7 @@
 #include "tui.hpp"
 #include "cpu.hpp"
-#include <cstdio>
+#include <charconv>
+#include <string_view>
 #include <iostream>
 #include <string>
 
@@ -13,6 +14,20 @@
  *           --keys feeds keystrokes first, e.g. "c<FRAME><FRAME>o" or
  *           ":run<CR>"; see parse_keys in tui.cpp.
  */
+// Parses "COLSxROWS" (e.g. 120x40). Rejects trailing text, overflow and
+// non-positive sizes, which sscanf would accept.
+static auto parse_size(std::string_view s, int &cols, int &rows) -> bool {
+  auto x = s.find('x');
+  if (x == std::string_view::npos)
+    return false;
+  auto number = [](std::string_view part, int &out) {
+    const char *end = part.data() + part.size();
+    auto [ptr, ec] = std::from_chars(part.data(), end, out);
+    return ec == std::errc{} && ptr == end && out > 0;
+  };
+  return number(s.substr(0, x), cols) && number(s.substr(x + 1), rows);
+}
+
 int main(int argc, char *argv[]) try {
   CPU cpu{};
 
@@ -32,7 +47,7 @@ int main(int argc, char *argv[]) try {
     } else if (arg == "--keys" && has_value) {
       keys = argv[++i];
     } else if (arg == "--size" && has_value) {
-      if (std::sscanf(argv[++i], "%dx%d", &cols, &rows) != 2) {
+      if (!parse_size(argv[++i], cols, rows)) {
         std::cerr << "--size expects COLSxROWS, e.g. 120x40\n";
         return 1;
       }

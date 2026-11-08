@@ -41,7 +41,6 @@ private:
   std::vector<Fanta::AST::AstNode> asts;
   std::vector<Fanta::AST::NodeIndex> roots;
 
-  size_t index = 0;
 
   auto nextToken() -> void;
 

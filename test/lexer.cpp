@@ -3,8 +3,8 @@
 
 // Helper macro to assert token type on std::expected<Token, LexError>
 #define REQUIRE_TOKEN_TYPE(expected_type, expected_res)                        \
-  REQUIRE_SAME(1, expected_res.has_value() ? 1 : 0);                           \
-  REQUIRE_SAME(expected_type, expected_res->t)
+  REQUIRE_SAME(1, (expected_res).has_value() ? 1 : 0);                         \
+  REQUIRE_SAME((expected_type), (expected_res)->t)
 
 TEST_CASE("Basic Lexing of Alpha") {
   std::string case1 = "hello";

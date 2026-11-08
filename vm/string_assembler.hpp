@@ -10,7 +10,6 @@
 #include <vector>
 
 struct Assembler {
-  static constexpr std::string _LITERAL = "#";
 
   auto scan_for_labels(std::string_view code) -> void {
     labels_.clear();
