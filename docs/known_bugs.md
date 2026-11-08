@@ -21,6 +21,7 @@ Crashes and hangs reproduce with `tools/crash.py fanta-compiler c.fn -o c.bin`. 
 | New | `return qd;` with `qd` undefined | Compiles without error | Undefined variables aren't rejected | Compiler |
 | New | Any compile | Prints `About to get stuck` | Leftover debug output | Compiler |
 | New | Any compiled program | Emits HALT as `0x03FFFFFF`, so `:eject` misreads code | Should emit `Halt::emit()` (`0`) | Compiler |
+| New | Opcode word `0x21`–`0x3F` (corrupt word, jump into data) | Runs as a silent NOP | `run_cycle()` switch has no `default:` | `vm/cpu.cpp`; fix proposed in `docs/interrupts_proposal.md` §8 |
 | B16 | `SP` as a source operand | Encoded as immediate `#16` | Checks the first letter instead of `is_register()` | `parse_two`, `vm/string_assembler.hpp` |
 
 ## Not rechecked since 2026-10-17
