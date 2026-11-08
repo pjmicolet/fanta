@@ -96,6 +96,16 @@ TEST_CASE("Disasm Shows Branch Target And Uses Labels When Known") {
                Fanta::disassemble(bne, 0x10, labels));
 }
 
+TEST_CASE("Disasm Names A CALL To A Hook") {
+  // CALL's 26-bit offset wraps around 32 bits to reach HOOK_BASE.
+  constexpr uint32_t addr = 0x100;
+  uint32_t offset = Fanta::HOOK_BASE - addr;
+  uint32_t call =
+      Assembler{}.assemble("CALL #0", addr) | (offset & 0x3FFFFFF);
+  REQUIRE_SAME(std::string{"CALL -#200 ; -> @print"},
+               Fanta::disassemble(call, addr));
+}
+
 TEST_CASE("Disasm Unknown Opcode") {
   REQUIRE_SAME(std::string{"UNKNOWN (0x3f)"},
                Fanta::disassemble(0x3Fu << 26));
