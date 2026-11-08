@@ -20,6 +20,7 @@ Read only what the task needs.
 | `tui_todo.md` | TUI work queue, pointing at friction entries | Living log |
 | `known_bugs.md` | Reproduced bugs with causes, to check before debugging | Living log |
 | `not_implemented.md` | Missing features, dated so they can be re-validated | Living log |
+| `plans.md` | Decided but deferred work, pointing at its spec | Living log |
 | `reviews/` | Dated review reports | Historical, not updated |
 
 When documents overlap, the code wins for current behaviour, and the specs win for planned behaviour.
