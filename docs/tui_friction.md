@@ -30,6 +30,8 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 2026-10-31  cc  headless screenshots: F10 and :out act as if the terminal were 80x24 whatever --size says (term_w/term_h are only set in update())
 2026-10-31  cc  test/serial_hello.asm still says "Press 'o' in the TUI to see it"; o does nothing now
 2026-11-07  cc  building `let b : int = ;` can crash the TUI, or report OK when it doesn't                           (compiler bug, not TUI: out-of-bounds read in emitVariableIR)
+2026-11-07  cc  stepping a .fn with @print, the ASM pane shows `CALL -#130 ; -> 0xFFFFFF00`: nothing says it's @print
+2026-11-07  cc  `@print(300)` shows `,` in the Serial tab; there's no way to see the 32-bit value that was written
 ```
 
 ## Parked ideas
