@@ -463,6 +463,78 @@ TEST_CASE("Screenshot Keys See The Requested Size, Not 80x24") {
   std::filesystem::remove(path);
 }
 
+// --- Status line messages (spec §6.2) ----------------------------------------
+
+namespace {
+/// Row 2 of a screenshot: the status line (row 1 is the border).
+auto statusAfter(TUI &tui, const std::string &keys) -> std::string {
+  auto path = tempPath("fanta_tui_status.txt");
+  if (!tui.screenshot(path, 120, 40, keys))
+    return "";
+  std::ifstream in(path);
+  std::string line;
+  std::getline(in, line);
+  std::getline(in, line);
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  std::filesystem::remove(path);
+  return line + "\n" + screen;
+}
+
+auto load(TUI &tui, const std::string &name, const std::string &text) -> void {
+  auto path = tempPath(name);
+  writeText(path, text);
+  tui.load_file(path);
+  std::filesystem::remove(path);
+}
+} // namespace
+
+TEST_CASE("Status Message Expires On The Next Key") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_msg.asm", "NOP\nNOP\nHALT\n");
+  REQUIRE_TRUE(statusAfter(tui, "").contains("Loaded"));
+  REQUIRE_TRUE(!statusAfter(tui, "<F7>").contains("Loaded"));
+}
+
+TEST_CASE("Build Error Stays Until The Next Build") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_msg_err.asm", "NOP\nFOO R1\nHALT\n");
+  auto status = statusAfter(tui, "<F7>jj");
+  REQUIRE_TRUE(status.contains("failed to assemble"));
+  // Full text (the status line truncates it): 1-based, with the address.
+  REQUIRE_TRUE(dumpOf(tui).contains("line 2 (0x000004): FOO R1"));
+}
+
+TEST_CASE("Hint Bar Offers F5 Pause While Running") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_msg_run.asm", "loop:\nJMP loop\n");
+  auto screen = statusAfter(tui, "<F5>");
+  REQUIRE_TRUE(screen.contains("RUNNING"));
+  REQUIRE_TRUE(screen.contains("F5 pause"));
+  REQUIRE_TRUE(!screen.contains("F5 run"));
+}
+
+TEST_CASE("Editing A .fn Says STALE Without A Message") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_msg.fn", "fn main() -> int { return 1; }\n");
+  auto status = statusAfter(tui, "ix<ESC>");
+  auto first = status.substr(0, status.find('\n'));
+  REQUIRE_TRUE(first.contains("STALE"));
+  REQUIRE_TRUE(!first.contains("Edited"));
+}
+
+TEST_CASE("Moved Code Message Names A 1-Based Line And Its Address") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_msg_moved.asm", "NOP\nHALT\n");
+  auto status = statusAfter(tui, "jiNOP<CR><ESC>");
+  REQUIRE_TRUE(status.contains("Line 2 (0x000004) added/removed"));
+}
+
 // --- Layout (spec §3.3): checked for every kind at many sizes ---------------
 
 namespace {
