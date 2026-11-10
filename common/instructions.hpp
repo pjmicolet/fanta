@@ -125,15 +125,25 @@ struct Decode {
   uint32_t raw;
   constexpr Decode(uint32_t d) : raw(d) {}
 
-  [[nodiscard]] constexpr auto getOpcode() const -> uint8_t { return (raw >> 26) & 0x3F; }
+  [[nodiscard]] constexpr auto getOpcode() const -> uint8_t {
+    return (raw >> 26) & 0x3F;
+  }
 
-  [[nodiscard]] constexpr auto getDestSrc() const -> uint8_t { return (raw >> 21) & 0x1F; }
+  [[nodiscard]] constexpr auto getDestSrc() const -> uint8_t {
+    return (raw >> 21) & 0x1F;
+  }
 
-  [[nodiscard]] constexpr auto getS1() const -> uint8_t { return (raw >> 16) & 0x1F; }
+  [[nodiscard]] constexpr auto getS1() const -> uint8_t {
+    return (raw >> 16) & 0x1F;
+  }
 
-  [[nodiscard]] constexpr auto getS2() const -> uint8_t { return (raw >> 11) & 0x1F; }
+  [[nodiscard]] constexpr auto getS2() const -> uint8_t {
+    return (raw >> 11) & 0x1F;
+  }
 
-  [[nodiscard]] constexpr auto getImm() const -> uint16_t { return raw & 0xFFFF; }
+  [[nodiscard]] constexpr auto getImm() const -> uint16_t {
+    return raw & 0xFFFF;
+  }
 };
 
 // constexpr assembler
@@ -245,6 +255,16 @@ inline constexpr std::array<InstEntry, 25> kInstructionTable{
     },
 };
 
+inline constexpr auto kOpcodeToMeta = [] {
+  std::array<const InstMetadata *, 64> t{};
+  for (const auto &e : kInstructionTable) {
+    t[e.meta.reg] = &e.meta;
+    if (e.meta.imm)
+      t[e.meta.imm] = &e.meta;
+  }
+  return t;
+}();
+
 struct Registry {
   static constexpr auto &get() { return kInstructionTable; }
 
@@ -253,8 +273,15 @@ struct Registry {
       if (entry.mnemonic == key)
         return entry.meta;
     }
+
     throw std::out_of_range("Unknown instruction mnemonic: " +
                             std::string(key));
+  }
+
+  static constexpr auto fetch(uint32_t opcode) -> const InstMetadata & {
+    if (opcode >= kOpcodeToMeta.size()) [[unlikely]]
+      std::out_of_range("Unknown instruction opcode:" + std::to_string(opcode));
+    return *kOpcodeToMeta[opcode];
   }
 };
 

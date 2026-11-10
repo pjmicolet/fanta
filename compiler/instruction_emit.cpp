@@ -85,27 +85,26 @@ auto InstructionEmitter::outputInitFunc(const FunctionIR &fir, GlobalTable &gt,
 
   for (const auto &ir : fir.insts) {
     std::visit(
-        overloaded{[&](const IROp &op) { emitInst(op, gt, il); },
-                   [&](const CallFunc &op) {
-                     il.push_back(Instructions::Emitter::single_inst(
-                         Info::Instructions::CALL,
-                         -1)); // We probably don't know the callsite yet.
-                     (op.cn == INTRINSIC ? intrinsicLinks : missingLinks)
-                         .push_back(
-                             {static_cast<uint32_t>(il.size() - 1), op.name});
-                     if (op.dest) {
-                       il.push_back(Instructions::Emitter::two_op(
-                           Info::Instructions::MOV_REG, op.dest->val, 0));
-                     }
-                   },
-                   [&](const LocalGlobalBase &lgb) {
-                     auto movGlobal = Instructions::Emitter::two_op_imm(
-                         Info::Instructions::MOV_IMM, lgb.dest.val, 0);
-                     il.push_back(movGlobal);
-                     globalBaseMovs.push_back(
-                         static_cast<uint32_t>(il.size() - 1));
-                   },
-                   [](const auto &) {}},
+        overloaded{
+            [&](const IROp &op) { emitInst(op, gt, il); },
+            [&](const CallFunc &op) {
+              il.push_back(Instructions::Emitter::single_inst(
+                  Info::Instructions::CALL,
+                  -1)); // We probably don't know the callsite yet.
+              (op.cn == INTRINSIC ? intrinsicLinks : missingLinks)
+                  .push_back({static_cast<uint32_t>(il.size() - 1), op.name});
+              if (op.dest) {
+                il.push_back(Instructions::Emitter::two_op(
+                    Info::Instructions::MOV_REG, op.dest->val, 0));
+              }
+            },
+            [&](const LocalGlobalBase &lgb) {
+              auto movGlobal = Instructions::Emitter::two_op_imm(
+                  Info::Instructions::MOV_IMM, lgb.dest.val, 0);
+              il.push_back(movGlobal);
+              globalBaseMovs.push_back(static_cast<uint32_t>(il.size() - 1));
+            },
+            [](const auto &) {}},
         ir);
   }
 
@@ -201,7 +200,7 @@ auto InstructionEmitter::emitEpilogue(const FunctionIR &fir, uint32_t maxOffset,
   il.push_back(Instructions::Emitter::single_inst(Info::Instructions::RET, 0));
 }
 
-auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &/*gt*/,
+auto InstructionEmitter::emitInst(const IROp &op, GlobalTable & /*gt*/,
                                   InstructionList &il) -> void {
 #define THREE_REG(num)                                                         \
   case num: {                                                                  \
@@ -237,39 +236,41 @@ auto InstructionEmitter::emitInst(const IROp &op, GlobalTable &/*gt*/,
   // Same-format cases expand to identical bodies; replacing this switch with
   // a kInstructionTable format lookup is in docs/plans.md.
   // NOLINTBEGIN(bugprone-branch-clone)
-  switch (op.opcode) {
-    SINGLE(Info::Instructions::HALT)
-    THREE_REG(Info::Instructions::ADD_REG)
-    THREE_IMM(Info::Instructions::ADD_IMM)
-    TWO_REG(Info::Instructions::MOV_REG)
-    TWO_IMM(Info::Instructions::MOV_IMM)
-    THREE_REG(Info::Instructions::SUB_REG)
-    THREE_IMM(Info::Instructions::SUB_IMM)
-    SINGLE(Info::Instructions::JUMP)
-    THREE_IMM(Info::Instructions::STORE)
-    THREE_IMM(Info::Instructions::LOAD)
-    SINGLE(Info::Instructions::BEQ)
-    SINGLE(Info::Instructions::BNE)
-    THREE_REG(Info::Instructions::LSH_REG)
-    THREE_IMM(Info::Instructions::LSH_IMM)
-    TWO_REG(Info::Instructions::CMP_REG)
-    TWO_IMM(Info::Instructions::CMP_IMM)
-    SINGLE(Info::Instructions::BEC)
-    SINGLE(Info::Instructions::BMI)
-    SINGLE(Info::Instructions::BPL)
-    SINGLE(Info::Instructions::JREL)
-    SINGLE(Info::Instructions::NOP)
-    SINGLE(Info::Instructions::CALL)
-    SINGLE(Info::Instructions::RET)
-    THREE_REG(Info::Instructions::AND_REG)
-    THREE_IMM(Info::Instructions::AND_IMM)
-    THREE_REG(Info::Instructions::OR_REG)
-    THREE_IMM(Info::Instructions::OR_IMM)
-    THREE_REG(Info::Instructions::XOR_REG)
-    THREE_IMM(Info::Instructions::XOR_IMM)
-    SINGLE(Info::Instructions::PUSH)
-    SINGLE(Info::Instructions::POP)
-    SINGLE(Info::Instructions::BNC)
+
+  const auto &mtdc = Instructions::Registry::fetch(op.opcode);
+  switch (mtdc.fmt) {
+  case Instructions::InstFormat::HALT:
+  case Instructions::InstFormat::JUMP:
+  case Instructions::InstFormat::BRANCH:
+  case Instructions::InstFormat::RET:
+  case Instructions::InstFormat::STACK_INST:
+  case Instructions::InstFormat::NOP: {
+    il.push_back(
+        Instructions::Emitter::single_inst(op.opcode, op.destination.val));
+    break;
+  }
+  case Instructions::InstFormat::MEM: {
+    il.push_back(Instructions::Emitter::three_op_imm(
+        op.opcode, op.destination.val, op.source1.val, op.source2.val));
+    break;
+  }
+  case Instructions::InstFormat::THREE_OP: {
+    il.push_back(
+        op.opcode == mtdc.imm
+            ? Instructions::Emitter::three_op_imm(
+                  op.opcode, op.destination.val, op.source1.val, op.source2.val)
+            : Instructions::Emitter::three_op(op.opcode, op.destination.val,
+                                              op.source1.val, op.source2.val));
+    break;
+  }
+  case Instructions::InstFormat::TWO_OP: {
+    il.push_back(op.opcode == mtdc.imm
+                     ? Instructions::Emitter::two_op_imm(
+                           op.opcode, op.destination.val, op.source2.val)
+                     : Instructions::Emitter::two_op(
+                           op.opcode, op.destination.val, op.source2.val));
+    break;
+  }
   default:
     throw std::logic_error(
         std::format("emitInst: no encoding for opcode {:#x}", op.opcode));
