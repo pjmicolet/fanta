@@ -256,11 +256,16 @@ inline constexpr std::array<InstEntry, 25> kInstructionTable{
 };
 
 inline constexpr auto kOpcodeToMeta = [] {
-  std::array<const InstMetadata *, 64> t{};
+  std::array<const InstMetadata *, kInstructionTable.size() * 2> t{};
   for (const auto &e : kInstructionTable) {
+    if (t[e.meta.reg] != nullptr) [[unlikely]]
+      throw std::runtime_error("Someone copied the same opcode twice");
     t[e.meta.reg] = &e.meta;
-    if (e.meta.imm)
+    if (e.meta.imm) {
+      if (t[e.meta.imm] != nullptr) [[unlikely]]
+        throw std::runtime_error("Someone copied the same imm opcode twice");
       t[e.meta.imm] = &e.meta;
+    }
   }
   return t;
 }();
@@ -279,8 +284,10 @@ struct Registry {
   }
 
   static constexpr auto fetch(uint32_t opcode) -> const InstMetadata & {
-    if (opcode >= kOpcodeToMeta.size()) [[unlikely]]
-      std::out_of_range("Unknown instruction opcode:" + std::to_string(opcode));
+    if (opcode >= kOpcodeToMeta.size() || kOpcodeToMeta[opcode] == nullptr)
+        [[unlikely]]
+      throw std::out_of_range("Unknown instruction opcode:" +
+                              std::to_string(opcode));
     return *kOpcodeToMeta[opcode];
   }
 };
