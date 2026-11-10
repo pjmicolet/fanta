@@ -255,8 +255,10 @@ inline constexpr std::array<InstEntry, 25> kInstructionTable{
     },
 };
 
+constexpr size_t OPCODE_COUNT = 1U << 6;
+
 inline constexpr auto kOpcodeToMeta = [] {
-  std::array<const InstMetadata *, kInstructionTable.size() * 2> t{};
+  std::array<const InstMetadata *, OPCODE_COUNT> t{};
   for (const auto &e : kInstructionTable) {
     if (t[e.meta.reg] != nullptr) [[unlikely]]
       throw std::runtime_error("Someone copied the same opcode twice");
