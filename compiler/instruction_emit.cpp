@@ -202,41 +202,6 @@ auto InstructionEmitter::emitEpilogue(const FunctionIR &fir, uint32_t maxOffset,
 
 auto InstructionEmitter::emitInst(const IROp &op, GlobalTable & /*gt*/,
                                   InstructionList &il) -> void {
-#define THREE_REG(num)                                                         \
-  case num: {                                                                  \
-    il.push_back(Instructions::Emitter::three_op(                              \
-        op.opcode, op.destination.val, op.source1.val, op.source2.val));       \
-    break;                                                                     \
-  }
-
-#define THREE_IMM(num)                                                         \
-  case num: {                                                                  \
-    il.push_back(Instructions::Emitter::three_op_imm(                          \
-        op.opcode, op.destination.val, op.source1.val, op.source2.val));       \
-    break;                                                                     \
-  }
-#define SINGLE(num)                                                            \
-  case num: {                                                                  \
-    il.push_back(                                                              \
-        Instructions::Emitter::single_inst(op.opcode, op.destination.val));    \
-    break;                                                                     \
-  }
-#define TWO_REG(num)                                                           \
-  case num: {                                                                  \
-    il.push_back(Instructions::Emitter::two_op(op.opcode, op.destination.val,  \
-                                               op.source2.val));               \
-    break;                                                                     \
-  }
-#define TWO_IMM(num)                                                           \
-  case num: {                                                                  \
-    il.push_back(Instructions::Emitter::two_op_imm(                            \
-        op.opcode, op.destination.val, op.source2.val));                       \
-    break;                                                                     \
-  }
-  // Same-format cases expand to identical bodies; replacing this switch with
-  // a kInstructionTable format lookup is in docs/plans.md.
-  // NOLINTBEGIN(bugprone-branch-clone)
-
   const auto &mtdc = Instructions::Registry::fetch(op.opcode);
   switch (mtdc.fmt) {
   case Instructions::InstFormat::HALT:
