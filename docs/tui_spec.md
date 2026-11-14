@@ -194,8 +194,8 @@ Every F-key has a `:` command, because some terminals intercept F-keys (macOS Te
 
 | Mode | Keys |
 | :--- | :--- |
-| NORMAL | `h j k l` / arrows move; `i` insert (refused with a message in read-only panes); `x` delete; `Tab` cycles focus between panes; `z` zoom focused pane; `:` command; `?` help; `q` quit (asks if dirty) |
-| INSERT | typing, `ESC` leaves; `TAB` completes a mnemonic in ASM, indents in SOURCE |
+| NORMAL | `h j k l` / arrows move; `i`/`a` insert before/after the cursor, `o`/`O` open a line below/above and insert (all refused with a message in read-only panes); `x` delete; `Tab` cycles focus between panes; `z` zoom focused pane; `:` command; `?` help; `q` quit (asks if dirty) |
+| INSERT | typing, `ESC` leaves; `TAB` completes a mnemonic in ASM, indents in SOURCE; `Enter` and `o`/`O` keep the line's indentation, and in SOURCE add a level after `{`; a `}` typed at the start of a line removes one |
 | COMMAND | the cursor sits on the command line; `ESC` cancels, `Enter` runs |
 | any | `Ctrl+C` is an alias for `ESC` everywhere (as in vim) |
 

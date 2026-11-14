@@ -677,8 +677,8 @@ void TUI::draw_help(const Fanta::Canvas &c) {
       "  F10  next output tab                   :out serial|vram|memory|log",
       "",
       "Editing: vim keys",
-      "  i            insert            ESC / Ctrl+C   back to normal",
-      "  h j k l      move (or arrows)  x              delete character",
+      "  i a  o O     insert before/after the cursor, on a new line below/above",
+      "  h j k l      move (or arrows)  x  delete      ESC / Ctrl+C  back to normal",
       "  TAB          complete a mnemonic (.asm) / indent (.fn)",
       "",
       "Switching between code and assembly: open a different file",
@@ -1117,11 +1117,18 @@ void TUI::handle_normal_mode(int ch) {
     if (mem_offset + 16 + 32 <= cpu.ram.getSize()) // keep the 32-byte pane in RAM
       mem_offset += 16;
     break;
-  case 'i':
+  case 'i': // insert before the cursor
+  case 'a': // after it
+  case 'o': // on a new line below
+  case 'O': // above
     if (editor.read_only()) {
       message = "Editor is read-only for binaries; :e a .asm file to edit";
       break;
     }
+    if (ch == 'a')
+      editor.right();
+    else if (ch == 'o' || ch == 'O')
+      editor.open_line(ch == 'O', source == Source::FANTA);
     mode = Mode::INSERT;
     curs_set(1);
     is_running_continuously = false;
@@ -1212,9 +1219,12 @@ void TUI::handle_insert_mode(int ch) {
     break;
   case KEY_ENTER:
   case '\n':
-    editor.newline();
+    editor.newline(source == Source::FANTA);
     break;
   default:
+    // A `}` that opens the line closes a block: back one indent level.
+    if (ch == '}' && source == Source::FANTA && editor.at_indent())
+      editor.dedent();
     if (isprint(ch))
       editor.insert(static_cast<char>(ch));
     break;

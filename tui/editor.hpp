@@ -110,17 +110,70 @@ public:
     ++version_;
   }
 
-  auto newline() -> void {
+  /// Splits the line at the cursor. The new line starts with the indentation
+  /// in front of the cursor (auto-indent), plus one level when `braces` is
+  /// set and the text before the cursor ends in `{`.
+  auto newline(bool braces = false) -> void {
     if (read_only_)
       return;
-    std::string rest = lines_[y_].substr(x_);
-    lines_[y_].resize(x_);
-    lines_.insert(lines_.begin() + y_ + 1, rest);
+    const std::string &l = lines_[y_];
+    std::string head = l.substr(0, x_);
+    std::string indent = new_line_indent(head, braces);
+    std::string rest = l.substr(x_);
+    if (!indent.empty()) // the indent replaces the moved text's own
+      rest.erase(0, std::min(rest.find_first_not_of(" \t"), rest.size()));
+    lines_[y_] = head;
+    lines_.insert(lines_.begin() + y_ + 1, indent + rest);
     ++y_;
-    x_ = 0;
+    x_ = static_cast<int>(indent.size());
     ++version_;
     ++structure_version_;
   }
+
+  /// Opens an empty line below (vim's `o`) or above (`O`) and puts the
+  /// cursor at its indentation: the current line's, plus one level (when
+  /// `braces` is set) below a line ending in `{` or above one starting `}`.
+  auto open_line(bool above, bool braces = false) -> void {
+    if (read_only_)
+      return;
+    const std::string &l = lines_[y_];
+    std::string indent = above ? indent_of(l) : new_line_indent(l, braces);
+    if (above && braces && l.find_first_not_of(" \t") != std::string::npos &&
+        l[l.find_first_not_of(" \t")] == '}')
+      indent.append(kIndent, ' ');
+    if (!above)
+      ++y_;
+    lines_.insert(lines_.begin() + y_, indent);
+    x_ = static_cast<int>(indent.size());
+    ++version_;
+    ++structure_version_;
+  }
+
+  /// Removes one indentation level (a tab, or up to kIndent spaces) from the
+  /// start of the line; the cursor stays on the same character.
+  auto dedent() -> void {
+    if (read_only_)
+      return;
+    auto &l = lines_[y_];
+    size_t n = 0;
+    if (!l.empty() && l[0] == '\t')
+      n = 1;
+    else
+      while (n < kIndent && n < l.size() && l[n] == ' ')
+        ++n;
+    if (n == 0)
+      return;
+    l.erase(0, n);
+    x_ = std::max(0, x_ - static_cast<int>(n));
+    ++version_;
+  }
+
+  /// True when only whitespace precedes the cursor.
+  [[nodiscard]] auto at_indent() const -> bool {
+    return lines_[y_].find_first_not_of(" \t") >= static_cast<size_t>(x_);
+  }
+
+  static constexpr size_t kIndent = 4;
 
   /// Replaces the first word of the current line, keeping its indentation,
   /// and puts the cursor after it plus one space (TAB completion).
@@ -148,6 +201,19 @@ public:
   }
 
 private:
+  [[nodiscard]] static auto indent_of(const std::string &l) -> std::string {
+    return l.substr(0, std::min(l.find_first_not_of(" \t"), l.size()));
+  }
+  /// Indentation for a line that follows `prev`.
+  [[nodiscard]] static auto new_line_indent(const std::string &prev, bool braces)
+      -> std::string {
+    std::string indent = indent_of(prev);
+    auto last = prev.find_last_not_of(" \t");
+    if (braces && last != std::string::npos && prev[last] == '{')
+      indent.append(kIndent, ' ');
+    return indent;
+  }
+
   [[nodiscard]] auto len() const -> int { return static_cast<int>(lines_[y_].size()); }
   auto clamp_x() -> void { x_ = std::min(x_, len()); }
 

@@ -267,6 +267,59 @@ TEST_CASE("Editor Moving To A Shorter Line Clamps The Column") {
   REQUIRE_SAME(3, ed.x());
 }
 
+TEST_CASE("Editor Newline Keeps The Indentation") {
+  Editor ed;
+  ed.set_lines({"    ADD R1, R2"});
+  for (int i = 0; i < 8; ++i)
+    ed.right();
+  ed.newline(); // ASM: copy the indent, drop the moved text's own spaces
+  REQUIRE_SAME(std::string{"    ADD "}, ed.lines()[0]);
+  REQUIRE_SAME(std::string{"    R1, R2"}, ed.lines()[1]);
+  REQUIRE_SAME(4, ed.x());
+}
+
+TEST_CASE("Editor Newline At Column 0 Adds No Indent") {
+  Editor ed;
+  ed.set_lines({"    NOP"});
+  ed.newline();
+  REQUIRE_SAME(std::string{""}, ed.lines()[0]);
+  REQUIRE_SAME(std::string{"    NOP"}, ed.lines()[1]);
+  REQUIRE_SAME(0, ed.x());
+}
+
+TEST_CASE("Editor Brace Indent Adds A Level And Dedent Removes It") {
+  Editor ed;
+  ed.set_lines({"  fn main() -> int {"});
+  for (int i = 0; i < 30; ++i)
+    ed.right();
+  ed.newline(/*braces=*/true);
+  REQUIRE_SAME(std::string{"      "}, ed.lines()[1]);
+  REQUIRE_TRUE(ed.at_indent());
+  ed.dedent();
+  REQUIRE_SAME(std::string{"  "}, ed.lines()[1]);
+  REQUIRE_SAME(2, ed.x());
+  ed.newline(/*braces=*/false); // no `{`: no extra level
+  REQUIRE_SAME(std::string{"  "}, ed.lines()[2]);
+}
+
+TEST_CASE("Editor Open Line Below And Above") {
+  Editor ed;
+  ed.set_lines({"if x {", "    y;"});
+  ed.open_line(/*above=*/false, /*braces=*/true); // below `{`: one level in
+  REQUIRE_SAME(3, ed.lines().size());
+  REQUIRE_SAME(std::string{"    "}, ed.lines()[1]);
+  REQUIRE_SAME(1, ed.y());
+  REQUIRE_SAME(4, ed.x());
+  ed.down();
+  ed.open_line(/*above=*/true); // above `    y;`: same indent
+  REQUIRE_SAME(std::string{"    "}, ed.lines()[2]);
+  REQUIRE_SAME(std::string{"    y;"}, ed.lines()[3]);
+  REQUIRE_SAME(2, ed.y());
+  ed.set_lines({"  }"});
+  ed.open_line(/*above=*/true, /*braces=*/true); // above `}`: one level in
+  REQUIRE_SAME(std::string{"      "}, ed.lines()[0]);
+}
+
 // --- Serial terminal layout ------------------------------------------------
 
 TEST_CASE("Terminal Newline And Carriage Return") {
@@ -533,6 +586,35 @@ TEST_CASE("Moved Code Message Names A 1-Based Line And Its Address") {
   load(tui, "fanta_msg_moved.asm", "NOP\nHALT\n");
   auto status = statusAfter(tui, "jiNOP<CR><ESC>");
   REQUIRE_TRUE(status.contains("Line 2 (0x000004) added/removed"));
+}
+
+namespace {
+/// The buffer after `keys`, written out with `:w` (the editor is private).
+auto bufferAfter(TUI &tui, const std::string &keys) -> std::string {
+  auto path = tempPath("fanta_tui_buffer.txt");
+  statusAfter(tui, keys + ":w " + path + "<CR>");
+  std::ifstream in(path);
+  std::string text((std::istreambuf_iterator<char>(in)),
+                   std::istreambuf_iterator<char>());
+  std::filesystem::remove(path);
+  return text;
+}
+} // namespace
+
+TEST_CASE("a o O Enter INSERT After, Below And Above") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_keys_aoO.asm", "NOP\nHALT\n");
+  REQUIRE_SAME(std::string{"NXOP\nRET\nNOP\nHALT\n"},
+               bufferAfter(tui, "aX<ESC>oNOP<ESC>ORET<ESC>"));
+}
+
+TEST_CASE("Fanta Source Auto-Indents Blocks") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_keys_indent.fn", "fn main() -> int {\n}\n");
+  REQUIRE_SAME(std::string{"fn main() -> int {\n    if 1 {\n        return 1;\n    }\n}\n"},
+               bufferAfter(tui, "oif 1 {<CR>return 1;<CR>}<ESC>"));
 }
 
 // --- Layout (spec §3.3): checked for every kind at many sizes ---------------
