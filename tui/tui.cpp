@@ -49,6 +49,9 @@ auto first_word(const std::string &line) -> std::string {
   return line.substr(start);
 }
 
+/// A memory address as the code gutters show it.
+auto addr(uint32_t v) -> std::string { return std::format("0x{:06X}", v); }
+
 } // namespace
 
 TUI::TUI(CPU &cpu) : cpu(cpu) {
@@ -272,13 +275,17 @@ void TUI::assemble_editor() {
   for (size_t i = 0; i < editor.lines().size(); ++i)
     binary_image.push_back(cpu.ram.read32(static_cast<uint32_t>(i * 4)));
   mark_built();
+  build_error.clear();
   if (asm_errors.empty()) {
     message = std::format("Assembled {} lines", editor.lines().size());
   } else {
     const auto &first = asm_errors.front();
-    message = std::format("{} line(s) failed to assemble (became NOP). "
-                          "First, line {}: {}",
-                          asm_errors.size(), first.line, first.text);
+    build_error = std::format("{} line(s) failed to assemble (became NOP). "
+                              "First, line {} ({}): {}",
+                              asm_errors.size(), first.line + 1,
+                              addr(static_cast<uint32_t>(first.line * 4)),
+                              first.text);
+    message = build_error;
   }
 }
 
@@ -286,9 +293,11 @@ bool TUI::compile_editor() {
   editor.trim_trailing();
   ++build_count;
   auto result = Fanta::Build::compile(editor.text());
+  build_error.clear();
   if (!result) {
     build_failed = true;
-    message = "Compile error: " + result.error();
+    build_error = "Compile error: " + result.error();
+    message = build_error;
     return false;
   }
   build_failed = false;
@@ -361,8 +370,8 @@ void TUI::dump_state(const std::string &filename) {
           : source == Source::FANTA ? "FANTA"
                                     : "BINARY (read-only)")
       << "\n";
-  if (!message.empty())
-    out << "MESSAGE: " << message << "\n";
+  if (!shown_message().empty())
+    out << "MESSAGE: " << shown_message() << "\n";
   out << "----------------" << "\n";
 
   out << "[REGISTERS]" << "\n";
@@ -435,7 +444,6 @@ auto fit(std::string_view full, std::string_view brief, int width)
     -> std::string_view {
   return static_cast<int>(full.size()) <= width ? full : brief;
 }
-auto addr(uint32_t v) -> std::string { return std::format("0x{:06X}", v); }
 
 auto tab_name(OutputTab t) -> std::string_view {
   switch (t) {
@@ -489,10 +497,7 @@ void TUI::update() {
   erase();
   cursor_at.reset();
 
-  if (!message.empty() && message != last_logged) {
-    build_log.push_back(message);
-    last_logged = message;
-  }
+  log_message();
 
   if (mode == Mode::ZOOM) {
     draw_vram(Fanta::Canvas{{0, 0, term_w, term_h}}, /*zoomed=*/true);
@@ -560,6 +565,20 @@ void TUI::update() {
   refresh();
 }
 
+/// Every message goes to the Build log once, even if a key clears it before
+/// the next frame (headless key sequences).
+void TUI::log_message() {
+  if (!message.empty() && message != last_logged) {
+    build_log.push_back(message);
+    last_logged = message;
+  }
+}
+
+/// The transient message if there is one, else the last build's error.
+auto TUI::shown_message() const -> const std::string & {
+  return message.empty() ? build_error : message;
+}
+
 void TUI::draw_status_line(const Fanta::Canvas &c) {
   std::string kind;
   std::string build;
@@ -601,12 +620,12 @@ void TUI::draw_status_line(const Fanta::Canvas &c) {
     left += std::format("| terminal {}x{} < 80x24 ", term_w, term_h);
 
   c.put_line(0, left, A_REVERSE);
-  if (!message.empty()) {
+  if (const auto &shown = shown_message(); !shown.empty()) {
     int col = static_cast<int>(left.size()) + 1;
     attr_t a = A_REVERSE;
-    if (build_failed || !asm_errors.empty())
+    if (shown == build_error)
       a |= COLOR_PAIR(kPairError) | A_BOLD;
-    c.put(0, col, message, a);
+    c.put(0, col, shown, a);
   }
 }
 
@@ -615,7 +634,7 @@ void TUI::draw_hint_bar(const Fanta::Canvas &c) {
     c.put_line(0, command_buffer);
     return;
   }
-  std::string_view hint;
+  std::string hint;
   int w = c.width();
   switch (mode) {
   case Mode::INSERT:
@@ -639,6 +658,11 @@ void TUI::draw_hint_bar(const Fanta::Canvas &c) {
                  w);
     break;
   }
+  // F5 toggles: offer what it will do now. "pause" is two letters longer;
+  // the brief form still fits 80 columns.
+  if (is_running_continuously)
+    if (auto at = hint.find("F5 run"); at != std::string::npos)
+      hint.replace(at, 6, "F5 pause");
   c.put_line(0, hint, A_DIM);
 }
 
@@ -1000,6 +1024,11 @@ void TUI::handle_key(int ch) {
     return;
   }
 
+  // Spec 6.2: a message lasts until the next key; build errors stay (see
+  // shown_message()).
+  log_message();
+  message.clear();
+
   if (ch == 27) { // ESC always stops a continuous run
     is_running_continuously = false;
     run_target.reset();
@@ -1128,8 +1157,7 @@ void TUI::handle_insert_mode(int ch) {
     curs_set(0);
     if (source == Source::FANTA) {
       // Recompiling moves every address, so no live patch: rebuild on demand.
-      if (stale())
-        message = "Edited: STALE until F9 (or :build) rebuilds";
+      // The STALE badge and the derived pane's title say so; no message.
     } else if (source == Source::ASM && stale()) {
       // Live-patch only edits that leave every instruction at its address.
       // Adding or removing lines before existing code shifts it under a
@@ -1141,10 +1169,12 @@ void TUI::handle_insert_mode(int ch) {
         ++prefix;
       bool moved = editor.structure_version() != built_structure &&
                    prefix < std::min(now.size(), built_lines.size());
+      // The gutter shows addresses, not line numbers: name both (1-based).
       if (moved)
-        message = std::format("Line {} added/removed: code below it moved, "
-                              "memory not patched. STALE until F9",
-                              prefix);
+        message = std::format("Line {} ({}) added/removed: code below moved, "
+                              "memory not patched",
+                              prefix + 1,
+                              addr(static_cast<uint32_t>(prefix * 4)));
       else
         assemble_editor(); // live-patch memory with the buffer
     }

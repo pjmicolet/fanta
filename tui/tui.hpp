@@ -62,6 +62,8 @@ private:
   // Panes; each draws only inside its canvas.
   void draw_status_line(const Fanta::Canvas &c);
   void draw_hint_bar(const Fanta::Canvas &c);
+  void log_message();
+  [[nodiscard]] auto shown_message() const -> const std::string &;
   void draw_source(const Fanta::Canvas &c);
   void draw_asm_editor(const Fanta::Canvas &c);
   void draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
@@ -143,7 +145,8 @@ private:
   std::string path;          // file the session was opened from
 
   std::string command_buffer; // ":..." while in COMMAND mode
-  std::string message;        // last status message, shown in NORMAL mode
+  std::string message;     // last status message; the next key clears it
+  std::string build_error; // failed build's message; stays until the next build
   std::vector<std::string> build_log; // every message, for the Build log tab
   std::string last_logged;
   std::optional<std::pair<int, int>> cursor_at; // editor cursor, screen row/col
