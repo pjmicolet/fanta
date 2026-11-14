@@ -48,6 +48,9 @@ A custom 32-bit RISC CPU, compiler, VM and TUI debugger for a 90s-style PC. Docs
 - `tools/tidy-summary.py [regex] [--update]`: clang-tidy counts by check, plus new findings.
 - `tools/crash.py TARGET [ARGS]`: runs under sanitizers and prints a short crash report.
 - `tools/token-usage.py [--tools]`: token use per session and subagent.
+- `tools/triage.py [--issue N…] [--move N --after M|--top]`: one-line-per-issue backlog digest
+  (board order, friction refs, deps, inbox, PRs). Use it instead of raw `gh issue list`.
+  `/fanta-triage` ranks and merges issues; `/fanta-task "line"` files one after a dedupe check.
 - **TUI safety:** wrap external assembler calls in `try-catch`, so malformed experimental
   instructions can't crash the TUI.
 
