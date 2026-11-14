@@ -5,6 +5,7 @@
 #include "layout.hpp"
 #include "program.hpp"
 #include "string_assembler.hpp"
+#include "syntax.hpp"
 #include "trie.hpp"
 #include <array>
 #include <bitset>
@@ -47,10 +48,11 @@ public:
    * Renders the real screen headlessly at cols x rows after feeding `keys`
    * (see parse_keys in tui.cpp for the <ESC>/<CR>/<FRAME> syntax), and writes
    * it as text plus a list of highlighted cells. For checking the layout
-   * without a terminal.
+   * without a terminal. `colours` adds each cell's colour pair (opt-in: it
+   * roughly doubles the output).
    */
   bool screenshot(const std::string &filename, int cols, int rows,
-                  std::string_view keys = "");
+                  std::string_view keys = "", bool colours = false);
 
 private:
   void update();
@@ -68,6 +70,14 @@ private:
   void draw_asm_editor(const Fanta::Canvas &c);
   void draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
                        bool editable);
+  /// Recolours `text`, already drawn at (row, col), with its syntax spans.
+  static void draw_spans(const Fanta::Canvas &c, int row, int col,
+                         std::string_view text,
+                         const std::vector<Fanta::Syntax::Span> &spans);
+  /// (Re)loads the definitions for the open file and for assembly; a broken
+  /// .syntax file becomes the status message and the text stays plain.
+  void load_syntax();
+  bool open_file(const std::string &filename);
   void draw_disasm_view(const Fanta::Canvas &c, std::string_view title,
                         bool dimmed = false);
   void draw_registers(const Fanta::Canvas &c,
@@ -150,6 +160,14 @@ private:
   std::vector<std::string> build_log; // every message, for the Build log tab
   std::string last_logged;
   std::optional<std::pair<int, int>> cursor_at; // editor cursor, screen row/col
+
+  // Syntax highlighting (spec §4.3): the editor's language, and assembly for
+  // the derived disassembly pane. Editor spans are cached per text version.
+  std::optional<Fanta::Syntax::Definition> code_syntax;
+  std::optional<Fanta::Syntax::Definition> asm_syntax;
+  std::vector<std::vector<Fanta::Syntax::Span>> code_spans;
+  uint64_t code_spans_version = UINT64_MAX;
+  std::vector<Fanta::Syntax::Span> row_spans; // scratch, reused every row
 
   Assembler assem;
   Trie trie;

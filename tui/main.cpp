@@ -7,12 +7,13 @@
 
 /**
  * fanta-tui [file] [--dump out.txt] [--screen out.txt [--size COLSxROWS]
- *           [--keys "script"]]
+ *           [--keys "script"] [--colours]]
  *
  * --dump    writes machine state (registers, disassembly, editor, serial).
  * --screen  writes what the terminal would show, rendered headlessly.
  *           --keys feeds keystrokes first, e.g. "c<FRAME><FRAME>o" or
  *           ":run<CR>"; see parse_keys in tui.cpp.
+ *           --colours adds the colour pair of every cell (syntax groups).
  */
 // Parses "COLSxROWS" (e.g. 120x40). Rejects trailing text, overflow and
 // non-positive sizes, which sscanf would accept.
@@ -34,6 +35,7 @@ int main(int argc, char *argv[]) try {
   std::string dump_file;
   std::string screen_file;
   std::string keys;
+  bool colours = false;
   std::string load_file;
   int cols = 120;
   int rows = 40;
@@ -44,6 +46,8 @@ int main(int argc, char *argv[]) try {
       dump_file = argv[++i];
     } else if (arg == "--screen" && has_value) {
       screen_file = argv[++i];
+    } else if (arg == "--colours") {
+      colours = true;
     } else if (arg == "--keys" && has_value) {
       keys = argv[++i];
     } else if (arg == "--size" && has_value) {
@@ -63,7 +67,7 @@ int main(int argc, char *argv[]) try {
 
   if (!dump_file.empty() || !screen_file.empty()) {
     // Headless: no interactive terminal is touched.
-    if (!screen_file.empty() && !tui.screenshot(screen_file, cols, rows, keys)) {
+    if (!screen_file.empty() && !tui.screenshot(screen_file, cols, rows, keys, colours)) {
       std::cerr << "Could not render screen to " << screen_file << "\n";
       return 1;
     }

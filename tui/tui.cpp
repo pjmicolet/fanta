@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -91,6 +92,7 @@ void TUI::configure_ncurses() {
     init_pair(4, COLOR_RED, COLOR_BLACK);     // Halted / errors
     init_pair(5, COLOR_MAGENTA, COLOR_BLACK); // Memory
     init_pair(6, COLOR_WHITE, COLOR_BLACK);   // VRAM preview (default)
+    init_pair(7, COLOR_BLUE, COLOR_BLACK);    // Syntax: comments
 
     // Initialize 6x6x6 color cube starting at pair 10
     // xterm colors 16-231 are the 6x6x6 cube
@@ -430,6 +432,39 @@ constexpr short kPairCode = 2;
 constexpr short kPairStatus = 3;
 constexpr short kPairError = 4;
 constexpr short kPairMemory = 5;
+constexpr short kPairWhite = 6;
+constexpr short kPairBlue = 7;
+
+/// The fixed syntax theme (spec §4.3): every group has its own look, so the
+/// colours a --screen reports name the group.
+auto syntax_attr(Fanta::Syntax::Group g) -> attr_t {
+  using G = Fanta::Syntax::Group;
+  switch (g) {
+  case G::Keyword:
+  case G::Mnemonic:
+    return COLOR_PAIR(kPairStatus) | A_BOLD;
+  case G::Type:
+  case G::Register:
+    return COLOR_PAIR(kPairRegs);
+  case G::Label:
+    return COLOR_PAIR(kPairRegs) | A_BOLD;
+  case G::String:
+    return COLOR_PAIR(kPairCode);
+  case G::Number:
+    return COLOR_PAIR(kPairMemory);
+  case G::Directive:
+    return COLOR_PAIR(kPairMemory) | A_BOLD;
+  case G::Comment:
+    return COLOR_PAIR(kPairBlue);
+  case G::Operator:
+    return COLOR_PAIR(kPairWhite);
+  case G::Error:
+    return COLOR_PAIR(kPairError) | A_BOLD;
+  case G::None:
+    break;
+  }
+  return A_NORMAL;
+}
 
 auto hex8(uint32_t v) -> std::string { return std::format("{:08X}", v); }
 
@@ -709,6 +744,13 @@ void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
   else if (editor.y() >= editor_scroll + rows)
     editor_scroll = editor.y() - rows + 1;
 
+  if (code_syntax && code_spans_version != editor.version()) {
+    code_spans.resize(lines.size());
+    for (size_t i = 0; i < lines.size(); ++i)
+      code_syntax->highlight(lines[i], code_spans[i]);
+    code_spans_version = editor.version();
+  }
+
   uint32_t pc = display_pc();
   for (int row = 0; row < rows; ++row) {
     int idx = editor_scroll + row;
@@ -729,6 +771,9 @@ void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
                : at_pc ? (A_REVERSE | A_BOLD)
                        : A_NORMAL;
     c.put_line(row, gutter + lines[uidx], a);
+    if (a == A_NORMAL && code_syntax && uidx < code_spans.size())
+      draw_spans(c, row, static_cast<int>(gutter.size()), lines[uidx],
+                 code_spans[uidx]);
 
     if (idx == editor.y()) {
       int col = static_cast<int>(gutter.size()) + editor.x();
@@ -745,6 +790,19 @@ void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
         }
       }
     }
+  }
+}
+
+void TUI::draw_spans(const Fanta::Canvas &c, int row, int col,
+                     std::string_view text,
+                     const std::vector<Fanta::Syntax::Span> &spans) {
+  // A line cut at the pane edge ends in '~' (Canvas::put): leave that cell.
+  int end = col + static_cast<int>(text.size()) > c.width() ? c.width() - 1
+                                                            : c.width();
+  for (const auto &sp : spans) {
+    int len = std::min(sp.len, end - col - sp.col);
+    if (len > 0)
+      c.put(row, col + sp.col, text.substr(sp.col, len), syntax_attr(sp.group));
   }
 }
 
@@ -778,10 +836,17 @@ void TUI::draw_disasm_view(const Fanta::Canvas &c, std::string_view title,
       break;
     auto ua = static_cast<uint32_t>(a);
     bool at_pc = ua == pc;
-    std::string line = std::format("{}{}  {}", at_pc ? '>' : ' ', addr(ua),
-                                   disassemble(ua));
+    std::string text = disassemble(ua);
+    std::string line =
+        std::format("{}{}  {}", at_pc ? '>' : ' ', addr(ua), text);
     attr_t normal = dimmed ? A_DIM : COLOR_PAIR(kPairCode);
     inner.put_line(row, line, at_pc ? (A_REVERSE | A_BOLD) : normal);
+    // PC and STALE dimming win over syntax colours.
+    if (!dimmed && !at_pc && asm_syntax) {
+      asm_syntax->highlight(text, row_spans);
+      draw_spans(inner, row, static_cast<int>(line.size() - text.size()), text,
+                 row_spans);
+    }
   }
 }
 
@@ -1453,6 +1518,35 @@ std::string TUI::disassemble(uint32_t addr) {
 }
 
 bool TUI::load_file(const std::string &filename) {
+  if (!open_file(filename))
+    return false;
+  load_syntax(); // after open_file, so a broken .syntax file's message shows
+  return true;
+}
+
+void TUI::load_syntax() {
+  code_syntax.reset();
+  asm_syntax.reset();
+  code_spans_version = UINT64_MAX;
+  const char *env = std::getenv("FANTA_SYNTAX_DIR");
+  std::filesystem::path dir = env != nullptr ? env : FANTA_SYNTAX_DIR;
+  std::vector<std::string> isa;
+  for (const auto &entry : Instructions::Registry::get())
+    isa.emplace_back(entry.mnemonic);
+  // BINARY sessions show a disassembly in the editor.
+  std::string ext = source == Source::BINARY
+                        ? ".asm"
+                        : std::filesystem::path(path).extension().string();
+  try {
+    asm_syntax = Fanta::Syntax::load_for(dir, ".asm", isa);
+    code_syntax = ext == ".asm" ? asm_syntax
+                                : Fanta::Syntax::load_for(dir, ext, isa);
+  } catch (const std::exception &e) {
+    message = std::format("Syntax file {}; highlighting off", e.what());
+  }
+}
+
+bool TUI::open_file(const std::string &filename) {
   editor_scroll = 0;
   build_count = 0;
   std::string previous_path = path;
@@ -1587,7 +1681,7 @@ auto parse_keys(std::string_view script) -> std::vector<int> {
 } // namespace
 
 bool TUI::screenshot(const std::string &filename, int cols, int rows,
-                     std::string_view keys) {
+                     std::string_view keys, bool colours_wanted) {
   std::ofstream out(filename);
   if (!out)
     return false;
@@ -1636,6 +1730,7 @@ bool TUI::screenshot(const std::string &filename, int cols, int rows,
   out << border << "\n";
   std::vector<chtype> cells(cols + 1);
   std::string attrs_report;
+  std::string colours_report;
   for (int y = 0; y < rows; ++y) {
     mvinchnstr(y, 0, cells.data(), cols);
     std::string text(cols, ' ');
@@ -1652,6 +1747,22 @@ bool TUI::screenshot(const std::string &filename, int cols, int rows,
         any_mark = true;
       }
     }
+    // Colour pair per cell: c cyan, g green, y yellow, r red, m magenta,
+    // w white, b blue (the init_pair numbers in configure_ncurses).
+    static constexpr std::string_view kPairLetters = " cgyrmwb";
+    std::string colours(cols, ' ');
+    bool any_colour = false;
+    for (int x = 0; x < cols; ++x) {
+      auto pair = static_cast<size_t>(PAIR_NUMBER(cells[x]));
+      if (pair > 0 && pair < kPairLetters.size()) {
+        colours[x] = kPairLetters[pair];
+        any_colour = true;
+      }
+    }
+    if (any_colour && colours_wanted) {
+      colours.erase(colours.find_last_not_of(' ') + 1);
+      colours_report += std::format("{:3} {}\n", y, colours);
+    }
     out << "|" << text << "|\n";
     if (any_mark) {
       marks.erase(marks.find_last_not_of(' ') + 1);
@@ -1664,6 +1775,10 @@ bool TUI::screenshot(const std::string &filename, int cols, int rows,
   if (!attrs_report.empty())
     out << "highlights (R = reverse video, B = bold), by row:\n"
         << attrs_report;
+  if (!colours_report.empty())
+    out << "colours (c cyan, g green, y yellow, r red, m magenta, w white, "
+           "b blue), by row:\n"
+        << colours_report;
 
   endwin();
   set_term(nullptr);

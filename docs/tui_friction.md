@@ -27,6 +27,8 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 2026-11-07  cc  building `let b : int = ;` can crash the TUI, or report OK when it doesn't                           (compiler bug, not TUI: out-of-bounds read in emitVariableIR)   → #40
 2026-11-07  cc  `@print(300)` shows `,` in the Serial tab; there's no way to see the 32-bit value that was written   → #35
 2026-11-08  pj  only `i` enters INSERT: no `a` (append after the cursor) or `o`/`O` (open a line below/above), which I use all the time in vim   → #25
+2026-11-14  cc  the source and ASM panes are monochrome: keywords, registers, literals and comments all look the same, so a typo'd mnemonic or a stray comment doesn't stand out   → #54 #55 #56
+2026-11-14  cc  --screen reports only reverse and bold, so colours (and any highlighting) can't be checked headlessly   → #57
 ```
 
 ## Parked ideas

@@ -155,11 +155,13 @@ find_package(Curses REQUIRED)
 add_executable(fanta-tui tui/main.cpp tui/tui.cpp)
 target_include_directories(fanta-tui PRIVATE tui vm compiler common)
 target_link_libraries(fanta-tui PRIVATE vm_lib compiler_lib ${CURSES_LIBRARIES})
+target_compile_definitions(fanta-tui PRIVATE FANTA_SYNTAX_DIR="${CMAKE_SOURCE_DIR}/tui/syntax")
 
 # TUI Tests (disassembler, program loading, editor, headless TUI session)
 add_executable(tui_test test/tui.cpp tui/tui.cpp)
 target_include_directories(tui_test PRIVATE tui vm compiler common)
 target_link_libraries(tui_test PRIVATE vm_lib compiler_lib test_framework ${CURSES_LIBRARIES})
+target_compile_definitions(tui_test PRIVATE FANTA_SYNTAX_DIR="${CMAKE_SOURCE_DIR}/tui/syntax")
 add_test(NAME tui_test COMMAND tui_test)
 
 # Trace Utility

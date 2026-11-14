@@ -1,0 +1,8 @@
+# Fanta source (.fn). Format: tui/syntax.hpp, spec §4.3.
+# Only what the compiler's lexer knows today: no comments or strings yet.
+extensions .fn
+words    keyword let fn if else return for
+words    type    int float string long void
+pattern  directive @[A-Za-z_][A-Za-z0-9_]*
+pattern  number  [0-9][0-9A-Za-z_]*
+symbols  operator == != <= >= && || -> + - * / = < > ! & |

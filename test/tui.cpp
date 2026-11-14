@@ -4,6 +4,7 @@
 #include "editor.hpp"
 #include "layout.hpp"
 #include "program.hpp"
+#include "syntax.hpp"
 #include "terminal.hpp"
 #include "tui.hpp"
 #include <filesystem>
@@ -467,9 +468,10 @@ TEST_CASE("Screenshot Keys See The Requested Size, Not 80x24") {
 
 namespace {
 /// Row 2 of a screenshot: the status line (row 1 is the border).
-auto statusAfter(TUI &tui, const std::string &keys) -> std::string {
+auto statusAfter(TUI &tui, const std::string &keys, bool colours = false)
+    -> std::string {
   auto path = tempPath("fanta_tui_status.txt");
-  if (!tui.screenshot(path, 120, 40, keys))
+  if (!tui.screenshot(path, 120, 40, keys, colours))
     return "";
   std::ifstream in(path);
   std::string line;
@@ -533,6 +535,130 @@ TEST_CASE("Moved Code Message Names A 1-Based Line And Its Address") {
   load(tui, "fanta_msg_moved.asm", "NOP\nHALT\n");
   auto status = statusAfter(tui, "jiNOP<CR><ESC>");
   REQUIRE_TRUE(status.contains("Line 2 (0x000004) added/removed"));
+}
+
+// --- Syntax highlighting (spec §4.3) ----------------------------------------
+
+namespace {
+using Fanta::Syntax::Group;
+
+/// "text:group" for every span of `line`, space-separated.
+auto spansOf(const Fanta::Syntax::Definition &d, std::string_view line)
+    -> std::string {
+  std::vector<Fanta::Syntax::Span> spans;
+  d.highlight(line, spans);
+  std::string out;
+  for (const auto &sp : spans)
+    out += std::format("{}{}:{}", out.empty() ? "" : " ",
+                       line.substr(sp.col, sp.len),
+                       Fanta::Syntax::kGroupNames[static_cast<size_t>(sp.group)]);
+  return out;
+}
+
+auto parseError(std::string_view text) -> std::string {
+  try {
+    Fanta::Syntax::Definition::parse(text);
+  } catch (const std::exception &e) {
+    return e.what();
+  }
+  return "";
+}
+} // namespace
+
+TEST_CASE("Syntax Words Match Whole Words Only") {
+  auto d = Fanta::Syntax::Definition::parse("words keyword let if\n");
+  REQUIRE_SAME(std::string{"let:keyword if:keyword"},
+               spansOf(d, "let letter = if_x; if"));
+}
+
+TEST_CASE("Syntax Strings With Escapes And Unterminated At End Of Line") {
+  auto d = Fanta::Syntax::Definition::parse("span string \" \" \\\n");
+  REQUIRE_SAME(std::string{R"("a\"b":string)"}, spansOf(d, R"(x = "a\"b";)"));
+  REQUIRE_SAME(std::string{R"("open:string)"}, spansOf(d, R"(x = "open)"));
+}
+
+TEST_CASE("Syntax Comment Runs To The End Of The Line") {
+  auto d = Fanta::Syntax::Definition::parse("comment ;\nwords mnemonic NOP\n");
+  REQUIRE_SAME(std::string{"NOP:mnemonic ; NOP here:comment"},
+               spansOf(d, "NOP ; NOP here"));
+}
+
+TEST_CASE("Syntax Patterns: Classes, Quantifiers, Escapes") {
+  auto d = Fanta::Syntax::Definition::parse(
+      "pattern label [A-Za-z_][A-Za-z0-9_]*:\n"
+      "pattern number [#$]-?[0-9A-Fa-f]+\n"
+      "pattern operator \\*\\*?\n"
+      "pattern error [^\\ a-z]\n");
+  REQUIRE_SAME(std::string{"loop2::label #-1F:number"}, spansOf(d, "loop2: #-1F"));
+  REQUIRE_SAME(std::string{"**:operator *:operator"}, spansOf(d, "** *"));
+  REQUIRE_SAME(std::string{"%:error"}, spansOf(d, "ab%"));
+}
+
+TEST_CASE("Syntax Ignorecase And @isa Fill Mnemonics From A List") {
+  auto d = Fanta::Syntax::Definition::parse("words mnemonic @isa\nignorecase\n",
+                                            {"ADD", "MOV"});
+  REQUIRE_SAME(std::string{"mov:mnemonic Add:mnemonic"},
+               spansOf(d, "mov R1 Add NOPE"));
+}
+
+TEST_CASE("Syntax Symbols Prefer The Longest Token") {
+  auto d = Fanta::Syntax::Definition::parse("symbols operator = == ->\n");
+  REQUIRE_SAME(std::string{"==:operator ->:operator =:operator"},
+               spansOf(d, "a == b -> c = d"));
+}
+
+TEST_CASE("Syntax Parse Errors Name The Line") {
+  REQUIRE_SAME(std::string{"line 2: unknown group 'kw'"},
+               parseError("# ok\nwords kw let\n"));
+  REQUIRE_SAME(std::string{"line 1: unknown rule 'colour'"}, parseError("colour x\n"));
+  REQUIRE_SAME(std::string{"line 1: unclosed [ in pattern"},
+               parseError("pattern number [0-9\n"));
+}
+
+TEST_CASE("Shipped Syntax Files Parse And Cover .fn And .asm") {
+  std::vector<std::string> isa;
+  for (const auto &entry : Instructions::Registry::get())
+    isa.emplace_back(entry.mnemonic);
+  auto fn = Fanta::Syntax::load_for(FANTA_SYNTAX_DIR, ".fn", isa);
+  auto as = Fanta::Syntax::load_for(FANTA_SYNTAX_DIR, ".asm", isa);
+  REQUIRE_TRUE(fn.has_value() && as.has_value());
+  REQUIRE_SAME(std::string{"let:keyword int:type =:operator 10:number"},
+               spansOf(fn.value(), "let b : int = 10;"));
+  REQUIRE_SAME(std::string{"loop::label add:mnemonic R1:register SP:register "
+                           "#1F:number ; hi:comment"},
+               spansOf(as.value(), "loop: add R1, SP, #1F ; hi"));
+  REQUIRE_TRUE(!Fanta::Syntax::load_for(FANTA_SYNTAX_DIR, ".txt", isa));
+}
+
+TEST_CASE("Screen Reports Syntax Colours") {
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_syntax.asm", "NOP\nMOV R1, #5\n");
+  auto screen = statusAfter(tui, "", /*colours=*/true);
+  auto colours = screen.substr(screen.find("colours ("));
+  // Row 3 (0-based) is the second code line; the first is at PC, reversed:
+  // mnemonic yellow, register cyan, literal magenta.
+  auto row = colours.substr(colours.find("\n  3 "));
+  row = row.substr(0, row.find('\n', 1));
+  REQUIRE_TRUE(row.contains("yyy cc  mm"));
+}
+
+TEST_CASE("A Broken Syntax File Leaves Text Plain With A Message") {
+  auto dir = std::filesystem::temp_directory_path() / "fanta_syntax_broken";
+  std::filesystem::create_directories(dir);
+  writeText((dir / "asm.syntax").string(), "extensions .asm\nwords kw X\n");
+  setenv("FANTA_SYNTAX_DIR", dir.c_str(), 1);
+  CPU cpu{};
+  TUI tui(cpu);
+  load(tui, "fanta_syntax_broken.asm", "NOP\nMOV R1, #5\n");
+  auto screen = statusAfter(tui, "", /*colours=*/true);
+  unsetenv("FANTA_SYNTAX_DIR");
+  std::filesystem::remove_all(dir);
+  REQUIRE_TRUE(screen.contains("Syntax file asm.syntax: line 2"));
+  auto colours = screen.substr(screen.find("colours ("));
+  auto row = colours.substr(colours.find("\n  3 "));
+  row = row.substr(0, row.find('\n', 1));
+  REQUIRE_TRUE(!row.contains('y'));
 }
 
 // --- Layout (spec §3.3): checked for every kind at many sizes ---------------
