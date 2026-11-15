@@ -1,0 +1,12 @@
+# Fanta assembly (.asm), also used for the derived disassembly pane.
+# Mnemonics come from the ISA Registry (@isa), so new instructions need no edit.
+extensions .asm
+ignorecase
+comment  ;
+pattern  label    [A-Za-z_][A-Za-z0-9_]*:
+words    mnemonic @isa
+words    register R0 R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 SP PC FP
+# Literals after # or $ are hexadecimal by default.
+pattern  number   [#$]-?[0-9A-Za-z_]+
+pattern  number   0x[0-9A-Fa-f]+
+pattern  number   [0-9]+

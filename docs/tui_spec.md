@@ -203,6 +203,17 @@ Commands: `:w [file]`, `:e file`, `:e! file` (discard unsaved edits), `:q`, `:q!
 
 `[` / `]` scroll the Memory tab by 16 bytes (added in milestone 1 without a spec entry; a removal candidate in review #1, in favour of `:mem ADDR`).
 
+### 4.3 Syntax highlighting
+
+Decided in #54. The editable code pane and the derived/BINARY disassembly pane colour their text from **`.syntax` files** in `tui/syntax/` (`FANTA_SYNTAX_DIR` overrides; the build bakes in the source path). A file applies to the extensions it lists; reopening a file (`:e`) reloads them, so no reload command.
+
+- **Independent of the compiler's lexer**: it must cope with half-typed code. One line at a time; nothing carries across lines.
+- **Rules**, tried in file order at each position, first match wins: `comment`, `span` (open/close/escape; unterminated runs to the end of the line), `words` (whole words; `@isa` = every mnemonic in the ISA Registry, so a new instruction needs no syntax edit), `pattern` (anchored mini-pattern: literals, `.`, `[a-z]`/`[^…]`, `\` escapes, `* + ?`; no groups or alternation), `symbols` (literal tokens, longest first). `ignorecase` makes `words` case-insensitive. `words` and `pattern` never match inside a word. Format reference: `tui/syntax.hpp`.
+- **Groups and theme are fixed** in code: keyword/mnemonic yellow bold, type/register cyan, label cyan bold, number magenta, directive magenta bold, string green, comment blue, operator white, error red bold. Each group's look is distinct within a language, so `--screen --colours` identifies groups.
+- **Priority:** the PC line (reverse), an assembly error line, and STALE dimming override syntax colours.
+- **Failure:** unknown extension or no file → plain text. A broken `.syntax` file → status message naming file and line, plain text; never an exception.
+- `fanta.syntax` covers only what the lexer has today (no comments or strings yet): grow it with the language (feature gating).
+
 ---
 
 ## 5. Interfaces the TUI depends on
@@ -215,6 +226,7 @@ These are the contracts between `tui/` and the user-owned code. The TUI must wor
 | **Assembler listing:** assemble a whole text, returning the image plus, per source line, its address or "none" (comments, blank lines, labels), and per-line errors. Supports `.org`. | vm (planned: comments without addresses, `.org`) | TUI keeps line = word: address = line × 4 | Real address gutter; comments cost nothing; inserting a comment no longer moves code |
 | **Compiler line table:** for each emitted word, the source line it came from; plus function symbols (name → address) | compiler (later, §7) | SOURCE pane has no PC marker; ASM shows raw addresses | `>` in SOURCE, `main+0x2C` symbols, source lines interleaved as comments in the derived ASM, and source-line stepping later |
 | **Compile diagnostics with a line number** | compiler (D3) | error text only in the status line and Build log | gutter marker on the failing line, like ASM errors |
+| `Instructions::Registry::get()`: every mnemonic | common | done | `@isa` in `asm.syntax` (§4.3) |
 
 Proposed shape for the assembler listing, for the user to adjust:
 
