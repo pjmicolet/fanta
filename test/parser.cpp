@@ -225,13 +225,8 @@ TEST_CASE("Intrinsic Call - Binds Like A Call Inside An Expression") {
 
 namespace {
 auto failsToParse(const char *source) -> bool {
-  try {
-    Parser p{source};
-    p.fullWalk();
-  } catch (const std::runtime_error &) {
-    return true;
-  }
-  return false;
+  Parser p{source};
+  return !p.fullWalk();
 }
 } // namespace
 

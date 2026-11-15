@@ -5,16 +5,25 @@
 #include <string>
 #include <vector>
 
-struct ParserError {};
+enum ParserErrorType {
+  unexpected_char,
+};
+
+struct ParserError {
+  ParserErrorType t_;
+  std::string what_;
+};
 
 struct Parser {
   Parser(std::string program);
 
-  auto walk() -> void;
-  auto fullWalk() -> void;
+  auto walk() -> std::expected<void, ParserError>;
+  auto fullWalk() -> std::expected<void, ParserError>;
   [[nodiscard]] auto getCurrentRoot() const -> Fanta::AST::AstNode;
-  [[nodiscard]] auto getRootIndices() const -> const std::vector<Fanta::AST::NodeIndex> &;
-  [[nodiscard]] auto getNodeAtIndex(Fanta::AST::NodeIndex idx) const -> Fanta::AST::AstNode;
+  [[nodiscard]] auto getRootIndices() const
+      -> const std::vector<Fanta::AST::NodeIndex> &;
+  [[nodiscard]] auto getNodeAtIndex(Fanta::AST::NodeIndex idx) const
+      -> Fanta::AST::AstNode;
   auto tokenTypeToString(Lexer::TokenType t) -> std::string_view;
   auto dumpNodes() -> void;
   auto printAST(Fanta::AST::NodeIndex idx, int indent = 0) -> void;
@@ -41,16 +50,16 @@ private:
   std::vector<Fanta::AST::AstNode> asts;
   std::vector<Fanta::AST::NodeIndex> roots;
 
-
   auto nextToken() -> void;
 
-  auto walkLet() -> Fanta::AST::NodeIndex;
-  auto walkFn() -> void;
-  auto walkReturn() -> Fanta::AST::NodeIndex;
-  auto walkFor() -> Fanta::AST::NodeIndex;
-  auto walkBody() -> Fanta::AST::NodeIndex;
-  auto walkIf() -> Fanta::AST::NodeIndex;
-  auto walkThroughCallArgs(std::vector<Fanta::AST::NodeIndex> &args) -> void;
+  auto walkLet() -> std::expected<Fanta::AST::NodeIndex, ParserError>;
+  auto walkFn() -> std::expected<void, ParserError>;
+  auto walkReturn() -> std::expected<Fanta::AST::NodeIndex, ParserError>;
+  auto walkFor() -> std::expected<Fanta::AST::NodeIndex, ParserError>;
+  auto walkBody() -> std::expected<Fanta::AST::NodeIndex, ParserError>;
+  auto walkIf() -> std::expected<Fanta::AST::NodeIndex, ParserError>;
+  auto walkThroughCallArgs(std::vector<Fanta::AST::NodeIndex> &args)
+      -> std::expected<void, ParserError>;
 
   /**
    * @brief Starting point of pratt parser to deal with operand precedence.
@@ -72,10 +81,11 @@ private:
    *
    * @param p: precedence of incoming token
    */
-  auto walkExpression(Precedence p) -> Fanta::AST::NodeIndex;
+  auto walkExpression(Precedence p)
+      -> std::expected<Fanta::AST::NodeIndex, ParserError>;
   auto walkInfix(Fanta::AST::NodeIndex idx, Lexer::Token t)
-      -> Fanta::AST::NodeIndex;
-  auto walkPrefix() -> Fanta::AST::NodeIndex;
+      -> std::expected<Fanta::AST::NodeIndex, ParserError>;
+  auto walkPrefix() -> std::expected<Fanta::AST::NodeIndex, ParserError>;
   auto getPrecedence(Lexer::TokenType t) -> Precedence;
 
   auto accept(Lexer::TokenType t) -> bool;
