@@ -298,7 +298,7 @@ bool TUI::compile_editor() {
   build_error.clear();
   if (!result) {
     build_failed = true;
-    build_error = "Compile error: " + result.error();
+    build_error = result.error(); // already "Parse error: …" or "Compile error: …"
     message = build_error;
     return false;
   }

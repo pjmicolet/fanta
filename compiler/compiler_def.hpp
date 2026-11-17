@@ -1,5 +1,6 @@
 #pragma once
 
+#include <expected>
 #include <utility>
 
 #include "PassDefinition.hpp"
@@ -15,9 +16,12 @@ struct CompilerDef {
 
   CompilerDef() = default;
 
-  auto compile(std::string program) {
+  auto compile(std::string program)
+      -> std::expected<InstructionList, ParserError> {
     Parser p(std::move(program));
-    p.fullWalk();
+    auto res = p.fullWalk();
+    if (!res)
+      return std::unexpected(ParserError{res.error()});
     Codegen cg{};
     cg.extractGlobalNames(p);
     Fanta::GlobalTable gt = cg.globalNameSpace;
