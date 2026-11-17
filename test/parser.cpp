@@ -1,7 +1,6 @@
 #include "ast.hpp"
 #include "lexer.hpp"
 #include <parser.hpp>
-#include <stdexcept>
 #include <testframework/testing.hpp>
 #include <variant>
 

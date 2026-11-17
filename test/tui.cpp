@@ -403,13 +403,24 @@ TEST_CASE("Build Compile Matches The Default Compiler") {
   auto built = Fanta::Build::compile(kAddProgram);
   REQUIRE_TRUE(built.has_value());
   auto direct = Fanta::DefaultCompiler{}.compile(kAddProgram);
-  REQUIRE_TRUE(*built == direct);
+  REQUIRE_TRUE(direct.has_value());
+  REQUIRE_TRUE(*built == *direct);
 }
 
 TEST_CASE("Build Compile Reports Errors Instead Of Throwing") {
   auto built = Fanta::Build::compile("fn main() -> int { return nope(1); }");
   REQUIRE_TRUE(!built.has_value());
   REQUIRE_TRUE(!built.error().empty());
+}
+
+TEST_CASE("Build Compile Reports The Parser's Message") {
+  // A parse failure used to be dropped, and codegen then failed on the
+  // half-built AST with a misleading "Unknown symbol: main".
+  auto built = Fanta::Build::compile(
+      "fn main() -> int {\n  let x int = 1;\n  return x;\n}\n");
+  REQUIRE_TRUE(!built.has_value());
+  REQUIRE_TRUE(built.error().starts_with("Parse error: "));
+  REQUIRE_TRUE(built.error().contains("expected ':'"));
 }
 
 TEST_CASE("Build Compile Times Out On A Parser Hang") {
@@ -431,7 +442,7 @@ TEST_CASE("Loading A .fn File Compiles It Into Memory") {
   CPU cpu{};
   TUI tui(cpu);
   REQUIRE_TRUE(tui.load_file(path));
-  auto expected = Fanta::DefaultCompiler{}.compile(kAddProgram);
+  auto expected = *Fanta::DefaultCompiler{}.compile(kAddProgram);
   for (size_t i = 0; i < expected.size(); ++i)
     REQUIRE_SAME(expected[i], cpu.load(static_cast<uint32_t>(i * 4)));
 
@@ -1148,7 +1159,7 @@ TEST_CASE(":eject Refuses What Wouldn't Assemble Back, Writing Nothing") {
   typeCmd(tui, "eject");
   if (std::filesystem::exists(asm_path)) {
     // B16 fixed: the ejected program must be the build, word for word.
-    auto image = Fanta::DefaultCompiler{}.compile(kAddProgram);
+    auto image = *Fanta::DefaultCompiler{}.compile(kAddProgram);
     REQUIRE_TRUE(statusLine(tui).contains("ASM"));
     for (size_t i = 0; i < image.size(); ++i)
       if ((image[i] >> 26) != 0) // HALT payload bits may differ
