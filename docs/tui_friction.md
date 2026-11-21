@@ -10,7 +10,7 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 
 ```
 2026-10-31  cc  stepping a .fn program, nothing shows which source line is executing                                → spec §7 (needs line table), #36
-2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           [partly tui/parse-errors: the parser's own message reaches the status line; line number in the message and a gutter `!` on the failing line [comp/lexer_error]; some typos still hang]   → spec §5 (diagnostics), #37
+2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           [partly tui/parse-errors: the parser's own message reaches the status line; line number in the message and a gutter `!` on the failing line, fixed #67; some typos still hang]   → spec §5 (diagnostics), #37
 2026-10-31  cc  `return qd;` with qd undefined compiled without complaint                                          (compiler bug, not TUI)
 2026-10-31  cc  memory pane is fixed at 0x0000 and 32 bytes, so it never shows what I'm looking at   [partly tui/layout: Memory tab fills the panel, [ ] scrolls; still doesn't follow anything]   → #30
 2026-10-31  cc  after inserting a line in a running .asm (STALE), the gutter and > show the edited text's addresses, not memory's: >0x000064 sits on a blank line while memory at 0x64 is still JMP MAIN_LOOP   (review #1, Q3)   → #34
