@@ -10,7 +10,7 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 
 ```
 2026-10-31  cc  stepping a .fn program, nothing shows which source line is executing                                → spec §7 (needs line table), #36
-2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           [partly tui/parse-errors: the parser's own message reaches the status line; still no line number, some typos still hang]   → spec §5 (diagnostics), #37
+2026-10-31  cc  a typo in the source froze the UI for 2s, then reported a parser hang with no line number           [partly tui/parse-errors: the parser's own message reaches the status line; line number in the message and a gutter `!` on the failing line [comp/lexer_error]; some typos still hang]   → spec §5 (diagnostics), #37
 2026-10-31  cc  `return qd;` with qd undefined compiled without complaint                                          (compiler bug, not TUI)
 2026-10-31  cc  memory pane is fixed at 0x0000 and 32 bytes, so it never shows what I'm looking at   [partly tui/layout: Memory tab fills the panel, [ ] scrolls; still doesn't follow anything]   → #30
 2026-10-31  cc  after inserting a line in a running .asm (STALE), the gutter and > show the edited text's addresses, not memory's: >0x000064 sits on a blank line while memory at 0x64 is still JMP MAIN_LOOP   (review #1, Q3)   → #34
@@ -74,7 +74,8 @@ Ideas that don't come from friction. They wait here until an entry in the log gi
 2026-10-31  cc  a loaded .bin shows the same disassembly twice, once with line numbers and once with addresses   [fixed tui/layout]
 2026-10-31  cc  PC shows 4 hex digits, SP 6 and the SP register 8   [fixed tui/layout]
 2026-10-31  cc  IPS reads 0 in every headless screenshot   [wontfix tui/layout: IPS dropped from the status line; re-add if it's missed]
-2026-11-17  cc  at 80x24 a failed build's status line reads only `Parse error~`; the actual message is only in :out log
+2026-11-17  cc  at 80x24 a failed build's status line reads only `Parse error~`; the actual message is only in :out log   [partly comp/lexer_error: the gutter `!` now shows the line]
+2026-11-21  cc  at 200x60 an absolute SOURCE path fills the status line, so even a wide terminal shows only `Parse error (line 2):~`
 2026-11-07  cc  stepping a .fn with @print, the ASM pane shows `CALL -#130 ; -> 0xFFFFFF00`: nothing says it's @print   [fixed tui/hook-names: `; -> @print`]
 2026-10-31  cc  headless screenshots: F10 and :out act as if the terminal were 80x24 whatever --size says (term_w/term_h are only set in update())   [fixed tui/headless-size: screenshot() sets term_w/term_h before feeding keys]
 ```

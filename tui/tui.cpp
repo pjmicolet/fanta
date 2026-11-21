@@ -296,9 +296,11 @@ bool TUI::compile_editor() {
   ++build_count;
   auto result = Fanta::Build::compile(editor.text());
   build_error.clear();
+  build_error_line = 0;
   if (!result) {
     build_failed = true;
-    build_error = result.error(); // already "Parse error: …" or "Compile error: …"
+    build_error = result.error().text; // already "Parse error …" or "Compile error: …"
+    build_error_line = result.error().line;
     message = build_error;
     return false;
   }
@@ -400,8 +402,9 @@ void TUI::dump_state(const std::string &filename) {
   out << "\n" << "[EDITOR]" << "\n";
   const auto &lines = editor.lines();
   for (size_t i = 0; i < lines.size(); ++i) {
-    bool bad = std::ranges::any_of(
-        asm_errors, [i](const auto &e) { return e.line == i; });
+    bool bad = i + 1 == build_error_line ||
+               std::ranges::any_of(asm_errors,
+                                   [i](const auto &e) { return e.line == i; });
     out << std::setw(2) << std::setfill(' ') << i << (bad ? "!" : "|") << " "
         << lines[i] << (i == static_cast<size_t>(editor.y()) ? " <--" : "") << "\n";
   }
@@ -757,8 +760,10 @@ void TUI::draw_code_lines(const Fanta::Canvas &c, bool show_addresses,
     if (idx >= static_cast<int>(lines.size()))
       break;
     auto uidx = static_cast<size_t>(idx);
-    bool bad = std::ranges::any_of(
-        asm_errors, [uidx](const auto &e) { return e.line == uidx; });
+    bool bad = uidx + 1 == build_error_line ||
+               std::ranges::any_of(asm_errors, [uidx](const auto &e) {
+                 return e.line == uidx;
+               });
     bool at_pc = show_addresses && static_cast<uint32_t>(idx * 4) == pc;
 
     std::string gutter =
@@ -1570,6 +1575,7 @@ bool TUI::open_file(const std::string &filename) {
     source = Source::BINARY;
     assem = Assembler(); // Binaries carry no labels
     asm_errors.clear();
+    build_error_line = 0;
     reset();
 
     // The editor shows a disassembly view. It is read-only: the text can't
@@ -1594,6 +1600,7 @@ bool TUI::open_file(const std::string &filename) {
     source = is_fn ? Source::FANTA : Source::ASM;
     assem = Assembler();
     asm_errors.clear();
+    build_error_line = 0;
     binary_image.clear();
     build_failed = false;
     editor.set_lines({});
@@ -1611,6 +1618,7 @@ bool TUI::open_file(const std::string &filename) {
     source = Source::FANTA;
     assem = Assembler(); // compiled code carries no labels
     asm_errors.clear();
+    build_error_line = 0;
     binary_image.clear();
     editor.set_lines(std::move(*lines));
     saved_version = editor.version();
