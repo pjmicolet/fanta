@@ -47,6 +47,8 @@ A custom 32-bit RISC CPU, compiler, VM and TUI debugger for a 90s-style PC. Docs
 - `tools/tui-shots.py [--update]`: renders standard TUI workflows and prints only screen changes.
 - `tools/tidy-summary.py [regex] [--update]`: clang-tidy counts by check, plus new findings.
 - `tools/crash.py TARGET [ARGS]`: runs under sanitizers and prints a short crash report.
+- `tools/pi-build.sh [--clean]`: builds and tests the working tree on the Raspberry Pi (Linux,
+  GCC 14, aarch64). Use it before a PR that touches build files or platform-sensitive code.
 - `tools/token-usage.py [--tools]`: token use per session and subagent.
 - `tools/triage.py [--issue N…] [--move N --after M|--top]`: one-line-per-issue backlog digest
   (board order, friction refs, deps, inbox, PRs). Use it instead of raw `gh issue list`.
