@@ -424,16 +424,17 @@ TEST_CASE("Build Compile Reports The Parser's Message") {
   REQUIRE_SAME(std::size_t{2}, built.error().line);
 }
 
-TEST_CASE("Build Compile Times Out On A Parser Hang") {
-  // EOF inside a function body loops forever in the parser (review B6). The
-  // TUI must get control back instead of freezing.
+TEST_CASE("Build Compile Reports EOF Inside A Body Without Hanging") {
+  // EOF inside a function body used to loop forever in the parser (review
+  // B6); it hit the timeout. Now it is a parse error, well inside the limit.
+  // No known input still hangs, so the timeout path has no test of its own.
   auto start = std::chrono::steady_clock::now();
   auto built = Fanta::Build::compile("fn main() -> int { let x: int = 1;",
                                      std::chrono::milliseconds(200));
   auto took = std::chrono::steady_clock::now() - start;
   REQUIRE_TRUE(!built.has_value());
-  REQUIRE_TRUE(built.error().text.contains("did not finish"));
-  REQUIRE_TRUE(took < std::chrono::seconds(2));
+  REQUIRE_TRUE(built.error().text.starts_with("Parse error"));
+  REQUIRE_TRUE(took < std::chrono::milliseconds(200));
 }
 
 TEST_CASE("Loading A .fn File Compiles It Into Memory") {
