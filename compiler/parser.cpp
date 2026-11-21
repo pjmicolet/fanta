@@ -305,10 +305,12 @@ auto Parser::walkBody() -> std::expected<Fanta::AST::NodeIndex, ParserError> {
     if (accept(Lexer::TokenType::KeywordLet)) {
       TRY(idx, walkLet());
       body.expressions.push_back(idx);
+      EXTRACT_TOKEN(Lexer::TokenType::SemiColon);
     } else if (accept(Lexer::TokenType::Return)) {
       hasReturn = true;
       TRY(idx, walkReturn());
       body.expressions.push_back(idx);
+      EXTRACT_TOKEN(Lexer::TokenType::SemiColon);
     } else if (accept(Lexer::TokenType::If)) {
       TRY(idx, walkIf());
       body.expressions.push_back(idx);
@@ -324,8 +326,8 @@ auto Parser::walkBody() -> std::expected<Fanta::AST::NodeIndex, ParserError> {
         continue;
       }
       body.expressions.push_back(idx);
+      EXTRACT_TOKEN(Lexer::TokenType::SemiColon);
     }
-    auto sc = expect(Lexer::TokenType::SemiColon);
   }
   EXTRACT_TOKEN(Lexer::TokenType::CloseBrace);
   asts.push_back({body, 0});
@@ -419,10 +421,10 @@ auto Parser::walkPrefix() -> std::expected<Fanta::AST::NodeIndex, ParserError> {
     asts.push_back({id, 0});
     auto idIndx = asts.size() - 1;
     if (!expect(Lexer::TokenType::OpenParam)) {
-      return std::unexpected(ParserError(
-          ParserErrorType::unexpected_char,
-          "expected '(' after intrinsic " + std::string{intrinsicName.lexeme},
-          currentToken.line));
+      return std::unexpected(ParserError(ParserErrorType::unexpected_char,
+                                         "expected '(' after intrinsic " +
+                                             std::string{intrinsicName.lexeme},
+                                         currentToken.line));
     }
     std::vector<Fanta::AST::NodeIndex> args;
     if (auto callArgs = walkThroughCallArgs(args); !callArgs)
