@@ -157,6 +157,7 @@ private:
   std::string command_buffer; // ":..." while in COMMAND mode
   std::string message;     // last status message; the next key clears it
   std::string build_error; // failed build's message; stays until the next build
+  std::size_t build_error_line = 0; // its 1-based .fn line, 0 = none; gutter '!' 
   std::vector<std::string> build_log; // every message, for the Build log tab
   std::string last_logged;
   std::optional<std::pair<int, int>> cursor_at; // editor cursor, screen row/col

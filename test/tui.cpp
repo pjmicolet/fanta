@@ -410,7 +410,7 @@ TEST_CASE("Build Compile Matches The Default Compiler") {
 TEST_CASE("Build Compile Reports Errors Instead Of Throwing") {
   auto built = Fanta::Build::compile("fn main() -> int { return nope(1); }");
   REQUIRE_TRUE(!built.has_value());
-  REQUIRE_TRUE(!built.error().empty());
+  REQUIRE_TRUE(!built.error().text.empty());
 }
 
 TEST_CASE("Build Compile Reports The Parser's Message") {
@@ -419,8 +419,9 @@ TEST_CASE("Build Compile Reports The Parser's Message") {
   auto built = Fanta::Build::compile(
       "fn main() -> int {\n  let x int = 1;\n  return x;\n}\n");
   REQUIRE_TRUE(!built.has_value());
-  REQUIRE_TRUE(built.error().starts_with("Parse error: "));
-  REQUIRE_TRUE(built.error().contains("expected ':'"));
+  REQUIRE_TRUE(built.error().text.starts_with("Parse error (line 2): "));
+  REQUIRE_TRUE(built.error().text.contains("expected ':'"));
+  REQUIRE_SAME(std::size_t{2}, built.error().line);
 }
 
 TEST_CASE("Build Compile Times Out On A Parser Hang") {
@@ -431,7 +432,7 @@ TEST_CASE("Build Compile Times Out On A Parser Hang") {
                                      std::chrono::milliseconds(200));
   auto took = std::chrono::steady_clock::now() - start;
   REQUIRE_TRUE(!built.has_value());
-  REQUIRE_TRUE(built.error().contains("did not finish"));
+  REQUIRE_TRUE(built.error().text.contains("did not finish"));
   REQUIRE_TRUE(took < std::chrono::seconds(2));
 }
 
@@ -480,6 +481,21 @@ TEST_CASE("A .fn File That Fails To Compile Still Opens") {
   REQUIRE_TRUE(dump.contains("MESSAGE: Compile error"));
   REQUIRE_TRUE(dump.contains("return nope(1);")); // source is in the editor
   REQUIRE_SAME(0, cpu.load(0)); // nothing stale left running
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("A .fn Parse Error Marks Its Line In The Editor") {
+  auto path = tempPath("fanta_tui_parse_line.fn");
+  writeText(path, "fn main() -> int {\n  let x int = 1;\n  return x;\n}\n");
+
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  auto dump = dumpOf(tui);
+  REQUIRE_TRUE(dump.contains("MESSAGE: Parse error (line 2)"));
+  REQUIRE_TRUE(dump.contains(" 1! ")); // dump rows are 0-based
+  REQUIRE_TRUE(!dump.contains(" 0! "));
+  REQUIRE_TRUE(!dump.contains(" 2! "));
   std::filesystem::remove(path);
 }
 

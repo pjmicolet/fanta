@@ -12,6 +12,7 @@ enum ParserErrorType {
 struct ParserError {
   ParserErrorType t_;
   std::string what_;
+  uint64_t line_;
 };
 
 struct Parser {

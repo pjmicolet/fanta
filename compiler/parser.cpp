@@ -387,7 +387,8 @@ auto Parser::walkThroughCallArgs(std::vector<Fanta::AST::NodeIndex> &args)
     if (expr == static_cast<Fanta::AST::NodeIndex>(-1)) {
       return std::unexpected(
           ParserError(ParserErrorType::unexpected_char,
-                      "expected an expression or ')' in call arguments"));
+                      "expected an expression or ')' in call arguments",
+                      currentToken.line));
     }
     args.push_back(expr);
     auto c = expect(Lexer::TokenType::Comma);
@@ -420,7 +421,8 @@ auto Parser::walkPrefix() -> std::expected<Fanta::AST::NodeIndex, ParserError> {
     if (!expect(Lexer::TokenType::OpenParam)) {
       return std::unexpected(ParserError(
           ParserErrorType::unexpected_char,
-          "expected '(' after intrinsic " + std::string{intrinsicName.lexeme}));
+          "expected '(' after intrinsic " + std::string{intrinsicName.lexeme},
+          currentToken.line));
     }
     std::vector<Fanta::AST::NodeIndex> args;
     if (auto callArgs = walkThroughCallArgs(args); !callArgs)
@@ -502,5 +504,6 @@ auto Parser::expect(Lexer::TokenType t)
   return std::unexpected(
       ParserError(ParserErrorType::unexpected_char,
                   std::format("expected '{}', got '{}'", tokenTypeToString(t),
-                              currentToken.lexeme)));
+                              currentToken.lexeme),
+                  currentToken.line));
 }

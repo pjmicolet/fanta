@@ -229,3 +229,84 @@ TEST_CASE("Intrinsic Lexing") {
   REQUIRE_TOKEN_TYPE(Lexer::TokenType::Intrinsic, t);
   REQUIRE_SAME("@print", t->lexeme);
 }
+
+// Line numbers are 1-based and count '\n' only.
+TEST_CASE("Line Numbers: Keywords And Literals") {
+  std::string src = "let\nfn\n\n42";
+  Lexer lx{src};
+  auto t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::KeywordLet, t);
+  REQUIRE_SAME(uint64_t{1}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::KeywordFn, t);
+  REQUIRE_SAME(uint64_t{2}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::IntLiteral, t);
+  REQUIRE_SAME(uint64_t{4}, t->line);
+}
+
+TEST_CASE("Line Numbers: Identifiers And Types") {
+  std::string src = "foo\nint";
+  Lexer lx{src};
+  auto t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Identifier, t);
+  REQUIRE_SAME(uint64_t{1}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Type, t);
+  REQUIRE_SAME(uint64_t{2}, t->line);
+}
+
+TEST_CASE("Line Numbers: Symbols And Intrinsics") {
+  std::string src = ";\n->\n==\n@print";
+  Lexer lx{src};
+  auto t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::SemiColon, t);
+  REQUIRE_SAME(uint64_t{1}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Arrow, t);
+  REQUIRE_SAME(uint64_t{2}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::EqualComp, t);
+  REQUIRE_SAME(uint64_t{3}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Intrinsic, t);
+  REQUIRE_SAME(uint64_t{4}, t->line);
+}
+
+TEST_CASE("Line Numbers: Eof And CRLF") {
+  // '\r' is plain whitespace, so CRLF counts as one line break.
+  std::string src = "let\r\nfn\r\n";
+  Lexer lx{src};
+  auto t = lx.getToken();
+  REQUIRE_SAME(uint64_t{1}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::KeywordFn, t);
+  REQUIRE_SAME(uint64_t{2}, t->line);
+  t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::Eof, t);
+  REQUIRE_SAME(uint64_t{3}, t->line);
+}
+
+TEST_CASE("Line Numbers: Lex Errors") {
+  std::string src = "let\n$";
+  Lexer lx{src};
+  auto t = lx.getToken();
+  REQUIRE_TOKEN_TYPE(Lexer::TokenType::KeywordLet, t);
+  auto bad = lx.getToken();
+  REQUIRE_SAME(0, bad.has_value() ? 1 : 0);
+  REQUIRE_SAME(std::size_t{2}, bad.error().line);
+}
+
+TEST_CASE("Line Numbers: Multi-line Program") {
+  std::string src = "fn main() -> int {\n  let b : int = 10;\n  return b;\n}\n";
+  Lexer lx{src};
+  uint64_t expected[] = {1, 1, 1, 1, 1, 1, 1,      // fn main ( ) -> int {
+                         2, 2, 2, 2, 2, 2, 2,      // let b : int = 10 ;
+                         3, 3, 3,                  // return b ;
+                         4};                       // }
+  for (auto line : expected) {
+    auto t = lx.getToken();
+    REQUIRE_SAME(1, t.has_value() ? 1 : 0);
+    REQUIRE_SAME(line, t->line);
+  }
+}

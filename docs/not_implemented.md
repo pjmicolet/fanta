@@ -35,4 +35,3 @@ The compiler has no semantic pass, so all of these compile without an error.
 
 | Gap | Check | What happens today | Added | Last checked |
 |---|---|---|---|---|
-| Source lines on tokens | `TODO: Add line` in `compiler/lexer.hpp` | Tokens carry line 0 | 2026-11-07 | 2026-11-07 |

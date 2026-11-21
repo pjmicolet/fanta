@@ -1,12 +1,16 @@
 #pragma once
 #include <cctype>
+#include <cstdint>
 #include <expected>
 #include <string_view>
-#include <cstdint>
 
 using namespace std::literals;
 
-enum class LexErrorType : std::uint8_t { UnterminatedString, UnknownToken, MalformedToken };
+enum class LexErrorType : std::uint8_t {
+  UnterminatedString,
+  UnknownToken,
+  MalformedToken
+};
 
 struct LexError {
   LexErrorType t;
@@ -60,7 +64,7 @@ struct Lexer {
   struct Token {
     TokenType t;
     std::string_view lexeme;
-    int line;
+    uint64_t line;
     std::size_t char_start;
     std::size_t char_end;
   };
@@ -75,6 +79,10 @@ struct Lexer {
       case CharType::Whitespace:
         cursor_++;
         break;
+      case CharType::Newline:
+        cursor_++;
+        line_++;
+        break;
       case CharType::Symbol:
         return parseSymbol();
       case CharType::Num:
@@ -82,7 +90,7 @@ struct Lexer {
       }
     }
 
-    return Token{TokenType::Eof, tString, 0, cursor_, end_};
+    return Token{TokenType::Eof, tString, line_, cursor_, end_};
   }
 
 private:
@@ -97,25 +105,20 @@ private:
     }
     std::string_view lexeme = body_.substr(start, cursor_ - start);
     if (lexeme == "let")
-      return Token{TokenType::KeywordLet, lexeme, 0 /*TODO: Add line*/, start,
-                   cursor_};
+      return Token{TokenType::KeywordLet, lexeme, line_, start, cursor_};
     if (lexeme == "fn")
-      return Token{TokenType::KeywordFn, lexeme, 0 /*TODO: Add line*/, start,
-                   cursor_};
+      return Token{TokenType::KeywordFn, lexeme, line_, start, cursor_};
     if (lexeme == "if")
-      return Token{TokenType::If, lexeme, 0 /*TODO: Add line*/, start, cursor_};
+      return Token{TokenType::If, lexeme, line_, start, cursor_};
     if (lexeme == "else")
-      return Token{TokenType::Else, lexeme, 0 /*TODO: Add line*/, start,
-                   cursor_};
+      return Token{TokenType::Else, lexeme, line_, start, cursor_};
     if (lexeme == "return")
-      return Token{TokenType::Return, lexeme, 0 /*TODO: Add line*/, start,
-                   cursor_};
+      return Token{TokenType::Return, lexeme, line_, start, cursor_};
     if (lexeme == "for")
-      return Token{TokenType::For, lexeme, 0 /*TODO: Add line*/, start,
-                   cursor_};
+      return Token{TokenType::For, lexeme, line_, start, cursor_};
     if (isType(lexeme))
-      return Token{TokenType::Type, lexeme, 0, start, cursor_};
-    return Token{TokenType::Identifier, lexeme, 0, start, cursor_};
+      return Token{TokenType::Type, lexeme, line_, start, cursor_};
+    return Token{TokenType::Identifier, lexeme, line_, start, cursor_};
   }
 
   auto isType(std::string_view lexeme) -> bool {
@@ -133,10 +136,9 @@ private:
     for (const auto &c : lexeme) {
       if (::isalpha(c))
         return std::unexpected(
-            LexError{LexErrorType::MalformedToken, 0, start, cursor_});
+            LexError{LexErrorType::MalformedToken, line_, start, cursor_});
     }
-    return Token{TokenType::IntLiteral, lexeme, 0 /*TODO: Add line*/, start,
-                 cursor_};
+    return Token{TokenType::IntLiteral, lexeme, line_, start, cursor_};
   }
 
   auto parseSymbol() -> std::expected<Token, LexError> {
@@ -146,25 +148,25 @@ private:
       if (next == '>') {
         auto start = cursor_;
         cursor_++;
-        return Token{TokenType::Arrow, body_.substr(start, 2), 0, start,
+        return Token{TokenType::Arrow, body_.substr(start, 2), line_, start,
                      cursor_++};
       }
-      return Token{TokenType::Minus, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::Minus, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     }
     case '+':
-      return Token{TokenType::Plus, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::Plus, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     case '=': {
       auto next = peek();
       if (next == '=') {
         auto start = cursor_;
         cursor_++;
-        return Token{TokenType::EqualComp, body_.substr(start, 2), 0, start,
+        return Token{TokenType::EqualComp, body_.substr(start, 2), line_, start,
                      cursor_++};
       }
       return Token{
-          TokenType::Equal, body_.substr(cursor_, 1), 0, cursor_,
+          TokenType::Equal, body_.substr(cursor_, 1), line_, cursor_,
           cursor_++}; // Ugly hack but I need to increment cursor at some point
     }
     case '>': {
@@ -172,11 +174,11 @@ private:
       if (next == '=') {
         auto start = cursor_;
         cursor_++;
-        return Token{TokenType::GreaterEq, body_.substr(start, 2), 0, start,
+        return Token{TokenType::GreaterEq, body_.substr(start, 2), line_, start,
                      cursor_++};
       }
       return Token{
-          TokenType::Greater, body_.substr(cursor_, 1), 0, cursor_,
+          TokenType::Greater, body_.substr(cursor_, 1), line_, cursor_,
           cursor_++}; // Ugly hack but I need to increment cursor at some point
     }
     case '<': {
@@ -184,11 +186,11 @@ private:
       if (next == '=') {
         auto start = cursor_;
         cursor_++;
-        return Token{TokenType::LesserEq, body_.substr(start, 2), 0, start,
+        return Token{TokenType::LesserEq, body_.substr(start, 2), line_, start,
                      cursor_++};
       }
       return Token{
-          TokenType::Lesser, body_.substr(cursor_, 1), 0, cursor_,
+          TokenType::Lesser, body_.substr(cursor_, 1), line_, cursor_,
           cursor_++}; // Ugly hack but I need to increment cursor at some point
     }
     case '!': {
@@ -196,10 +198,10 @@ private:
       if (next == '=') {
         auto start = cursor_;
         cursor_++;
-        return Token{TokenType::NotEq, body_.substr(start, 2), 0, start,
+        return Token{TokenType::NotEq, body_.substr(start, 2), line_, start,
                      cursor_++};
       }
-      return Token{TokenType::Not, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::Not, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     }
     case '&': {
@@ -207,10 +209,10 @@ private:
       if (next == '&') {
         auto start = cursor_;
         cursor_++;
-        return Token{TokenType::And, body_.substr(start, 2), 0, start,
+        return Token{TokenType::And, body_.substr(start, 2), line_, start,
                      cursor_++};
       }
-      return Token{TokenType::BitAnd, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::BitAnd, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     }
     case '|': {
@@ -218,38 +220,38 @@ private:
       if (next == '|') {
         auto start = cursor_;
         cursor_++;
-        return Token{TokenType::Or, body_.substr(start, 2), 0, start,
+        return Token{TokenType::Or, body_.substr(start, 2), line_, start,
                      cursor_++};
       }
-      return Token{TokenType::BitOr, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::BitOr, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     }
     case '*':
-      return Token{TokenType::Mult, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::Mult, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     case '/':
-      return Token{TokenType::Slash, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::Slash, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     case ';':
-      return Token{TokenType::SemiColon, body_.substr(cursor_, 1), 0, cursor_,
-                   cursor_++};
+      return Token{TokenType::SemiColon, body_.substr(cursor_, 1), line_,
+                   cursor_, cursor_++};
     case '(':
-      return Token{TokenType::OpenParam, body_.substr(cursor_, 1), 0, cursor_,
-                   cursor_++};
+      return Token{TokenType::OpenParam, body_.substr(cursor_, 1), line_,
+                   cursor_, cursor_++};
     case '{':
-      return Token{TokenType::OpenBrace, body_.substr(cursor_, 1), 0, cursor_,
-                   cursor_++};
+      return Token{TokenType::OpenBrace, body_.substr(cursor_, 1), line_,
+                   cursor_, cursor_++};
     case '}':
-      return Token{TokenType::CloseBrace, body_.substr(cursor_, 1), 0, cursor_,
-                   cursor_++};
+      return Token{TokenType::CloseBrace, body_.substr(cursor_, 1), line_,
+                   cursor_, cursor_++};
     case ')':
-      return Token{TokenType::CloseParam, body_.substr(cursor_, 1), 0, cursor_,
-                   cursor_++};
+      return Token{TokenType::CloseParam, body_.substr(cursor_, 1), line_,
+                   cursor_, cursor_++};
     case ',':
-      return Token{TokenType::Comma, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::Comma, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     case ':':
-      return Token{TokenType::Colon, body_.substr(cursor_, 1), 0, cursor_,
+      return Token{TokenType::Colon, body_.substr(cursor_, 1), line_, cursor_,
                    cursor_++};
     case '@': {
       auto start = cursor_++;
@@ -257,16 +259,17 @@ private:
         cursor_++;
       }
       return Token{TokenType::Intrinsic, body_.substr(start, cursor_ - start),
-                   0, start, cursor_};
+                   line_, start, cursor_};
     }
     default:
       return std::unexpected(
-          LexError{LexErrorType::UnknownToken, 0, cursor_, cursor_++});
+          LexError{LexErrorType::UnknownToken, line_, cursor_, cursor_++});
     }
   }
 
   enum class CharType : std::uint8_t {
     Whitespace,
+    Newline,
     Alpha,
     Num,
     Symbol,
@@ -277,6 +280,8 @@ private:
       return CharType::Alpha;
     if (::isdigit(c))
       return CharType::Num;
+    if (c == '\n')
+      return CharType::Newline;
     if (::isspace(c))
       return CharType::Whitespace;
     return CharType::Symbol;
@@ -291,4 +296,5 @@ private:
   std::string_view body_;
   std::size_t cursor_ = 0;
   std::size_t end_ = 0;
+  uint64_t line_ = 1;
 };
