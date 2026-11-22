@@ -20,7 +20,7 @@ Seeded from the 2026-10-31 usability review (findings F1–F12, summarised in `d
 2026-10-31  cc  after a failed build the derived pane is titled "build #2" but shows build #1's code   → #28
 2026-10-31  cc  pressing i, : or z pauses a running program; "edit while it runs" means edit while paused, then F5 again   (review #1, Q1)
 2026-10-31  cc  a VRAM program at 120x40 opens on the Serial tab showing "(no serial output)"; I had to F10 to see the ball   (review #1, Q5)   → #34
-2026-10-31  cc  in a BINARY session j/k do nothing visible and there's no way to look at code away from PC; the hint bar still offers "i edit" and "F9 build"   → #29
+2026-10-31  cc  in a BINARY session j/k do nothing visible and there's no way to look at code away from PC; the hint bar still offers "i edit" and "F9 build"   → #29   fixed a8ece33
 2026-10-31  cc  at 80x24 the help overlay silently loses its last 3 lines (q quit, ESC closes the overlay, the macOS fn note)   → #26
 2026-10-31  cc  a new .fn shows "ASM build #0 (derived ...)" full of HALTs from empty memory   → #28
 2026-10-31  cc  test/serial_hello.asm still says "Press 'o' in the TUI to see it"; o does nothing now   → #33
