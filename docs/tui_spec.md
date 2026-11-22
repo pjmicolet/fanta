@@ -84,7 +84,7 @@ The work area depends on the session kind:
 | :--- | :--- | :--- |
 | Status line | vim mode, kind, file, `[+]` if dirty, build id/result, `STALE`, run state (`PAUSED` / `RUNNING` / `HALTED at 0x0004`), PC and its symbol, then the latest message | One row, always visible. The only place for state; the old STATUS block goes. The mode comes **first** so truncation on narrow terminals can never hide it (changed after review #1). |
 | SOURCE | Fanta text, line numbers | Header: `SOURCE  test_input.fn  (source of truth)`. PC marker `>` once the line table exists (§7). |
-| ASM (derived) | disassembly of memory around PC, address gutter | Header: `ASM  build #3  (derived, read-only, :eject to edit)`. Follows PC; scrollable when focused. |
+| ASM (derived) | disassembly of memory around PC, address gutter | Header: `ASM  build #3  (derived, read-only, :eject to edit)`. Follows PC; scrollable when focused. In a BINARY session it is the only pane, so `j`/`k` scroll it without focus; the header says `scrolled, ESC to PC`, and `ESC` or any step goes back to following PC. The hint bar offers `j/k scroll` there instead of `i edit` and `F9 build`. |
 | ASM (editable) | the assembly text, with an address gutter from the assembler listing (§5) | Header: `ASM  bounce.asm  (source of truth)`. `>` marks the line at PC. Follows PC while running unless the user is in INSERT. |
 | Registers | R0–R15, SP, PC, flags | Every register changed by the last step is highlighted, not just the first. R15 labelled FP. |
 | Stack | from SP+4 up, FP marked | Grows with the available height. |

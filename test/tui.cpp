@@ -531,6 +531,56 @@ TEST_CASE("Screenshot Feeds Keys Before Rendering") {
   std::filesystem::remove(path);
 }
 
+namespace {
+// Screen of a 4-word binary session after `keys`, at 100x30.
+auto binaryScreen(std::string_view keys) -> std::string {
+  auto bin = tempPath("fanta_tui_binary_keys.bin");
+  auto out = tempPath("fanta_tui_binary_keys.txt");
+  Assembler assem{};
+  writeBinary(bin, {assem.assemble("MOV R1, #80", 0),
+                    assem.assemble("MOV R2, #81", 4),
+                    assem.assemble("MOV R3, #82", 8), 0});
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(bin));
+  REQUIRE_TRUE(tui.screenshot(out, 100, 30, keys));
+  std::ifstream in(out);
+  std::string screen((std::istreambuf_iterator<char>(in)),
+                     std::istreambuf_iterator<char>());
+  std::filesystem::remove(bin);
+  std::filesystem::remove(out);
+  return screen;
+}
+} // namespace
+
+TEST_CASE("Binary Session Hint Bar Offers No Edit Or Build") {
+  auto screen = binaryScreen("");
+  REQUIRE_TRUE(!screen.contains("i edit"));
+  REQUIRE_TRUE(!screen.contains("F9 build"));
+  REQUIRE_TRUE(screen.contains("j/k scroll"));
+}
+
+TEST_CASE("Binary Session j And k Scroll Away From PC, ESC Returns") {
+  auto start = binaryScreen("");
+  REQUIRE_TRUE(start.contains(">0x000000"));
+  REQUIRE_TRUE(start.contains("R1, #80"));
+  // k at the top is clamped, so one j still moves down a word: the first
+  // instruction scrolls off and PC's row loses its marker.
+  auto scrolled = binaryScreen("kkj");
+  REQUIRE_TRUE(!scrolled.contains("R1, #80"));
+  REQUIRE_TRUE(!scrolled.contains(">0x"));
+  REQUIRE_TRUE(scrolled.contains(" 0x000004"));
+  REQUIRE_TRUE(scrolled.contains("scrolled, ESC to PC"));
+  auto back = binaryScreen("jj<ESC>");
+  REQUIRE_TRUE(back.contains(">0x000000"));
+  REQUIRE_TRUE(!back.contains("scrolled, ESC to PC"));
+}
+
+TEST_CASE("Binary Session Step Brings The View Back To PC") {
+  auto screen = binaryScreen("jjj<F7>");
+  REQUIRE_TRUE(screen.contains(">0x000004"));
+}
+
 TEST_CASE("Screenshot Keys See The Requested Size, Not 80x24") {
   // At 80x24 the first F10 opens the panel as an overlay on [Serial]; at
   // 120x40 the panel is already on screen, so F10 cycles to VRAM.
