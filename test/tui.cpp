@@ -1147,6 +1147,31 @@ TEST_CASE("Editing Source Makes The Build STALE Until F9") {
   std::filesystem::remove(path);
 }
 
+TEST_CASE("Derived Pane Names The Loaded Build After A Failed One") {
+  CPU cpu{};
+  TUI tui(cpu);
+  auto path = loadAdd(tui); // build #1 OK
+  editLine2(tui);           // 'X' breaks the source
+  tui.handle_key(KEY_F(9)); // build #2 fails, #1 stays loaded
+  auto screen = screenAfter(tui, "");
+  REQUIRE_TRUE(screen.contains("build #2 FAILED"));
+  REQUIRE_TRUE(screen.contains("ASM  build #1  STALE"));
+  REQUIRE_TRUE(!screen.contains("ASM  build #2"));
+  std::filesystem::remove(path);
+}
+
+TEST_CASE("New .fn Shows No Build In The Derived Pane") {
+  auto path = tempPath("fanta_tui_new_derived.fn");
+  std::filesystem::remove(path);
+  CPU cpu{};
+  TUI tui(cpu);
+  REQUIRE_TRUE(tui.load_file(path));
+  auto screen = screenAfter(tui, "");
+  REQUIRE_TRUE(screen.contains("ASM  not built"));
+  REQUIRE_TRUE(!screen.contains("build #0"));
+  REQUIRE_TRUE(!screen.contains("HALT"));
+}
+
 TEST_CASE("ASM Edit In Place Is Live-Patched") {
   auto path = tempPath("fanta_tui_patch.asm");
   writeText(path, "MOV R1, #1\nMOV R2, #2\nHALT\n");
