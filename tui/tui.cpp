@@ -307,6 +307,7 @@ bool TUI::compile_editor() {
   }
   build_failed = false;
   binary_image = std::move(*result);
+  loaded_build = build_count;
   mark_built();
   message = std::format("Compiled {} instructions", binary_image.size());
   return true;
@@ -339,6 +340,7 @@ bool TUI::build() {
     return true;
   case Source::ASM:
     ++build_count;
+    loaded_build = build_count;
     fresh_cpu();
     assemble_editor();
     return asm_errors.empty();
@@ -560,14 +562,21 @@ void TUI::update() {
     switch (source) {
     case Source::FANTA:
       draw_source(Fanta::Canvas{l.code});
-      if (l.derived)
+      // Title the pane with the build that is in memory, not the latest
+      // attempt: a failed build leaves the previous image loaded.
+      if (l.derived && loaded_build == 0)
+        Fanta::Canvas{*l.derived}
+            .frame("ASM  not built", A_DIM)
+            .put_line(0, build_failed ? " build failed: fix the source, F9"
+                                      : " F9 compiles the source",
+                      A_DIM);
+      else if (l.derived)
         draw_disasm_view(
             Fanta::Canvas{*l.derived},
-            stale() && build_count > 0
-                ? std::format("ASM  build #{}  STALE: source changed, F9",
-                              build_count)
-                : std::format("ASM  build #{}  (derived, read-only, :eject)",
-                              build_count),
+            stale() ? std::format("ASM  build #{}  STALE: source changed, F9",
+                                  loaded_build)
+                    : std::format("ASM  build #{}  (derived, read-only, :eject)",
+                                  loaded_build),
             stale());
       break;
     case Source::ASM:
@@ -1473,7 +1482,7 @@ void TUI::eject(bool force) {
     message = ":eject turns a .fn build into a new .asm; open a .fn first";
     return;
   }
-  if (build_count == 0 || binary_image.empty()) {
+  if (loaded_build == 0 || binary_image.empty()) {
     message = "Nothing to eject yet: F9 to build first";
     return;
   }
@@ -1500,7 +1509,7 @@ void TUI::eject(bool force) {
         Fanta::disassemble(binary_image[i], static_cast<uint32_t>(i * 4)));
   lines[0] += std::format("   ; ejected from {} build #{}; edits here don't "
                           "flow back to the .fn",
-                          Fanta::base_name_of(path), build_count);
+                          Fanta::base_name_of(path), loaded_build);
 
   // Refuse to write anything that doesn't assemble back to the same program.
   std::string all;
@@ -1535,7 +1544,7 @@ void TUI::eject(bool force) {
   for (const auto &l : lines)
     out << l << "\n";
   out.close();
-  int from_build = build_count;
+  int from_build = loaded_build;
   std::string from = path;
   load_file(target);
   message = std::format("Ejected build #{} of {} to {}: now editing assembly "
@@ -1594,6 +1603,7 @@ void TUI::load_syntax() {
 bool TUI::open_file(const std::string &filename) {
   editor_scroll = 0;
   build_count = 0;
+  loaded_build = 0;
   std::string previous_path = path;
   path = filename;
   if (filename.ends_with(".bin")) {

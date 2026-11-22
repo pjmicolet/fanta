@@ -157,6 +157,7 @@ private:
   std::vector<Fanta::Program::AsmError> asm_errors;
   bool build_failed = false; // last compile failed (message holds why)
   int build_count = 0;       // compiles attempted this session
+  int loaded_build = 0;      // build id whose image is in memory, 0 = none
   uint64_t saved_version = 0; // editor.version() at the last save / load
   uint64_t built_version = 0; // editor.version() the image was built from
   uint64_t built_structure = 0;          // editor.structure_version() likewise
