@@ -160,6 +160,7 @@ void TUI::track_changed_registers(
 }
 
 void TUI::follow_pc() {
+  disasm_top.reset();
   if (source != Source::ASM || mode == Mode::INSERT)
     return;
   auto line = static_cast<int>(display_pc() / 4);
@@ -318,6 +319,7 @@ void TUI::fresh_cpu() {
   changed_regs.reset();
   is_running_continuously = false;
   run_target.reset();
+  disasm_top.reset();
 }
 
 void TUI::reset() {
@@ -574,7 +576,9 @@ void TUI::update() {
     case Source::BINARY:
       draw_disasm_view(
           Fanta::Canvas{l.code},
-          std::format("BINARY  {}  (read-only image)", base_name(path)));
+          std::format("BINARY  {}  ({})", base_name(path),
+                      disasm_top ? "scrolled, ESC to PC" : "read-only image"),
+          /*dimmed=*/false, disasm_top);
       break;
     }
     if (l.registers)
@@ -686,8 +690,17 @@ void TUI::draw_hint_bar(const Fanta::Canvas &c) {
   default:
     if (help_open)
       hint = " any key closes help ";
+    else if (source == Source::BINARY && !output_overlay)
+      // Nothing to edit or build: offer scrolling instead (#29).
+      hint = fit(" F5 run  F6 reset  F7 step  F8 over  F10 output | "
+                 "j/k scroll  z zoom VRAM  : cmd  ? help  q quit ",
+                 " F5 run F6 reset F7 step F8 over F10 out | "
+                 "j/k scroll ? help q quit ",
+                 w);
     else if (output_overlay)
-      hint = " F10 next tab  ESC close | F5 run  F6 reset  F7 step  F8 over  F9 build ";
+      hint = source == Source::BINARY
+                 ? " F10 next tab  ESC close | F5 run  F6 reset  F7 step  F8 over "
+                 : " F10 next tab  ESC close | F5 run  F6 reset  F7 step  F8 over  F9 build ";
     else
       hint = fit(" F5 run  F6 reset  F7 step  F8 over  F9 build  F10 output | "
                  "i edit  z zoom VRAM  : cmd  ? help  q quit ",
@@ -826,15 +839,17 @@ void TUI::draw_asm_editor(const Fanta::Canvas &c) {
 }
 
 void TUI::draw_disasm_view(const Fanta::Canvas &c, std::string_view title,
-                           bool dimmed) {
+                           bool dimmed, std::optional<uint32_t> top) {
   auto inner = c.frame(title, dimmed ? A_DIM : COLOR_PAIR(kPairCode));
   uint32_t pc = display_pc();
   int rows = inner.height();
   // Keep PC a third of the way down, but never start before address 0
   // (no blank rows above the program).
-  int64_t start = int64_t{pc} - (int64_t{rows / 3} * 4);
-  start = std::max<int64_t>(start, 0);
   auto ram = static_cast<int64_t>(cpu.ram.getSize());
+  int64_t start =
+      top ? int64_t{*top}
+          : std::max<int64_t>(int64_t{pc} - (int64_t{rows / 3} * 4), 0);
+  disasm_drawn_top = static_cast<uint32_t>(start);
   for (int row = 0; row < rows; ++row) {
     int64_t a = start + int64_t{row} * 4;
     if (a > ram - 4)
@@ -1159,6 +1174,14 @@ void TUI::handle_zoom_mode(int ch) {
   }
 }
 
+void TUI::scroll_disasm(int words) {
+  // Clamped here, not when drawn, so presses past either end don't pile up.
+  int64_t from = disasm_top.value_or(disasm_drawn_top);
+  int64_t last = static_cast<int64_t>(cpu.ram.getSize()) - 4;
+  disasm_top = static_cast<uint32_t>(
+      std::clamp<int64_t>(from + (int64_t{words} * 4), 0, last));
+}
+
 void TUI::handle_normal_mode(int ch) {
   switch (ch) {
   case 'q':
@@ -1178,6 +1201,7 @@ void TUI::handle_normal_mode(int ch) {
     break;
   case 27: // ESC
     output_overlay = false;
+    disasm_top.reset(); // BINARY: back to PC
     break;
   case '[': // memory tab: back one 16-byte row
     if (mem_offset >= 16)
@@ -1205,11 +1229,17 @@ void TUI::handle_normal_mode(int ch) {
     break;
   case KEY_UP:
   case 'k':
-    editor.up();
+    if (source == Source::BINARY)
+      scroll_disasm(-1); // no editor text: scroll the disassembly instead
+    else
+      editor.up();
     break;
   case KEY_DOWN:
   case 'j':
-    editor.down();
+    if (source == Source::BINARY)
+      scroll_disasm(1);
+    else
+      editor.down();
     break;
   case KEY_LEFT:
   case 'h':

@@ -78,8 +78,12 @@ private:
   /// .syntax file becomes the status message and the text stays plain.
   void load_syntax();
   bool open_file(const std::string &filename);
+  /// `top`, if set, pins the first row to that address instead of following
+  /// PC (BINARY scrolling).
   void draw_disasm_view(const Fanta::Canvas &c, std::string_view title,
-                        bool dimmed = false);
+                        bool dimmed = false,
+                        std::optional<uint32_t> top = std::nullopt);
+  void scroll_disasm(int words);
   void draw_registers(const Fanta::Canvas &c,
                       Fanta::Layout::RegisterForm form);
   void draw_stack(const Fanta::Canvas &c);
@@ -121,7 +125,8 @@ private:
   void eject(bool force);
   void run_command(const std::string &cmd);
   void track_changed_registers(const std::array<std::uint32_t, 17> &before);
-  /// In an ASM session, move the editor cursor to the line at PC.
+  /// Bring the code pane back to PC: the editor cursor in an ASM session,
+  /// the scrolled disassembly in a BINARY one.
   void follow_pc();
   void reset_zoom();
 
@@ -144,6 +149,10 @@ private:
   Source source = Source::ASM;
   Editor editor;
   int editor_scroll = 0;
+  // BINARY: first address shown after j/k; unset follows PC. Scrolling
+  // starts from the last drawn first row, so it moves from what is on screen.
+  std::optional<uint32_t> disasm_top;
+  uint32_t disasm_drawn_top = 0;
   std::vector<uint32_t> binary_image;
   std::vector<Fanta::Program::AsmError> asm_errors;
   bool build_failed = false; // last compile failed (message holds why)
